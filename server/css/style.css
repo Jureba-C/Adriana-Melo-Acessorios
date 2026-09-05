@@ -1460,17 +1460,21 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .mock-resumo.is-resumo-mobile, .mock-total.is-resumo-mobile{ display:none; }
 
 /* Pix: o QR e o código vão ilegíveis de propósito — é uma ilustração da tela,
-   não um código que leve a algum lugar. */
+   não um código que leve a algum lugar. Antes era um xadrez borrado preto e
+   branco (achado feio, pedido pra trocar) — agora é um degradê rosa suave
+   com o laço da marca no meio, que comunica "isto é só ilustração" sem
+   parecer um erro de carregamento. */
 .mock-qr-frame{ position:relative; }
 /* Precisa da dupla classe: .pix-qr (definida bem depois neste arquivo) usa o
-   atalho `background:#fff`, que zeraria o background-image do padrão abaixo. */
+   atalho `background:#fff`, que zeraria o background definido aqui. */
 .pix-qr.mock-qr-art{
-  filter:blur(5px); border-radius:8px;
-  background-color:#fff;
-  background-image:
-    linear-gradient(45deg, var(--ink) 25%, transparent 25%, transparent 75%, var(--ink) 75%),
-    linear-gradient(45deg, var(--ink) 25%, transparent 25%, transparent 75%, var(--ink) 75%);
-  background-size:26px 26px; background-position:0 0, 13px 13px;
+  border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg, var(--blush-100), var(--blush-200));
+}
+.mock-qr-bow{
+  width:52%; height:52%; color:var(--blush-500);
+  filter:drop-shadow(0 8px 16px rgba(192,84,128,.35));
 }
 .mock-oculto{
   position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
