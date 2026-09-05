@@ -468,9 +468,10 @@
 
           <div class="mb-3">
             <label class="form-label small fw-semibold" for="epCategory">Categoria</label>
-                        <div class="d-flex gap-2">
+                        <div class="d-flex flex-wrap gap-2">
               <select class="form-select" id="epCategory"></select>
               <button type="button" class="btn-outline-blush btn-sm-blush flex-shrink-0" id="epNewCategoryBtn" title="Criar uma categoria nova">+ Nova</button>
+              <button type="button" class="btn-outline-blush btn-sm-blush flex-shrink-0" id="epManageCategoriesBtn" title="Renomear ou excluir categorias"><i class="bi bi-tags me-1"></i>Gerenciar</button>
             </div>
           </div>
 
@@ -604,9 +605,10 @@
 
           <div class="mb-3">
             <label class="form-label small fw-semibold" for="apCategory">Categoria</label>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
               <select class="form-select" id="apCategory"></select>
               <button type="button" class="btn-outline-blush btn-sm-blush flex-shrink-0" id="apNewCategoryBtn" title="Criar uma categoria nova">+ Nova</button>
+              <button type="button" class="btn-outline-blush btn-sm-blush flex-shrink-0" id="apManageCategoriesBtn" title="Renomear ou excluir categorias"><i class="bi bi-tags me-1"></i>Gerenciar</button>
             </div>
           </div>
 
@@ -628,6 +630,22 @@
           <button type="submit" class="btn-blush w-100" id="apSaveBtn">Criar produto</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="manageCategoriesModal" tabindex="-1" aria-labelledby="manageCategoriesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title font-display" id="manageCategoriesModalLabel">Gerenciar categorias</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-ink-soft">As 5 categorias fixas do catálogo não podem ser renomeadas nem excluídas por aqui.</p>
+        <div id="manageCategoriesList" class="manage-categories-list"></div>
+        <div id="manageCategoriesMsg" class="small account-msg mt-2" role="alert"></div>
+      </div>
     </div>
   </div>
 </div>

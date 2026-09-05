@@ -1107,6 +1107,20 @@ const stmtListCustomCategories = db.prepare(`SELECT * FROM custom_categories ORD
 const stmtInsertCustomCategory = db.prepare(
   `INSERT INTO custom_categories (slug, label, created_at) VALUES (?, ?, ?)`
 );
+const stmtUpdateCustomCategoryLabel = db.prepare(
+  `UPDATE custom_categories SET label = ? WHERE slug = ?`
+);
+const stmtDeleteCustomCategory = db.prepare(`DELETE FROM custom_categories WHERE slug = ?`);
+// Conta em quantos produtos (fixos com override ou criados pelo painel) a
+// categoria está em uso agora — usado para bloquear a exclusão, já que
+// apagar a linha em custom_categories não muda o texto já gravado em
+// product_overrides.category/custom_products.category, e o produto ficaria
+// com um slug sem rótulo correspondente.
+const stmtCountProductsUsingCategory = db.prepare(`
+  SELECT
+    (SELECT COUNT(*) FROM product_overrides WHERE category = ?) +
+    (SELECT COUNT(*) FROM custom_products WHERE category = ?) AS total
+`);
 
 function listCustomCategories() {
   return stmtListCustomCategories.all();
@@ -1114,6 +1128,15 @@ function listCustomCategories() {
 function insertCustomCategory({ slug, label }) {
   stmtInsertCustomCategory.run(slug, label, Date.now());
   return { slug, label };
+}
+function updateCustomCategoryLabel(slug, label) {
+  stmtUpdateCustomCategoryLabel.run(label, slug);
+}
+function deleteCustomCategory(slug) {
+  stmtDeleteCustomCategory.run(slug);
+}
+function countProductsUsingCategory(slug) {
+  return stmtCountProductsUsingCategory.get(slug, slug).total;
 }
 
 /* --------------------------- CUSTOM COLORS --------------------------- */
@@ -1425,6 +1448,9 @@ module.exports = {
   deleteCustomProduct,
   listCustomCategories,
   insertCustomCategory,
+  updateCustomCategoryLabel,
+  deleteCustomCategory,
+  countProductsUsingCategory,
   listCustomColors,
   insertCustomColor,
   deleteCustomColor,

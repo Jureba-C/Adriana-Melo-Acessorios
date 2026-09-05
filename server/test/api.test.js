@@ -673,6 +673,57 @@ test("ocultar produto: some de /api/products, continua em /api/admin/products, e
   assert.ok(pubFinal.products.some(p => p.id === 5), "produto volta a aparecer ao desocultar");
 });
 
+test("categorias: cria, renomeia (slug não muda), bloqueia excluir em uso, exclui depois de liberar", async () => {
+  const adminCookie = sharedAdminCookie;
+  assert.ok(adminCookie);
+
+  const criada = await post("/api/admin/categories", { label: "Aniversário Teste" }, adminCookie);
+  assert.equal(criada.status, 201);
+  const categoria = await criada.json();
+  assert.equal(categoria.builtin, false);
+  const slug = categoria.slug;
+
+  // Cliente comum não gerencia categorias.
+  assert.equal((await post("/api/admin/categories", { label: "Outra" }, sharedClienteCookie)).status, 403);
+
+  // Categoria fixa não pode ser renomeada nem excluída por aqui.
+  assert.equal((await patch("/api/admin/categories/festa", { label: "Festa Nova" }, adminCookie)).status, 400);
+  assert.equal((await fetch(ORIGIN + `/api/admin/categories/festa`, {
+    method: "DELETE", headers: { Origin: ORIGIN, Cookie: adminCookie },
+  })).status, 400);
+
+  // Renomear: o slug (o que fica gravado no produto) não muda, só o rótulo.
+  const renomeada = await patch(`/api/admin/categories/${slug}`, { label: "Aniversário Renomeado" }, adminCookie);
+  assert.equal(renomeada.status, 200);
+  const dadosRenomeada = await renomeada.json();
+  assert.equal(dadosRenomeada.slug, slug);
+  assert.equal(dadosRenomeada.label, "Aniversário Renomeado");
+  const listaApósRenomear = (await (await fetch(ORIGIN + "/api/products")).json()).categories;
+  assert.ok(listaApósRenomear.some(c => c.slug === slug && c.label === "Aniversário Renomeado"));
+
+  // Atribui a categoria a um produto fixo (via override) — excluir agora
+  // deve ser bloqueado, porque o slug do produto ficaria sem rótulo.
+  const atribuiu = await patch("/api/admin/products/5", { category: slug }, adminCookie);
+  assert.equal(atribuiu.status, 200);
+
+  const bloqueada = await fetch(ORIGIN + `/api/admin/categories/${slug}`, {
+    method: "DELETE", headers: { Origin: ORIGIN, Cookie: adminCookie },
+  });
+  assert.equal(bloqueada.status, 409);
+  assert.match((await bloqueada.json()).error, /produto/);
+
+  // Devolve o produto 5 para a categoria original e tenta excluir de novo —
+  // agora sem nenhum produto usando o slug, a exclusão deve funcionar.
+  await patch("/api/admin/products/5", { category: "festa" }, adminCookie);
+  const excluida = await fetch(ORIGIN + `/api/admin/categories/${slug}`, {
+    method: "DELETE", headers: { Origin: ORIGIN, Cookie: adminCookie },
+  });
+  assert.equal(excluida.status, 200);
+
+  const listaFinal = (await (await fetch(ORIGIN + "/api/products")).json()).categories;
+  assert.ok(!listaFinal.some(c => c.slug === slug), "categoria excluída não aparece mais na lista");
+});
+
 // DELETE /api/auth/account agora leva authLimiter (mesma proteção de
 // login/2FA — antes a rota não tinha limitador dedicado, um oráculo de
 // senha com 500 tentativas/15min em vez de 10). Pra não gastar do balde

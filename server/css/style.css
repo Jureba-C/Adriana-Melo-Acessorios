@@ -2885,6 +2885,24 @@ body.tem-secao-fab-oculta .fab-top{
 
 .admin-row-actions{ display:flex; justify-content:flex-end; align-items:center; gap:.4rem; flex-wrap:nowrap; }
 
+/* Lista do modal "Gerenciar categorias" — uma linha por categoria, fixa ou
+   criada pelo painel. As fixas mostram só a etiqueta "fixa" (sem os ícones
+   de editar/excluir, que não fazem sentido para elas — ver server.js). */
+.manage-categories-list{
+  display:flex; flex-direction:column; gap:.5rem;
+  max-height:50vh; overflow-y:auto;
+}
+.manage-category-row{
+  display:flex; align-items:center; gap:.6rem;
+  padding:.55rem .8rem; border-radius:var(--radius-md); background:var(--blush-50);
+}
+.manage-category-label{ flex:1 1 auto; font-weight:600; font-size:.92rem; }
+.manage-category-tag{
+  font-size:.72rem; font-weight:600; color:var(--ink-soft);
+  background:var(--white); border:1px solid var(--blush-150);
+  border-radius:999px; padding:.15rem .55rem; flex-shrink:0;
+}
+
 /* Gancho de arrastar, na primeira coluna da tabela de produtos — pega,
    segura e leva pra cima/baixo (Pointer Events, ver js/admin.js) passando
    por cima dos outros produtos. Também aceita seta pra cima/baixo pelo

@@ -41,7 +41,7 @@
     "dia-a-dia": "Dia a dia",
     "presente": "Presente",
   };
-  let currentCategories = Object.entries(CATEGORY_LABELS).map(([slug, label]) => ({ slug, label }));
+  let currentCategories = Object.entries(CATEGORY_LABELS).map(([slug, label]) => ({ slug, label, builtin: true }));
   function applyCategories(categories){
     if(!Array.isArray(categories) || categories.length === 0) return;
     currentCategories = categories;
@@ -53,6 +53,86 @@
       .map(c => `<option value="${escapeHTML(c.slug)}">${escapeHTML(c.label)}</option>`).join("");
     if(selectedSlug) selectEl.value = selectedSlug;
   }
+
+  /* ============================ DETECTOR DE CATEGORIA PELO NOME ============================
+     Enquanto a lojista digita o nome do produto, tenta reconhecer o tipo e já
+     seleciona (ou cria, se ainda não existir) a categoria correspondente —
+     só os 7 tipos pedidos por enquanto. Ordem importa: os termos mais
+     específicos vêm antes de "kit", que é genérico o bastante para aparecer
+     em qualquer um dos outros (ex.: "Kit 2 Tiaras" deve cair em Tiara, não
+     em Kit Laço na Caixa). */
+  function normalizarTexto(s){
+    return String(s).toLowerCase()
+      .replace(/[áàâã]/g, "a")
+      .replace(/[éèê]/g, "e")
+      .replace(/[íìî]/g, "i")
+      .replace(/[óòôõ]/g, "o")
+      .replace(/[úùû]/g, "u")
+      .replace(/ç/g, "c");
+  }
+  const DETECTORES_DE_CATEGORIA = [
+    { rotulo: "Laço Pompom",       regex: /\bpompom\b/ },
+    { rotulo: "Parzinho",          regex: /\bparzinho\b/ },
+    { rotulo: "Tiara",             regex: /\btiaras?\b/ },
+    { rotulo: "Bolsa",             regex: /\bbolsas?\b/ },
+    { rotulo: "Cabide",            regex: /\bcabides?\b/ },
+    { rotulo: "Laço Único",        regex: /\bunico\b/ },
+    { rotulo: "Kit Laço na Caixa", regex: /\bkit\b/ },
+  ];
+  function detectarCategoriaPorNome(nome){
+    const texto = normalizarTexto(nome);
+    for(const { rotulo, regex } of DETECTORES_DE_CATEGORIA){
+      if(regex.test(texto)) return rotulo;
+    }
+    return null;
+  }
+
+  // Cria a categoria detectada na hora, se ainda não existir — a lojista não
+  // precisa passar pelo "+ Nova" manualmente para os 7 tipos reconhecidos.
+  // Só mexe no <select> se a própria pessoa não tiver escolhido uma
+  // categoria manualmente antes (selectEl.dataset.categoriaManual) — ver o
+  // listener de "change" logo abaixo, que marca essa flag.
+  async function autoDetectarCategoria(nome, selectEl){
+    if(selectEl.dataset.categoriaManual === "true") return;
+    const rotulo = detectarCategoriaPorNome(nome);
+    if(!rotulo) return;
+    let categoria = currentCategories.find(c => c.label.toLowerCase() === rotulo.toLowerCase());
+    if(!categoria){
+      try{
+        const res = await fetchWithTimeout("/api/admin/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: rotulo }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if(res.ok){
+          categoria = data;
+          currentCategories = [...currentCategories, data];
+        }
+      }catch{
+        // Falha de rede: não trava o formulário, só deixa de autodetectar
+        // agora — a lojista sempre pode escolher a categoria à mão.
+        return;
+      }
+    }
+    if(categoria && selectEl.dataset.categoriaManual !== "true"){
+      renderCategoryOptions(selectEl, categoria.slug);
+    }
+  }
+  // Espera uma pausa na digitação (400ms) antes de detectar — sem isso, cada
+  // tecla digitada tentaria criar/selecionar categoria, disparando um POST
+  // por letra sempre que o nome ainda não tem categoria correspondente.
+  function comAtraso(fn, ms){
+    let temporizador = null;
+    return (...args) => {
+      clearTimeout(temporizador);
+      temporizador = setTimeout(() => fn(...args), ms);
+    };
+  }
+  // Temporizador do formulário de EDITAR — o de ADICIONAR usa o próprio
+  // (aoDigitarNomeAdicionarComAtraso, mais abaixo), que encadeia a detecção
+  // de categoria com a descrição automática.
+  const autoDetectarCategoriaEditar = comAtraso(autoDetectarCategoria, 400);
 
   const STATUS_LABELS = {
     "pendente":    { label:"Pagamento pendente", cls:"order-status-pending" },
@@ -625,6 +705,8 @@
     epPreviewPrice.textContent = Number.isFinite(price) && price > 0 ? formatMoney(price) : "—";
   }
   epName.addEventListener("input", syncPreviewText);
+  epName.addEventListener("input", () => autoDetectarCategoriaEditar(epName.value, epCategory));
+  epCategory.addEventListener("change", () => { epCategory.dataset.categoriaManual = "true"; });
   epPrice.addEventListener("input", syncPreviewText);
 
   function openEditModal(productId){
@@ -635,6 +717,10 @@
     epDescription.value = product.description || "";
     epPrice.value = product.price;
     epPhotoFile.value = "";
+    // Reabre "destravado" a cada produto — o detector de categoria só some
+    // se a PESSOA mudar o select nesta sessão do modal, não por causa de um
+    // produto anterior que foi editado antes.
+    epCategory.dataset.categoriaManual = "false";
     renderCategoryOptions(epCategory, product.category || "");
     epBadgeBestseller.checked = (product.badges || []).includes("Mais vendido");
     epBadgeNew.checked = (product.badges || []).includes("Novo");
@@ -1149,7 +1235,15 @@
       const data = await res.json().catch(() => ({}));
       if(!res.ok) throw new Error(data.error || "Não foi possível criar a categoria.");
       currentCategories = [...currentCategories, data];
+      // Escolha explícita da pessoa — trava o detector automático pra essa
+      // sessão do formulário, senão ele podia sobrescrever essa categoria
+      // recém-criada na próxima pausa de digitação no nome.
+      selectToUpdate.dataset.categoriaManual = "true";
       renderCategoryOptions(selectToUpdate, data.slug);
+      // A descrição automática menciona a categoria — se essa troca foi no
+      // formulário de adicionar produto, ela precisa refletir a categoria
+      // recém-criada.
+      if(selectToUpdate === apCategory) atualizarDescricaoAutomatica();
     }catch(err){
       alert(err.message || "Não foi possível criar a categoria agora.");
     }
@@ -1169,6 +1263,38 @@
   const apHeight = document.getElementById("apHeight");
   const apLength = document.getElementById("apLength");
   const apCategory = document.getElementById("apCategory");
+
+  /* Descrição automática — mesma frase que já era gerada só para o Google
+     (dadosEstruturados, em server.js: "{nome} — laço artesanal feito à mão
+     pela Adriana Melo Acessórios, ideal para {categoria}."), agora também
+     preenchendo o campo de verdade ao ADICIONAR um produto. Só ao adicionar:
+     editar um produto existente não mexe na descrição sozinho, porque ali
+     ela pode já ter sido escrita/ajustada de propósito. */
+  function atualizarDescricaoAutomatica(){
+    if(apDescription.dataset.descricaoManual === "true") return;
+    const nome = apName.value.trim();
+    if(!nome){ apDescription.value = ""; return; }
+    const categoria = currentCategories.find(c => c.slug === apCategory.value);
+    apDescription.value = categoria
+      ? `${nome} — laço artesanal feito à mão pela Adriana Melo Acessórios, ideal para ${categoria.label.toLowerCase()}.`
+      : `${nome} — laço artesanal feito à mão pela Adriana Melo Acessórios.`;
+  }
+  apDescription.addEventListener("input", () => { apDescription.dataset.descricaoManual = "true"; });
+
+  // Encadeado com a detecção de categoria (mesmo atraso de digitação): a
+  // descrição menciona a categoria, então só faz sentido gerá-la DEPOIS que
+  // a categoria (que pode ter acabado de ser detectada/criada) já estiver
+  // escolhida — daí o await antes de atualizarDescricaoAutomatica().
+  async function aoDigitarNomeAdicionar(){
+    await autoDetectarCategoria(apName.value, apCategory);
+    atualizarDescricaoAutomatica();
+  }
+  const aoDigitarNomeAdicionarComAtraso = comAtraso(aoDigitarNomeAdicionar, 400);
+  apName.addEventListener("input", aoDigitarNomeAdicionarComAtraso);
+  apCategory.addEventListener("change", () => {
+    apCategory.dataset.categoriaManual = "true";
+    atualizarDescricaoAutomatica();
+  });
   const apBadgeBestseller = document.getElementById("apBadgeBestseller");
   const apBadgeNew = document.getElementById("apBadgeNew");
   const apMsg = document.getElementById("apMsg");
@@ -1324,9 +1450,95 @@
 
   document.getElementById("apNewCategoryBtn").addEventListener("click", () => promptNewCategory(apCategory));
 
+  /* ============================ GERENCIAR CATEGORIAS ============================
+     Renomear e excluir categorias criadas pelo painel (as 5 fixas do catálogo
+     só aparecem na lista como referência, sem os ícones de ação — ver o
+     bloqueio correspondente em server.js). Um modal só, aberto tanto do
+     formulário de editar quanto do de adicionar produto, para não duplicar
+     a lista em dois lugares. */
+  const manageCategoriesModalEl = document.getElementById("manageCategoriesModal");
+  const manageCategoriesModal = new bootstrap.Modal(manageCategoriesModalEl);
+  const manageCategoriesListEl = document.getElementById("manageCategoriesList");
+  const manageCategoriesMsgEl = document.getElementById("manageCategoriesMsg");
+
+  function renderManageCategoriesList(){
+    manageCategoriesListEl.innerHTML = currentCategories.map(c => `
+      <div class="manage-category-row" data-slug="${escapeHTML(c.slug)}">
+        <span class="manage-category-label">${escapeHTML(c.label)}</span>
+        ${c.builtin
+          ? `<span class="manage-category-tag">fixa</span>`
+          : `<div class="admin-row-actions">
+              <button type="button" class="edit-order-icon-btn rename-category-btn" data-slug="${escapeHTML(c.slug)}" data-label="${escapeHTML(c.label)}" aria-label="Renomear categoria" title="Renomear categoria"><i class="bi bi-pencil"></i></button>
+              <button type="button" class="delete-order-icon-btn delete-category-btn" data-slug="${escapeHTML(c.slug)}" aria-label="Excluir categoria" title="Excluir categoria"><i class="bi bi-trash3"></i></button>
+            </div>`}
+      </div>
+    `).join("");
+  }
+
+  function openManageCategoriesModal(){
+    manageCategoriesMsgEl.textContent = "";
+    manageCategoriesMsgEl.className = "small account-msg mt-2";
+    renderManageCategoriesList();
+    manageCategoriesModal.show();
+  }
+  document.getElementById("epManageCategoriesBtn").addEventListener("click", openManageCategoriesModal);
+  document.getElementById("apManageCategoriesBtn").addEventListener("click", openManageCategoriesModal);
+
+  // Depois de renomear/excluir, os dois <select> (editar e adicionar produto)
+  // precisam refletir a mudança — mesmo que estejam com um modal por cima
+  // deste (o formulário que estava aberto quando "Gerenciar" foi clicado).
+  function refreshCategorySelects(){
+    renderCategoryOptions(epCategory, epCategory.value);
+    renderCategoryOptions(apCategory, apCategory.value);
+  }
+
+  manageCategoriesListEl.addEventListener("click", async (e) => {
+    const renameBtn = e.target.closest(".rename-category-btn");
+    if(renameBtn){
+      const slug = renameBtn.dataset.slug;
+      const novoNome = prompt("Novo nome da categoria:", renameBtn.dataset.label);
+      if(!novoNome || !novoNome.trim() || novoNome.trim() === renameBtn.dataset.label) return;
+      try{
+        const res = await fetchWithTimeout(`/api/admin/categories/${encodeURIComponent(slug)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: novoNome.trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok) throw new Error(data.error || "Não foi possível renomear a categoria.");
+        currentCategories = currentCategories.map(c => c.slug === slug ? { ...c, label: data.label } : c);
+        renderManageCategoriesList();
+        refreshCategorySelects();
+      }catch(err){
+        manageCategoriesMsgEl.textContent = err.message || "Erro ao renomear a categoria.";
+        manageCategoriesMsgEl.classList.add("text-danger");
+      }
+      return;
+    }
+    const deleteBtn = e.target.closest(".delete-category-btn");
+    if(deleteBtn){
+      const slug = deleteBtn.dataset.slug;
+      const categoria = currentCategories.find(c => c.slug === slug);
+      if(!confirm(`Excluir a categoria "${categoria?.label || slug}"? Essa ação não pode ser desfeita.`)) return;
+      try{
+        const res = await fetchWithTimeout(`/api/admin/categories/${encodeURIComponent(slug)}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok) throw new Error(data.error || "Não foi possível excluir a categoria.");
+        currentCategories = currentCategories.filter(c => c.slug !== slug);
+        renderManageCategoriesList();
+        refreshCategorySelects();
+      }catch(err){
+        manageCategoriesMsgEl.textContent = err.message || "Erro ao excluir a categoria.";
+        manageCategoriesMsgEl.classList.add("text-danger");
+      }
+    }
+  });
+
   document.getElementById("addProductBtn").addEventListener("click", () => {
     addProductForm.reset();
     resetApPhotos();
+    apCategory.dataset.categoriaManual = "false";
+    apDescription.dataset.descricaoManual = "false";
     renderCategoryOptions(apCategory, "");
     apMsg.textContent = "";
     apMsg.className = "small account-msg";

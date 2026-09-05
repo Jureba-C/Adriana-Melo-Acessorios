@@ -180,7 +180,10 @@ const PESO_EMBALAGEM_KG = 0.04;
 const PESO_LACO_KG = 0.02;
 
 function getAllCategories(){
-  return [...BUILTIN_CATEGORIES, ...db.listCustomCategories().map(c => ({ slug: c.slug, label: c.label }))];
+  return [
+    ...BUILTIN_CATEGORIES.map(c => ({ ...c, builtin: true })),
+    ...db.listCustomCategories().map(c => ({ slug: c.slug, label: c.label, builtin: false })),
+  ];
 }
 function isValidCategorySlug(slug){
   return getAllCategories().some(c => c.slug === slug);
@@ -3843,10 +3846,73 @@ app.post("/api/admin/categories", auth.requireAdmin, auth.requireAdminTwoFactor,
       return res.status(409).json({ error: "Já existe uma categoria parecida com essa." });
     }
     const created = db.insertCustomCategory({ slug, label });
-    res.status(201).json(created);
+    res.status(201).json({ ...created, builtin: false });
   } catch (err) {
     console.error("Erro ao criar categoria:", err);
     res.status(500).json({ error: "Não foi possível criar a categoria agora." });
+  }
+});
+
+/* =========================================================================
+   PATCH /api/admin/categories/:slug — renomeia uma categoria criada pelo
+   painel. Só o rótulo muda; o slug (o que fica gravado em
+   product_overrides.category/custom_products.category) continua o mesmo,
+   então nenhum produto precisa ser tocado.
+   -------------------------------------------------------------------------
+   Categoria fixa (BUILTIN_CATEGORIES) não pode ser renomeada aqui: ela vive
+   em código (server.js), não no banco — mudar o rótulo exigiria editar
+   BUILTIN_CATEGORIES e reiniciar o servidor, então não faz sentido pelo
+   painel.
+========================================================================= */
+app.patch("/api/admin/categories/:slug", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  try {
+    const slug = String(req.params.slug || "");
+    const isCustom = db.listCustomCategories().some(c => c.slug === slug);
+    if(!isCustom){
+      if(PRODUCT_CATEGORIES.includes(slug)){
+        return res.status(400).json({ error: "Categorias fixas do catálogo não podem ser renomeadas por aqui." });
+      }
+      return res.status(404).json({ error: "Categoria não encontrada." });
+    }
+    const label = String(req.body?.label || "").trim();
+    if(label.length < 2 || label.length > 40){
+      return res.status(400).json({ error: "Nome da categoria precisa ter entre 2 e 40 caracteres." });
+    }
+    db.updateCustomCategoryLabel(slug, label);
+    res.json({ slug, label });
+  } catch (err) {
+    console.error("Erro ao renomear categoria:", err);
+    res.status(500).json({ error: "Não foi possível renomear a categoria agora." });
+  }
+});
+
+/* =========================================================================
+   DELETE /api/admin/categories/:slug — apaga uma categoria criada pelo
+   painel. Bloqueada se algum produto (fixo com override ou criado pelo
+   painel) ainda usa esse slug — apagar a categoria sem mudar o produto
+   deixaria category apontando para um rótulo que não existe mais.
+========================================================================= */
+app.delete("/api/admin/categories/:slug", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  try {
+    const slug = String(req.params.slug || "");
+    const isCustom = db.listCustomCategories().some(c => c.slug === slug);
+    if(!isCustom){
+      if(PRODUCT_CATEGORIES.includes(slug)){
+        return res.status(400).json({ error: "Categorias fixas do catálogo não podem ser excluídas por aqui." });
+      }
+      return res.status(404).json({ error: "Categoria não encontrada." });
+    }
+    const emUso = db.countProductsUsingCategory(slug);
+    if(emUso > 0){
+      return res.status(409).json({
+        error: `${emUso} produto${emUso === 1 ? "" : "s"} ainda usa${emUso === 1 ? "" : "m"} essa categoria — mude a categoria del${emUso === 1 ? "e" : "es"} antes de excluir.`,
+      });
+    }
+    db.deleteCustomCategory(slug);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Erro ao excluir categoria:", err);
+    res.status(500).json({ error: "Não foi possível excluir a categoria agora." });
   }
 });
 
