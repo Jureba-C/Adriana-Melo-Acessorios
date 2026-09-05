@@ -48,12 +48,16 @@ test("normalizeCpf / isValidCpf", () => {
 
 test("isValidAddress", () => {
   const enderecoCompleto = {
-    nome: "Maria Silva", telefone: "61982749808", rua: "Rua das Flores",
+    nome: "Maria Silva", telefone: "61982749808", cpf: "11144477735", rua: "Rua das Flores",
     numero: "123", bairro: "Centro", cidade: "Brasília", uf: "DF",
   };
   assert.equal(auth.isValidAddress(enderecoCompleto), true);
   assert.equal(auth.isValidAddress({ ...enderecoCompleto, numero: "" }), false, "campo obrigatório em branco");
   assert.equal(auth.isValidAddress({ ...enderecoCompleto, numero: undefined }), false, "campo obrigatório ausente");
+  // CPF tem checagem própria (dígito verificador) — presente mas inválido
+  // também derruba o endereço, não só "campo vazio".
+  assert.equal(auth.isValidAddress({ ...enderecoCompleto, cpf: "12345678900" }), false, "CPF com dígito verificador errado");
+  assert.equal(auth.isValidAddress({ ...enderecoCompleto, cpf: "00000000000" }), false, "sequência repetida nunca é CPF real");
   assert.equal(auth.isValidAddress(null), false);
   assert.equal(auth.isValidAddress(undefined), false);
   // complemento é opcional — a ausência dele não invalida o endereço.

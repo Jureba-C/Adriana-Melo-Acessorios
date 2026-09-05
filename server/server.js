@@ -1915,8 +1915,15 @@ app.get("/api/orders/:reference/status", statusPollLimiter, auth.requireAuth, (r
    Mesma checagem de dono do endpoint /status acima (404 tanto para pedido
    inexistente quanto para pedido de outra cliente, de propósito — não dá
    pista sobre qual dos dois casos é). Só consulta o rastreio ao vivo
-   (fetchLiveTracking) quando já existe um código salvo — sem isso, é uma
-   chamada de rede a mais para todo pedido pago, mesmo antes de postado.
+   quando já existe um código salvo — sem isso, é uma chamada de rede a mais
+   para todo pedido pago, mesmo antes de postado.
+   Duas fontes possíveis para o "ao vivo": se a etiqueta foi comprada PELO
+   Melhor Envio (melhor_envio_shipment_id preenchido), consulta a API deles
+   (fetchLiveTracking); senão — etiqueta comprada direto com a
+   transportadora e o código só colado no painel — tenta o rastreio direto
+   dos Correios (fetchCorreiosPublicTracking), que só funciona para código
+   no formato deles. Nos dois casos, falha vira `null` sem quebrar a
+   página: o link de rastreio (carrierTrackingUrl) sempre continua servindo.
 ========================================================================= */
 app.get("/api/orders/:reference", statusPollLimiter, auth.requireAuth, async (req, res) => {
   try {
@@ -1933,7 +1940,11 @@ app.get("/api/orders/:reference", statusPollLimiter, auth.requireAuth, async (re
     }));
     const shipping = JSON.parse(order.shipping_json);
     const trackingCode = order.tracking_code || "";
-    const live = trackingCode ? await fetchLiveTracking(order.melhor_envio_shipment_id) : null;
+    const live = trackingCode
+      ? (order.melhor_envio_shipment_id
+          ? await fetchLiveTracking(order.melhor_envio_shipment_id)
+          : await fetchCorreiosPublicTracking(trackingCode))
+      : null;
     res.json({
       reference: order.external_reference,
       status: order.status,
@@ -2117,15 +2128,66 @@ function normalizeTrackingEvent(raw){
   return { description, date, location: location || null };
 }
 
+/* =========================================================================
+   Rastreio "ao vivo" DIRETO dos Correios (best-effort) — para quando a
+   etiqueta foi comprada fora do Melhor Envio (direto no site da
+   transportadora) e só o código foi colado no painel. Nesse caso não existe
+   melhor_envio_shipment_id (só é gravado quando a etiqueta é comprada PELO
+   Melhor Envio), então fetchLiveTracking não tem o que consultar — este é
+   o equivalente para esse caminho.
+   -------------------------------------------------------------------------
+   ⚠️ Não é uma API pública documentada/com contrato: é o mesmo endpoint que
+   o site oficial dos Correios usa para a própria página de rastreio, sem
+   autenticação. Pode mudar de formato ou parar de responder sem aviso — por
+   isso é estritamente best-effort, no mesmo espírito de fetchLiveTracking:
+   qualquer falha (rede, formato inesperado, indisponibilidade, bloqueio)
+   só faz a página cair de volta para "sem eventos ao vivo". O link direto
+   para o rastreio oficial (carrierTrackingUrl) sempre funciona de qualquer
+   jeito, então a cliente nunca fica sem conseguir rastrear — só sem o
+   histórico embutido na nossa página quando este endpoint falhar. */
+async function fetchCorreiosPublicTracking(trackingCode){
+  if(!trackingCode || !CODIGO_CORREIOS_REGEX.test(trackingCode)) return null;
+  try{
+    const res = await fetch(`https://proxyapp.correios.com.br/v1/sro-rastro/${encodeURIComponent(trackingCode)}`, {
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const objeto = Array.isArray(data?.objetos) ? data.objetos[0] : (Array.isArray(data) ? data[0] : data);
+    const rawEventos = objeto?.eventos || objeto?.tracking_events || objeto?.events || null;
+    if(!Array.isArray(rawEventos)) return null;
+    const events = rawEventos.map(ev => {
+      if(!ev || typeof ev !== "object") return null;
+      const description = ev.descricao || ev.description || ev.message || null;
+      const date = ev.dtHrCriado || ev.data || ev.date || ev.created_at || null;
+      const unidade = ev.unidade || {};
+      const location = (unidade.cidade && unidade.uf) ? `${unidade.cidade}/${unidade.uf}` : (ev.local || ev.location || null);
+      if(!description && !date) return null;
+      return { description, date, location: location || null };
+    }).filter(Boolean);
+    if(events.length === 0) return null;
+    return { status: events[0].description, events };
+  }catch(err){
+    console.error(`Não foi possível consultar rastreio direto dos Correios (${trackingCode}):`, err.message || err);
+    return null;
+  }
+}
+
+// Código dos Correios tem sempre 13 caracteres, terminando em "BR" (ex.:
+// AA123456789BR) — usado tanto para escolher o link de rastreio quanto para
+// decidir se vale tentar o rastreio direto dos Correios (mais abaixo).
+const CODIGO_CORREIOS_REGEX = /^[A-Z]{2}\d{9}BR$/;
+
 // Link de rastreio da transportadora, sempre presente quando há código —
 // complemento permanente da rota "ao vivo" (fetchLiveTracking), não um
-// fallback só de erro. Código dos Correios tem sempre 13 caracteres,
-// terminando em "BR" (ex.: AA123456789BR); qualquer outro formato (etiqueta
-// de outra transportadora comprada via Melhor Envio) cai no link do
-// próprio Melhor Envio, que redireciona para a transportadora certa.
+// fallback só de erro. Código dos Correios cai no link oficial deles;
+// qualquer outro formato (etiqueta de outra transportadora comprada via
+// Melhor Envio) cai no link do próprio Melhor Envio, que redireciona para a
+// transportadora certa.
 function carrierTrackingUrl(trackingCode){
   if(!trackingCode) return null;
-  return /^[A-Z]{2}\d{9}BR$/.test(trackingCode)
+  return CODIGO_CORREIOS_REGEX.test(trackingCode)
     ? `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(trackingCode)}`
     : `https://www.melhorenvio.com.br/rastreio/${encodeURIComponent(trackingCode)}`;
 }
@@ -3096,6 +3158,7 @@ app.get("/api/admin/orders", auth.requireAdmin, auth.requireAdminTwoFactor, (req
         customer: {
           nome: address?.nome || null,
           telefone: address?.telefone || null,
+          cpf: address?.cpf || null,
           email: account?.email || null,
         },
         address,

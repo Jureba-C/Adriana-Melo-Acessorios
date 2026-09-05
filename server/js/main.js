@@ -1161,6 +1161,7 @@
   const addrInputs = {
     nome: document.getElementById("addrNome"),
     telefone: document.getElementById("addrTelefone"),
+    cpf: document.getElementById("addrCpf"),
     rua: document.getElementById("addrRua"),
     numero: document.getElementById("addrNumero"),
     complemento: document.getElementById("addrComplemento"),
@@ -1173,6 +1174,10 @@
     return {
       nome: addrInputs.nome.value.trim(),
       telefone: addrInputs.telefone.value.trim(),
+      // Dígitos só, igual ao cadastro (js/conta.js) — é o formato que
+      // auth.isValidCpf (server.js) espera para conferir o dígito
+      // verificador.
+      cpf: addrInputs.cpf.value.replace(/\D/g, ""),
       rua: addrInputs.rua.value.trim(),
       numero: addrInputs.numero.value.trim(),
       complemento: addrInputs.complemento.value.trim(),
@@ -1200,9 +1205,38 @@
     return out;
   }
 
+  // Mesmo algoritmo do dígito verificador usado em auth.isValidCpf
+  // (server.js) — duplicado aqui de propósito: o navegador não importa a
+  // lib do servidor, e vale avisar "CPF inválido" antes do submit em vez de
+  // só depois que o servidor recusar.
+  function isValidCpfBR(value){
+    const v = value.replace(/\D/g, "");
+    if(!/^\d{11}$/.test(v)) return false;
+    if(/^(\d)\1{10}$/.test(v)) return false;
+    const digits = v.split("").map(Number);
+    const checkDigit = base => {
+      let sum = 0;
+      for(let i = 0; i < base.length; i++) sum += base[i] * (base.length + 1 - i);
+      const rest = (sum * 10) % 11;
+      return rest === 10 ? 0 : rest;
+    };
+    if(checkDigit(digits.slice(0, 9)) !== digits[9]) return false;
+    if(checkDigit(digits.slice(0, 10)) !== digits[10]) return false;
+    return true;
+  }
+
+  function maskCpf(value){
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if(digits.length > 9) return `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+    if(digits.length > 6) return `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
+    if(digits.length > 3) return `${digits.slice(0,3)}.${digits.slice(3)}`;
+    return digits;
+  }
+
   const ADDRESS_FIELD_RULES = {
     nome: { label: "Nome", validate: v => !v ? "Digite seu nome completo" : (v.length < 3 ? "Nome muito curto — digite o nome completo" : null) },
     telefone: { label: "Telefone", validate: v => !v ? "Digite seu telefone" : (!isValidPhoneBR(v) ? "Faltam números no telefone. Confira o DDD." : null) },
+    cpf: { label: "CPF", validate: v => !v ? "Digite o CPF do destinatário" : (!isValidCpfBR(v) ? "CPF inválido — confira os números." : null) },
     rua: { label: "Rua", validate: v => v ? null : "Digite o nome da rua" },
     numero: { label: "Número", validate: v => v ? null : "Digite o número do endereço" },
     bairro: { label: "Bairro", validate: v => v ? null : "Digite o bairro" },
@@ -1262,6 +1296,11 @@
     if(currentUser.name && !addrInputs.nome.value.trim()){
       addrInputs.nome.value = currentUser.name;
     }
+    // Só um ponto de partida — o pacote pode ser presente para outra
+    // pessoa, então o CPF continua editável, igual ao nome/telefone.
+    if(currentUser.cpf && !addrInputs.cpf.value.trim()){
+      addrInputs.cpf.value = maskCpf(currentUser.cpf);
+    }
     fillCep(currentUser.cep);
 
     // Endereço completo salvo de uma compra anterior (server.js:
@@ -1275,6 +1314,7 @@
       if(!address) return;
       if(!addrInputs.nome.value) addrInputs.nome.value = address.nome || "";
       if(!addrInputs.telefone.value) addrInputs.telefone.value = maskPhoneBR(address.telefone || "");
+      if(!addrInputs.cpf.value) addrInputs.cpf.value = maskCpf(address.cpf || "");
       if(!addrInputs.rua.value) addrInputs.rua.value = address.rua || "";
       if(!addrInputs.numero.value) addrInputs.numero.value = address.numero || "";
       if(!addrInputs.complemento.value) addrInputs.complemento.value = address.complemento || "";
@@ -1303,6 +1343,9 @@
 
   addrInputs.telefone.addEventListener("input", () => {
     addrInputs.telefone.value = maskPhoneBR(addrInputs.telefone.value);
+  });
+  addrInputs.cpf.addEventListener("input", () => {
+    addrInputs.cpf.value = maskCpf(addrInputs.cpf.value);
   });
 
   Object.values(addrInputs).forEach(el => el.addEventListener("input", () => {

@@ -157,6 +157,12 @@
             <input type="tel" class="form-control" id="addrTelefone" placeholder="(11) 99999-9999" inputmode="tel" required aria-describedby="addrTelefone-error" autocomplete="tel">
             <div class="field-error" id="addrTelefone-error"></div>
           </div>
+          <div class="col-12 cart-address-field">
+            <label class="form-label" for="addrCpf">CPF do destinatário<span class="required-mark" aria-hidden="true">*</span></label>
+            <input type="text" class="form-control" id="addrCpf" placeholder="000.000.000-00" inputmode="numeric" required aria-describedby="addrCpf-error" autocomplete="off" maxlength="14">
+            <div class="field-error" id="addrCpf-error"></div>
+            <div class="form-text">Necessário para a etiqueta de envio.</div>
+          </div>
           <div class="col-8 cart-address-field">
             <label class="form-label" for="addrRua">Rua<span class="required-mark" aria-hidden="true">*</span></label>
             <input type="text" class="form-control" id="addrRua" placeholder="Ex: Rua das Flores" required aria-describedby="addrRua-error" autocomplete="address-line1">

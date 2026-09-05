@@ -74,6 +74,7 @@ function formatOrderMessage({ externalReference, items, address, total, paidAt, 
     "",
     `Cliente: ${address?.nome || "-"}`,
     `Telefone: ${address?.telefone || "-"}`,
+    `CPF: ${address?.cpf || "-"}`,
     `Entrega: ${deliveryLine || "-"}`,
   ].join("\n");
 }

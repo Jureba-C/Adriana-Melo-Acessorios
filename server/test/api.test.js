@@ -225,7 +225,7 @@ test("GET/PUT /api/auth/address — sem sessão, endereço em branco, salva/atua
   assert.equal(initial.status, 200);
   assert.equal((await initial.json()).address, null);
 
-  const endereco = { nome: "End A", telefone: "(61) 91111-2222", rua: "Rua das Flores", numero: "10", bairro: "Centro", cidade: "Brasília", uf: "DF", cep: "70040-020" };
+  const endereco = { nome: "End A", telefone: "(61) 91111-2222", cpf: "11144477735", rua: "Rua das Flores", numero: "10", bairro: "Centro", cidade: "Brasília", uf: "DF", cep: "70040-020" };
 
   // Endereço incompleto -> 400, nada é salvo.
   const incompleto = await put("/api/auth/address", { address: { ...endereco, numero: "" } }, cookieA);
@@ -253,7 +253,7 @@ test("GET/PUT /api/auth/address — sem sessão, endereço em branco, salva/atua
 
 test("esgotado: PATCH admin reflete no catálogo e bloqueia o checkout (incl. a corrida)", async () => {
   const endereco = {
-    nome: "Cliente Esgotado", telefone: "61982749808", rua: "Rua das Flores",
+    nome: "Cliente Esgotado", telefone: "61982749808", cpf: "11144477735", rua: "Rua das Flores",
     numero: "100", bairro: "Centro", cidade: "Brasília", uf: "DF",
   };
   const checkoutBody = () => ({

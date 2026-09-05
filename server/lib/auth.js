@@ -88,9 +88,18 @@ function isValidCpf(v) {
 // do checkout (server.js: buildCheckoutDraft) quanto na do endereço salvo
 // (PUT /api/auth/address), para as duas nunca divergirem sobre o que é
 // "endereço completo". `complemento` fica de fora de propósito: é opcional.
-const ADDRESS_REQUIRED_FIELDS = ["nome", "telefone", "rua", "numero", "bairro", "cidade", "uf"];
+// `cpf` é o do DESTINATÁRIO (pode não ser o mesmo da conta — presente de
+// aniversário, etc.), pedido na hora de calcular o frete porque é ali que a
+// tela já pede os outros dados de entrega; a etiqueta/nota fiscal usa esse
+// valor, não o CPF cadastrado na conta.
+const ADDRESS_REQUIRED_FIELDS = ["nome", "telefone", "rua", "numero", "bairro", "cidade", "uf", "cpf"];
 function isValidAddress(address) {
-  return !!address && ADDRESS_REQUIRED_FIELDS.every(f => String(address[f] || "").trim());
+  if (!address) return false;
+  if (!ADDRESS_REQUIRED_FIELDS.every(f => String(address[f] || "").trim())) return false;
+  // CPF recebe uma checagem própria (dígito verificador), não só "não
+  // vazio" — os outros campos são texto livre, mas um CPF errado aqui vai
+  // direto para uma etiqueta de envio de verdade.
+  return isValidCpf(normalizeCpf(address.cpf));
 }
 
 /* ------------------------------ COOKIES ------------------------------ */
@@ -468,7 +477,11 @@ function getUserFromRequest(req) {
   if (!session) return null;
   const user = db.getUserById(session.user_id);
   if (!user) return null;
-  return { id: user.id, name: user.name, email: user.email, cep: user.cep || null, isAdmin: isAdminEmail(user.email) };
+  // cpf vai junto (mesmo padrão de cep): o carrinho usa para pré-preencher
+  // o CPF do destinatário no checkout, poupando quem compra de digitar de
+  // novo o que já deu no cadastro (continua editável — o pacote pode ser
+  // presente para outra pessoa).
+  return { id: user.id, name: user.name, email: user.email, cep: user.cep || null, cpf: user.cpf || null, isAdmin: isAdminEmail(user.email) };
 }
 
 /* ------------------------------ MIDDLEWARES ------------------------------ */

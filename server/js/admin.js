@@ -1658,6 +1658,7 @@
         <div class="small mb-3 text-ink-soft">
           <div><strong>Cliente:</strong> ${escapeHTML(order.customer?.nome || "—")}</div>
           <div><strong>Telefone:</strong> ${escapeHTML(order.customer?.telefone || "—")}</div>
+          <div><strong>CPF:</strong> ${escapeHTML(order.customer?.cpf || "—")}</div>
           ${order.customer?.email ? `<div><strong>E-mail da conta:</strong> ${escapeHTML(order.customer.email)}</div>` : ""}
           <div><strong>Entrega:</strong> ${escapeHTML(addressLine(order.address))}${order.shipping?.name ? ` — ${escapeHTML(order.shipping.name)}` : ""}</div>
         </div>
@@ -1692,7 +1693,7 @@
           <div class="d-flex gap-2 flex-grow-1 flex-wrap" style="min-width:220px">
             <input type="text" class="form-control form-control-sm tracking-input" id="tracking-${escapeHTML(ref)}"
                    value="${escapeHTML(order.trackingCode || "")}" placeholder="Ex.: BR123456789BR" maxlength="60">
-            <button type="button" class="btn-outline-blush save-tracking-btn" data-ref="${escapeHTML(ref)}">Salvar</button>
+            <button type="button" class="btn-outline-blush save-tracking-btn" data-ref="${escapeHTML(ref)}" title="Comprou a etiqueta direto no site da transportadora (Correios, etc.)? Cole o código aqui e salve — a cliente acompanha ao vivo do mesmo jeito.">Salvar</button>
             <button type="button" class="btn-outline-blush show-barcode-btn" data-ref="${escapeHTML(ref)}" title="Desenha o código digitado acima como código de barras"><i class="bi bi-upc-scan me-1"></i>Gerar código de barras</button>
             <button type="button" class="btn-outline-blush generate-label-btn" data-ref="${escapeHTML(ref)}" title="Compra a etiqueta no Melhor Envio (gasta saldo real) e preenche o código automaticamente"><i class="bi bi-stars me-1"></i>Comprar etiqueta</button>
             ${order.fulfillmentStatus === "postado" ? `

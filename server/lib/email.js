@@ -236,6 +236,7 @@ function formatOrderEmail({ externalReference, items, address, total, paidAt, ad
     "",
     `Cliente: ${address?.nome || "-"}`,
     `Telefone: ${address?.telefone || "-"}`,
+    `CPF: ${address?.cpf || "-"}`,
     `Entrega: ${deliveryLine || "-"}`,
     "",
     `Ver no painel administrativo: ${adminUrl}`,
@@ -280,6 +281,7 @@ function formatOrderEmail({ externalReference, items, address, total, paidAt, ad
         <td align="left" style="font-family:${FONT_CORPO}; color:#8C6577; font-size:13px; line-height:1.6; background:#FFF5F9; border-radius:14px; padding:14px 16px; margin-bottom:20px;">
           ${linhaDado("Cliente", address?.nome || "-")}
           ${linhaDado("Telefone", address?.telefone || "-")}
+          ${linhaDado("CPF", address?.cpf || "-")}
           ${linhaDado("Entrega", deliveryLine || "-")}
         </td>
       </tr>
@@ -311,6 +313,11 @@ async function sendEmail({ to, subject, text, html, headers, attachments = [] })
 
   await transporter.sendMail({
     from: process.env.SMTP_FROM || SMTP_USER,
+    // Reply-To real (a própria lojista) em todo e-mail — se a cliente
+    // responder o recibo, cai na caixa dela, não se perde. É também um dos
+    // muitos sinais pequenos que ajudam a reputação do remetente: caixa que
+    // aceita resposta lê como correspondência de verdade, não disparo.
+    replyTo: process.env.OWNER_EMAIL || undefined,
     to,
     subject,
     text,
