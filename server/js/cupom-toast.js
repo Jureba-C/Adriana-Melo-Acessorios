@@ -31,6 +31,14 @@
   const copyBtn = document.getElementById("couponToastCopyBtn");
   const closeBtn = toastEl.querySelector(".coupon-toast-close");
 
+  window.PLCCupomToast = {
+    abrir(){
+      toast.show();
+      if(!emailInput.disabled) emailInput.focus();
+    },
+  };
+  document.dispatchEvent(new CustomEvent("plc:cupom-toast-pronto"));
+
   closeBtn.addEventListener("click", (e) => {
     e.preventDefault();
     const semAnimacao = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -84,6 +92,7 @@
       form.hidden = true;
       revealEl.classList.add("show");
       emailInput.disabled = true;
+      document.dispatchEvent(new CustomEvent("plc:cupom-assinado"));
     }catch(err){
       console.error("Falha ao inscrever pelo cupom da notificação:", err);
       mostrarErro(err.message || "Não foi possível agora. Tente de novo.");

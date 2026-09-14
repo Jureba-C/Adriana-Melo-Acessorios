@@ -1680,10 +1680,6 @@
     window.scrollTo({ top:0, behavior:"smooth" });
   });
 
-  function isValidEmail(v){
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-  }
-
   async function postForm(url, body){
     const res = await fetchWithTimeout(url, {
       method: "POST",
@@ -1694,47 +1690,6 @@
     if(!res.ok) throw new Error(data.error || "Não foi possível enviar agora. Tente novamente em instantes.");
     return data;
   }
-
-  const newsletterForm = document.getElementById("newsletterForm");
-  newsletterForm?.addEventListener("submit", async function(e){
-    e.preventDefault();
-    const input = this.querySelector("input[type=email]");
-    const btn = this.querySelector("button[type=submit]");
-    const msg = document.getElementById("newsletterMsg");
-    const email = input.value.trim();
-    if(!isValidEmail(email)){
-      msg.textContent = "Digite um e-mail válido.";
-      return;
-    }
-    const consent = document.getElementById("newsletterConsent");
-    if(consent && !consent.checked){
-      msg.textContent = "Marque o consentimento para continuar.";
-      return;
-    }
-    btn.disabled = true;
-    msg.textContent = "Enviando...";
-    try{
-      const data = await postForm("/api/newsletter", { email });
-
-      if(data.coupon){
-        const emailLine = data.emailed
-          ? "Também enviamos no seu e-mail."
-          : "Anote o código — use no carrinho antes de finalizar.";
-        msg.innerHTML = `Pronto! Seu cupom de ${escapeHTML(String(data.percentOff))}% é `
-          + `<strong class="newsletter-coupon">${escapeHTML(data.coupon)}</strong> 🎀<br>${emailLine}`;
-      } else {
-        msg.textContent = "Pronto! Você está na nossa lista de novidades. 🎀";
-      }
-      input.value = "";
-    }catch(err){
-      console.error("Falha ao inscrever na newsletter:", err);
-      msg.textContent = err.name === "AbortError"
-        ? "O envio demorou demais. Tente novamente."
-        : err.message;
-    }finally{
-      btn.disabled = false;
-    }
-  });
 
   const contactForm = document.getElementById("contactForm");
   contactForm.addEventListener("submit", async function(e){

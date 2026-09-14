@@ -61,16 +61,27 @@
   <svg class="fita-guia-laco bow-icon" focusable="false"><use href="#bow-shape"/></svg>
 </div>
 
-<a class="faixa-promo" href="#colecoes" aria-label="Promoção Leve 4, pague 3: a peça mais barata sai grátis. Ver coleção.">
+<div class="faixa-promo" id="faixaPromo">
   <span class="faixa-promo-laco" aria-hidden="true"><svg class="bow-icon"><use href="#bow-shape"/></svg></span>
-  <span class="faixa-promo-conteudo">
-    <span class="faixa-promo-grito"><i class="bi bi-tags" aria-hidden="true"></i> Leve 4, pague 3</span>
-    <span class="faixa-promo-sep" aria-hidden="true"><svg class="bow-icon"><use href="#bow-shape"/></svg></span>
-    <span class="faixa-promo-mecanica">a peça mais barata sai grátis</span>
-    <span class="faixa-promo-mecanica-curta" aria-hidden="true">a peça mais barata sai grátis</span>
-    <span class="faixa-promo-cta">Ver coleção<i class="bi bi-chevron-right" aria-hidden="true"></i></span>
-  </span>
-</a>
+  <a class="faixa-promo-slide is-ativa" href="#colecoes" aria-label="Promoção Leve 4, pague 3: a peça mais barata sai grátis. Ver coleção.">
+    <span class="faixa-promo-conteudo">
+      <span class="faixa-promo-grito"><i class="bi bi-tags" aria-hidden="true"></i> Leve 4, pague 3</span>
+      <span class="faixa-promo-sep" aria-hidden="true"><svg class="bow-icon"><use href="#bow-shape"/></svg></span>
+      <span class="faixa-promo-mecanica">a peça mais barata sai grátis</span>
+      <span class="faixa-promo-mecanica-curta" aria-hidden="true">a peça mais barata sai grátis</span>
+      <span class="faixa-promo-cta">Ver coleção<i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+    </span>
+  </a>
+  <button type="button" class="faixa-promo-slide" id="faixaPromoCupom" hidden aria-label="Ganhe 10% de desconto na primeira compra: cadastre seu e-mail e receba o cupom.">
+    <span class="faixa-promo-conteudo">
+      <span class="faixa-promo-grito"><i class="bi bi-gift-fill" aria-hidden="true"></i> Ganhe 10% na primeira compra</span>
+      <span class="faixa-promo-sep" aria-hidden="true"><svg class="bow-icon"><use href="#bow-shape"/></svg></span>
+      <span class="faixa-promo-mecanica">cupom de boas-vindas no seu e-mail</span>
+      <span class="faixa-promo-mecanica-curta" aria-hidden="true">cupom no seu e-mail</span>
+      <span class="faixa-promo-cta">Quero o cupom<i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+    </span>
+  </button>
+</div>
 
 <nav class="plc-navbar" id="mainNav" aria-label="Navegação principal">
   <div class="container d-flex align-items-center justify-content-between">
@@ -615,23 +626,6 @@
 </section>
 
 
-<section class="py-5" style="padding-top:5rem; padding-bottom:5rem;">
-  <div class="container">
-    <div class="plc-cta text-center text-md-start reveal">
-      <svg class="bow-icon" style="width:200px; top:-30px; right:-20px;"><use href="#bow-shape"/></svg>
-      <svg class="bow-icon" style="width:120px; bottom:-30px; left:10%;"><use href="#bow-shape"/></svg>
-      <div class="row align-items-center position-relative">
-        <div class="col-lg-9">
-          <span class="plc-cta-badge"><i class="bi bi-tags"></i> promoção ativa</span>
-          <h2 class="mb-2" style="font-family:var(--font-body); font-weight:700; text-transform:uppercase; letter-spacing:.03em; font-size:2rem; color:#fff">Leve 4, pague 3</h2>
-          <p class="mb-4 plc-cta-sub">A peça mais barata do carrinho sai grátis — em qualquer combinação de produtos, sem precisar de cupom.</p>
-          <a class="btn-blush" href="#colecoes">Ver coleção</a>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section id="contato" class="py-5" style="padding-top:5rem; padding-bottom:6rem;">
   <div class="container">
     <div class="row g-5">
@@ -916,6 +910,7 @@
 <script src="js/animacoes.js" defer fetchpriority="low"></script>
 <script src="js/instagram-feed.js" defer></script>
 <script src="js/cupom-toast.js" defer></script>
+<script src="js/faixa-promo.js" defer></script>
 <script src="js/cookie-consent.js" defer></script>
 </body>
 </html>

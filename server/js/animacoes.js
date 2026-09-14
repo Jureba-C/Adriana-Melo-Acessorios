@@ -178,7 +178,7 @@
     }
   }
 
-  const TITULOS = "#colecoes h2, #historia h2, #sobre h2, #depoimentos h2, .plc-cta h2, #contato h2";
+  const TITULOS = "#colecoes h2, #historia h2, #sobre h2, #depoimentos h2, #contato h2";
 
   function entradaDosTitulos() {
     const titulos = gsap.utils.toArray(TITULOS);
@@ -217,7 +217,6 @@
     const camadas = [
       [".hero-flutuantes", 90],
       ["#historia .instagram-feed-card", -46],
-      [".plc-cta .bow-icon", 70],
     ];
 
     camadas.forEach(([seletor, distancia]) => {
@@ -238,20 +237,6 @@
         }
       );
     });
-
-    const lacosCta = gsap.utils.toArray(".plc-cta .bow-icon");
-    if (lacosCta.length) {
-      gsap.fromTo(lacosCta,
-        { rotation: -8 },
-        {
-          rotation: 8, ease: "none",
-          scrollTrigger: {
-            trigger: ".plc-cta", start: "top bottom", end: "bottom top",
-            scrub: true, invalidateOnRefresh: true,
-          },
-        }
-      );
-    }
   }
 
   function fitaGuia() {
