@@ -1668,6 +1668,16 @@
       </div>`;
   }
 
+  const pedidosAbertos = new Set();
+  const dadosDaClienteAbertos = new Set();
+
+  function proximoPasso(order){
+    if(order.status !== "pago") return null;
+    if(order.fulfillmentStatus === "entregue") return { texto: "Entregue", cls: "is-pronto" };
+    if(!order.trackingCode) return { texto: "Falta postar", cls: "is-agora" };
+    return { texto: "A caminho", cls: "is-andamento" };
+  }
+
   function orderCardHTML(order){
     const status = STATUS_LABELS[order.status] || { label: escapeHTML(order.status), cls:"order-status-pending" };
     const ref = order.reference;
@@ -1687,20 +1697,35 @@
       </li>
     `).join("");
 
+    const passo = proximoPasso(order);
+    const aberto = pedidosAbertos.has(ref);
+    const dadosFechados = !dadosDaClienteAbertos.has(ref);
+    const quem = (order.customer?.nome || order.address?.nome || "").split(" ")[0] || "";
+
     return `
-      <div class="order-card" id="pedido-${escapeHTML(ref)}" data-ref="${escapeHTML(ref)}">
-        <div class="d-flex align-items-start flex-wrap gap-2 mb-2">
-          <div>
-            <div class="fw-semibold">Pedido #${escapeHTML(ref.slice(0, 8))}</div>
-            <div class="small text-ink-soft">${formatDate(order.createdAt)}</div>
-          </div>
-          <div class="d-flex align-items-center gap-2 ms-auto">
-            <span class="order-status ${status.cls}">${status.label}</span>
-            ${!isPaid ? `<button type="button" class="delete-order-icon-btn delete-order-btn" data-ref="${escapeHTML(ref)}" aria-label="Apagar pedido" title="Apagar pedido"><i class="bi bi-trash3"></i></button>` : ""}
-          </div>
+      <div class="order-card${aberto ? " is-aberto" : ""}" id="pedido-${escapeHTML(ref)}" data-ref="${escapeHTML(ref)}">
+        <div class="order-card-topo">
+          <button type="button" class="order-card-head" data-ref="${escapeHTML(ref)}"
+                  aria-expanded="${aberto ? "true" : "false"}" aria-controls="corpo-${escapeHTML(ref)}">
+            <i class="bi bi-chevron-right order-card-seta" aria-hidden="true"></i>
+            <span class="order-card-info">
+              <span class="order-card-titulo">#${escapeHTML(ref.slice(0, 8))}${quem ? ` · ${escapeHTML(quem)}` : ""}</span>
+              <span class="order-card-sub">${formatDate(order.createdAt)} · ${formatMoney(order.total)}</span>
+            </span>
+            <span class="order-card-tags">
+              ${passo ? `<span class="order-passo ${passo.cls}">${passo.texto}</span>` : ""}
+              <span class="order-status ${status.cls}">${status.label}</span>
+            </span>
+          </button>
+          ${!isPaid ? `<button type="button" class="delete-order-icon-btn delete-order-btn" data-ref="${escapeHTML(ref)}" aria-label="Apagar pedido" title="Apagar pedido"><i class="bi bi-trash3"></i></button>` : ""}
         </div>
 
-        <div class="order-fields small mb-3">
+        <div class="order-card-corpo" id="corpo-${escapeHTML(ref)}"${aberto ? "" : " hidden"}>
+        <button type="button" class="dados-toggle${dadosFechados ? "" : " is-aberto"}" data-ref="${escapeHTML(ref)}"
+                aria-expanded="${dadosFechados ? "false" : "true"}" aria-controls="dados-${escapeHTML(ref)}">
+          <i class="bi bi-chevron-right dados-toggle-seta" aria-hidden="true"></i>Dados da cliente
+        </button>
+        <div class="order-fields small mb-3" id="dados-${escapeHTML(ref)}"${dadosFechados ? " hidden" : ""}>
           ${camposDoCliente(order).map(([rotulo, valor]) => linhaCopiavel(rotulo, valor)).join("")}
           ${order.shipping?.name ? `<div class="order-field"><span class="order-field-label">Envio</span><span class="order-field-value">${escapeHTML(order.shipping.name)}</span></div>` : ""}
         </div>
@@ -1770,8 +1795,39 @@
           <span class="small tracking-feedback" data-ref-feedback="${escapeHTML(ref)}"></span>
         </div>
         ` : ""}
+        </div>
       </div>
     `;
+  }
+
+  function alternarPedido(ref){
+    const card = document.getElementById(`pedido-${ref}`);
+    if(!card) return;
+    const head = card.querySelector(".order-card-head");
+    const corpo = card.querySelector(".order-card-corpo");
+    if(!head || !corpo) return;
+    const abrindo = corpo.hidden;
+    corpo.hidden = !abrindo;
+    head.setAttribute("aria-expanded", String(abrindo));
+    card.classList.toggle("is-aberto", abrindo);
+    if(abrindo) pedidosAbertos.add(ref); else pedidosAbertos.delete(ref);
+  }
+
+  function abrirPedido(ref){
+    if(pedidosAbertos.has(ref)) return;
+    alternarPedido(ref);
+  }
+
+  function alternarDadosDaCliente(ref){
+    const card = document.getElementById(`pedido-${ref}`);
+    const botao = card?.querySelector(".dados-toggle");
+    const campos = document.getElementById(`dados-${ref}`);
+    if(!botao || !campos) return;
+    const abrindo = campos.hidden;
+    campos.hidden = !abrindo;
+    botao.setAttribute("aria-expanded", String(abrindo));
+    botao.classList.toggle("is-aberto", abrindo);
+    if(abrindo) dadosDaClienteAbertos.add(ref); else dadosDaClienteAbertos.delete(ref);
   }
 
   function highlightFromQuery(){
@@ -1783,6 +1839,7 @@
 
     const card = document.getElementById(`pedido-${ref}`);
     if(!card) return;
+    abrirPedido(ref);
     card.scrollIntoView({ behavior:"smooth", block:"center" });
     card.classList.add("is-highlighted");
     setTimeout(() => card.classList.remove("is-highlighted"), 4000);
@@ -1853,6 +1910,7 @@
     }
     stateEmpty.classList.add("d-none");
     listEl.classList.remove("d-none");
+    if(orders.length === 1) pedidosAbertos.add(orders[0].reference);
     listEl.innerHTML = orders.map(orderCardHTML).join("");
     highlightFromQuery();
   }
@@ -1995,6 +2053,18 @@
     const checkBtn = e.target.closest(".check-delivery-btn");
     const deleteBtn = e.target.closest(".delete-order-btn");
     const copyBtn = e.target.closest(".copy-field-btn");
+    const headBtn = e.target.closest(".order-card-head");
+    const dadosBtn = e.target.closest(".dados-toggle");
+
+    if(dadosBtn){
+      alternarDadosDaCliente(dadosBtn.dataset.ref);
+      return;
+    }
+
+    if(headBtn){
+      alternarPedido(headBtn.dataset.ref);
+      return;
+    }
 
     if(copyBtn){
       copiarCampo(copyBtn);
