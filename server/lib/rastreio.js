@@ -1,48 +1,25 @@
 "use strict";
 
-const CODIGO_CORREIOS_REGEX = /^[A-Z]{2}\d{9}BR$/;
+/* Recebe o rastreio inteiro (status + eventos), não só a lista de eventos:
+   o Melhor Envio às vezes devolve a situação do envio SEM histórico, e aí a
+   única pista de que chegou é o status "delivered". Sem olhar os dois, um
+   pedido entregue sem lista de eventos nunca fecharia sozinho.
 
-/* ⚠️ Não é API pública com contrato: é o mesmo endereço que o site dos
-   Correios usa na própria página de rastreio, sem autenticação. Pode mudar
-   de formato ou parar de responder sem aviso, então tudo aqui é best-effort
-   e qualquer falha devolve null. */
-async function consultarCorreios(trackingCode){
-  if(!trackingCode || !CODIGO_CORREIOS_REGEX.test(trackingCode)) return null;
-  try{
-    const res = await fetch(`https://proxyapp.correios.com.br/v1/sro-rastro/${encodeURIComponent(trackingCode)}`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(6000),
-    });
-    if(!res.ok) return null;
-    const data = await res.json();
-    const objeto = Array.isArray(data?.objetos) ? data.objetos[0] : (Array.isArray(data) ? data[0] : data);
-    const rawEventos = objeto?.eventos || objeto?.tracking_events || objeto?.events || null;
-    if(!Array.isArray(rawEventos)) return null;
-    const events = rawEventos.map(ev => {
-      if(!ev || typeof ev !== "object") return null;
-      const description = ev.descricao || ev.description || ev.message || null;
-      const date = ev.dtHrCriado || ev.data || ev.date || ev.created_at || null;
-      const unidade = ev.unidade || {};
-      const location = (unidade.cidade && unidade.uf) ? `${unidade.cidade}/${unidade.uf}` : (ev.local || ev.location || null);
-      if(!description && !date) return null;
-      return { description, date, location: location || null };
-    }).filter(Boolean);
-    if(events.length === 0) return null;
-    return { status: events[0].description, events };
-  }catch(err){
-    console.error(`Não foi possível consultar rastreio direto dos Correios (${trackingCode}):`, err.message || err);
-    return null;
-  }
-}
-
-/* ⚠️ "entregue ao remetente" é DEVOLUÇÃO, não entrega — marcar isso como
+   ⚠️ "entregue ao remetente" é DEVOLUÇÃO, não entrega — marcar isso como
    entregue diria à cliente que o pacote chegou quando ele voltou. */
-function eventoDeEntrega(events){
-  if(!Array.isArray(events)) return null;
-  return events.find(ev => {
+const STATUS_DE_ENTREGA = new Set(["delivered", "entregue"]);
+
+function eventoDeEntrega(live){
+  const events = Array.isArray(live?.events) ? live.events : (Array.isArray(live) ? live : []);
+  const evento = events.find(ev => {
     const texto = String(ev?.description || "").toLowerCase();
     return texto.includes("entregue") && !texto.includes("remetente");
-  }) || null;
+  });
+  if(evento) return evento;
+
+  const status = String(live?.status || "").trim().toLowerCase();
+  if(STATUS_DE_ENTREGA.has(status)) return { description: live.status, date: null, location: null };
+  return null;
 }
 
 function dataDoEvento(evento){
@@ -51,16 +28,18 @@ function dataDoEvento(evento){
   return Number.isNaN(d.getTime()) ? null : d.getTime();
 }
 
+/* A loja só posta pelo Melhor Envio, e o código que ela cola no painel só é
+   reconhecido lá — inclusive quando o serviço é PAC/SEDEX, que o Melhor
+   Envio revende. Por isso o link é sempre deles, sem olhar o formato do
+   código como antes.
+   ⚠️ Sem "www.": medido, a versão com www responde 302 para esta, e o
+   redirecionamento extra custa uma viagem a mais no celular da cliente. */
 function linkDaTransportadora(trackingCode){
   if(!trackingCode) return null;
-  return CODIGO_CORREIOS_REGEX.test(trackingCode)
-    ? `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(trackingCode)}`
-    : `https://www.melhorenvio.com.br/rastreio/${encodeURIComponent(trackingCode)}`;
+  return `https://melhorenvio.com.br/rastreio/${encodeURIComponent(trackingCode)}`;
 }
 
 module.exports = {
-  CODIGO_CORREIOS_REGEX,
-  consultarCorreios,
   eventoDeEntrega,
   dataDoEvento,
   linkDaTransportadora,

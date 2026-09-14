@@ -45,11 +45,11 @@ const db = require("./lib/db");
 const spreadsheetExport = require("./lib/export-spreadsheet");
 const auth = require("./lib/auth");
 const whatsapp = require("./lib/whatsapp");
-const notaFiscal = require("./lib/notaFiscal");
 const instagram = require("./lib/instagram");
 const email = require("./lib/email");
 const emailPhotos = require("./lib/emailPhotos.js");
 const rastreio = require("./lib/rastreio.js");
+const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // Mesmo arquivo que a vitrine e o carrinho carregam no navegador (js/pricing.js,
 // em formato UMD) — é o que garante que o "5% no Pix" e o "3x sem juros"
 // mostrados na tela do produto sejam exatamente os valores cobrados aqui.
@@ -323,7 +323,6 @@ function effectiveProduct(id, overridesMap){
       // NULL = nunca customizado -> todas as cores disponíveis (não deixa
       // nada subitamente incomprável para produto que a lojista nunca editou).
       description: custom.description || null,
-      ncm: custom.ncm || null,
       hidden: Boolean(custom.hidden),
       soldOut: Boolean(custom.sold_out),
     };
@@ -331,7 +330,7 @@ function effectiveProduct(id, overridesMap){
   const base = PRODUCTS[id];
   if(!base) return null;
   const override = overridesMap.get(id);
-  if(!override) return { ...base, photos: [], photoUrl: null, description: null, ncm: null, hidden: false, soldOut: false };
+  if(!override) return { ...base, photos: [], photoUrl: null, description: null, hidden: false, soldOut: false };
   const photos = photosFromRow(override);
   return {
     ...base,
@@ -341,7 +340,6 @@ function effectiveProduct(id, overridesMap){
     category: override.category || base.category,
     badges: override.badges ? JSON.parse(override.badges) : base.badges,
     description: override.description || null,
-    ncm: override.ncm || null,
     hidden: Boolean(override.hidden),
     soldOut: Boolean(override.sold_out),
   };
@@ -1240,84 +1238,10 @@ function buildValidatedItems(items){
    produção por padrão não tem custo. O que gasta saldo de verdade é a
    compra de etiqueta, e essa continua atrás de AUTO_PURCHASE_SHIPPING_LABEL
    (desligada por padrão — ver purchaseShippingLabel mais abaixo).
+
+   O cliente HTTP em si (meFetch) e o rastreio moram em lib/melhorEnvio.js,
+   porque scripts/tarefas-periodicas.js roda noutro processo e precisa deles.
 ========================================================================= */
-const MELHOR_ENVIO_BASE_URL = process.env.MELHOR_ENVIO_BASE_URL || "https://melhorenvio.com.br";
-const MELHOR_ENVIO_USER_AGENT = process.env.MELHOR_ENVIO_USER_AGENT || "PetitLaco (defina MELHOR_ENVIO_USER_AGENT no .env com seu e-mail)";
-
-/* ⚠️ TIMEOUT É OBRIGATÓRIO AQUI. O fetch do Node não tem timeout padrão: se o
-   Melhor Envio aceitar a conexão e não responder, a promessa fica pendurada
-   para sempre — e como esta função roda DENTRO do checkout, a cliente ficaria
-   com o botão de pagar girando sem fim, sem erro e sem pedido.
-
-   `retries` é explícito por chamada, nunca padrão, porque as duas famílias de
-   chamada são opostas: cotar frete é leitura pura e pode ser repetida à
-   vontade; comprar etiqueta GASTA SALDO REAL e não pode ser repetida sozinha
-   nunca — uma repetição automática ali compraria duas etiquetas. */
-async function meFetch(path, { method = "GET", body, timeoutMs = 12000, retries = 0 } = {}){
-  let ultimoErro = null;
-
-  for(let tentativa = 0; tentativa <= retries; tentativa++){
-    if(tentativa > 0) await new Promise(r => setTimeout(r, 700 * tentativa));
-
-    let res;
-    try{
-      res = await fetch(`${MELHOR_ENVIO_BASE_URL}${path}`, {
-        method,
-        headers: {
-          "Authorization": `Bearer ${process.env.MELHOR_ENVIO_TOKEN}`,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "User-Agent": MELHOR_ENVIO_USER_AGENT,
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    }catch(erroDeRede){
-      const estourouOTempo = erroDeRede?.name === "TimeoutError";
-      ultimoErro = new Error(
-        estourouOTempo
-          ? `Melhor Envio não respondeu em ${timeoutMs / 1000}s.`
-          : `Falha de rede ao falar com o Melhor Envio: ${erroDeRede?.message || erroDeRede}`
-      );
-      ultimoErro.cause = erroDeRede;
-      /* Timeout NÃO é repetido, mesmo com retries liberado: quem não respondeu
-         em N segundos está sobrecarregado, e insistir só dobra a espera da
-         cliente (que está olhando o carrinho) enquanto piora a fila deles.
-         Conexão recusada/derrubada falha na hora — essa vale repetir. */
-      if(estourouOTempo) throw ultimoErro;
-      continue;
-    }
-
-    const data = await res.json().catch(() => null);
-
-    if(res.ok) return data;
-
-    const err = new Error(data?.message || `Melhor Envio respondeu ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-
-    /* Credencial recusada é a falha mais cara que existe aqui: TODA cotação
-       para de funcionar e ninguém consegue fechar compra. Diferente do
-       Instagram (lib/instagram.js), este token não se renova sozinho — só
-       trocando no .env. Por isso o log grita, em vez de virar mais uma linha
-       genérica de "não foi possível calcular o frete". */
-    if(res.status === 401 || res.status === 403){
-      console.error(
-        `⚠️  MELHOR ENVIO RECUSOU AS CREDENCIAIS (HTTP ${res.status}). ` +
-        "Enquanto isso, NENHUMA cliente consegue calcular frete nem finalizar compra. " +
-        "O MELHOR_ENVIO_TOKEN provavelmente venceu: gere um novo no painel do Melhor Envio " +
-        "e atualize o .env de produção."
-      );
-      throw err;
-    }
-
-    // 5xx é problema do lado deles e costuma passar; 4xx não melhora repetindo.
-    if(res.status >= 500){ ultimoErro = err; continue; }
-    throw err;
-  }
-
-  throw ultimoErro;
-}
 
 /* Transportadoras que a loja oferece. O Melhor Envio cota TODAS as que
    atendem o CEP (Jadlog, JeT, Total Express, Azul, LATAM...), o que enche
@@ -1974,13 +1898,11 @@ app.get("/api/orders/:reference/status", statusPollLimiter, auth.requireAuth, (r
    pista sobre qual dos dois casos é). Só consulta o rastreio ao vivo
    quando já existe um código salvo — sem isso, é uma chamada de rede a mais
    para todo pedido pago, mesmo antes de postado.
-   Duas fontes possíveis para o "ao vivo": se a etiqueta foi comprada PELO
-   Melhor Envio (melhor_envio_shipment_id preenchido), consulta a API deles
-   (fetchLiveTracking); senão — etiqueta comprada direto com a
-   transportadora e o código só colado no painel — tenta o rastreio direto
-   dos Correios (rastreio.consultarCorreios), que só funciona para código
-   no formato deles. Nos dois casos, falha vira `null` sem quebrar a
-   página: o link de rastreio (rastreio.linkDaTransportadora) sempre continua servindo.
+   O "ao vivo" vem sempre do Melhor Envio (lib/melhorEnvio.js): com o id do
+   envio quando ele já está salvo, senão descobrindo o id pelo código de
+   rastreio e guardando para as próximas vezes. Falha vira `null` sem
+   quebrar a página: o link de rastreio (rastreio.linkDaTransportadora)
+   sempre continua servindo.
 ========================================================================= */
 /* POST /api/orders/:reference/recebi — a própria cliente fecha a entrega
    pela página de acompanhamento. Só vale para o dono do pedido e só depois
@@ -2018,11 +1940,11 @@ app.get("/api/orders/:reference", statusPollLimiter, auth.requireAuth, async (re
     }));
     const shipping = JSON.parse(order.shipping_json);
     const trackingCode = order.tracking_code || "";
-    const live = trackingCode
-      ? (order.melhor_envio_shipment_id
-          ? await fetchLiveTracking(order.melhor_envio_shipment_id)
-          : await rastreio.consultarCorreios(trackingCode))
-      : null;
+    const { live, shipmentId, descoberto } = await rastreioDoPedido({
+      trackingCode,
+      shipmentId: order.melhor_envio_shipment_id,
+    });
+    if(descoberto && shipmentId) db.setMelhorEnvioShipmentId(order.external_reference, shipmentId);
     const entregou = fecharEntregaPeloRastreio(order, live);
     res.json({
       reference: order.external_reference,
@@ -2134,7 +2056,7 @@ async function purchaseShippingLabel(order, externalReference){
   // falharem, pelo menos fica registrado com qual envio esta tentativa
   // mexeu (útil para depuração e para uma nova tentativa não perder o
   // vínculo), e é este id que a página de acompanhamento da cliente usa
-  // depois para consultar o rastreio ao vivo (fetchLiveTracking, abaixo).
+  // depois para consultar o rastreio ao vivo (lib/melhorEnvio.js).
   if(externalReference) db.setMelhorEnvioShipmentId(externalReference, String(cartItem.id));
 
   await meFetch("/api/v2/me/shipment/checkout", {
@@ -2150,61 +2072,6 @@ async function purchaseShippingLabel(order, externalReference){
   });
 
   return generated;
-}
-
-/* =========================================================================
-   Rastreio ao vivo (Melhor Envio) — best-effort, nunca lança.
-   -------------------------------------------------------------------------
-   A página de acompanhamento de pedido (acompanhar-pedido.html) chama isto
-   sob demanda quando a cliente abre a página — não há polling nem webhook
-   de rastreio, é uma consulta pontual.
-   A documentação pública de POST /api/v2/me/shipment/tracking não pôde ser
-   confirmada em detalhe (formato exato da resposta, se traz um histórico
-   de eventos com local/data ou só um status atual). Por isso
-   normalizeTrackingResponse tenta reconhecer algumas formas plausíveis e,
-   se não reconhecer nada, devolve null — quem chama sempre cai de volta
-   para a linha do tempo manual (fulfillmentStatus) + link oficial da
-   transportadora (rastreio.linkDaTransportadora), nunca deixa a página quebrada.
-========================================================================= */
-async function fetchLiveTracking(shipmentId){
-  if(!shipmentId || !process.env.MELHOR_ENVIO_TOKEN) return null;
-  try{
-    const data = await meFetch("/api/v2/me/shipment/tracking", {
-      method: "POST",
-      // A cliente está olhando a página esperando: melhor cair no rastreio
-      // manual em 6s do que deixar a tela pendurada.
-      timeoutMs: 6000,
-      body: { orders: [shipmentId] },
-    });
-    return normalizeTrackingResponse(data, shipmentId);
-  }catch(err){
-    console.error(`Não foi possível consultar rastreio ao vivo (envio ${shipmentId}):`, err.message || err);
-    return null;
-  }
-}
-
-function normalizeTrackingResponse(data, shipmentId){
-  if(!data || typeof data !== "object") return null;
-  // A resposta pode vir como um objeto chaveado pelo id do envio
-  // ({ "<id>": {...} }) ou, para uma consulta de um único envio, já como o
-  // objeto direto — aceita as duas formas.
-  const entry = data[shipmentId] && typeof data[shipmentId] === "object" ? data[shipmentId] : data;
-  const rawEvents = entry.tracking_events || entry.events || entry.occurrences || entry.tracking || null;
-  const events = Array.isArray(rawEvents)
-    ? rawEvents.map(normalizeTrackingEvent).filter(Boolean)
-    : [];
-  const status = typeof entry.status === "string" ? entry.status : null;
-  if(!status && events.length === 0) return null;
-  return { status, events };
-}
-
-function normalizeTrackingEvent(raw){
-  if(!raw || typeof raw !== "object") return null;
-  const description = raw.description || raw.message || raw.status || raw.title || null;
-  const date = raw.date || raw.created_at || raw.occurred_at || raw.time || null;
-  const location = raw.location || raw.local || [raw.city, raw.state].filter(Boolean).join("/") || null;
-  if(!description && !date) return null;
-  return { description, date, location: location || null };
 }
 
 /* =========================================================================
@@ -2271,7 +2138,7 @@ async function entregarEmailDaFila(id){
    e-mail, ou aviso já enfileirado antes para este pedido). */
 function fecharEntregaPeloRastreio(order, live){
   if(!order || order.fulfillment_status !== "postado") return null;
-  const evento = rastreio.eventoDeEntrega(live?.events);
+  const evento = rastreio.eventoDeEntrega(live);
   if(!evento) return null;
   db.markOrderDelivered(order.external_reference, rastreio.dataDoEvento(evento));
   return evento;
@@ -2414,32 +2281,6 @@ async function runApprovedOrderSideEffects(orderRow, info){
     await entregarEmailDaFila(id);
   } else {
     console.warn(`Pedido ${info.external_reference} sem e-mail da cliente gravado — recibo não enviado.`);
-  }
-
-  // Nota fiscal — best-effort, mesmo racional do WhatsApp/e-mail acima:
-  // uma falha (credenciais ausentes, NCM faltando, Focus NFe fora do ar)
-  // nunca pode reverter a confirmação do pedido.
-  if(process.env.NFE_AUTO_EMIT === "true"){
-    try{
-      const resultado = await notaFiscal.emitirNotaFiscal({
-        externalReference: info.external_reference,
-        items: order.items.map(item => ({
-          id: item.id, qty: item.qty, price: item.price,
-          name: effectiveProduct(item.id, notifyOverridesMap)?.name || `Produto #${item.id}`,
-          ncm: effectiveProduct(item.id, notifyOverridesMap)?.ncm || null,
-        })),
-        address: order.address,
-        subtotal: orderRow.subtotal,
-        shippingPrice: orderRow.shipping_price,
-        discountTotal: orderRow.discount + orderRow.pix_discount + orderRow.promo_discount,
-        total: orderRow.total,
-      });
-      db.setOrderNfeStatus(info.external_reference, resultado);
-      console.log(`Nota fiscal do pedido ${info.external_reference}: ${resultado.status}.`);
-    }catch(nfeErr){
-      db.setOrderNfeStatus(info.external_reference, { status: "erro", error: nfeErr.message });
-      console.error(`Falha ao emitir nota fiscal (pedido ${info.external_reference} segue pago normalmente):`, nfeErr.message || nfeErr);
-    }
   }
 
   /* Se a etiqueta foi comprada automaticamente, o rastreio já existe neste
@@ -3225,10 +3066,6 @@ app.get("/api/admin/orders", auth.requireAdmin, auth.requireAdminTwoFactor, (req
         shippingPrice: row.shipping_price,
         total: row.total,
         createdAt: row.created_at,
-        nfeStatus: row.nfe_status || null,
-        nfeNumber: row.nfe_number || null,
-        nfeUrl: row.nfe_url || null,
-        nfeError: row.nfe_error || null,
       };
     });
     const stats = db.getOrderStats();
@@ -3403,8 +3240,8 @@ app.delete("/api/admin/contact-messages/:id", auth.requireAdmin, auth.requireAdm
   }
 });
 
-/* PATCH /api/admin/orders/:reference/tracking — salva o código de postagem/
-   rastreio dos Correios para um pedido (preenchido à mão pela lojista). */
+/* PATCH /api/admin/orders/:reference/tracking — salva o código de rastreio
+   do envio (preenchido à mão pela lojista, copiado do Melhor Envio). */
 app.patch("/api/admin/orders/:reference/tracking", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
   try {
     const reference = String(req.params.reference || "");
@@ -3423,8 +3260,8 @@ app.patch("/api/admin/orders/:reference/tracking", auth.requireAdmin, auth.requi
   }
 });
 
-/* POST /api/admin/orders/:reference/conferir-entrega — pergunta aos Correios
-   se o pedido já chegou e fecha a entrega quando eles confirmam. */
+/* POST /api/admin/orders/:reference/conferir-entrega — pergunta ao Melhor
+   Envio se o pedido já chegou e fecha a entrega quando eles confirmam. */
 app.post("/api/admin/orders/:reference/conferir-entrega", auth.requireAdmin, auth.requireAdminTwoFactor, async (req, res) => {
   try {
     const reference = String(req.params.reference || "");
@@ -3435,9 +3272,11 @@ app.post("/api/admin/orders/:reference/conferir-entrega", auth.requireAdmin, aut
     if(!order.tracking_code){
       return res.status(409).json({ error: "Este pedido ainda não tem código de rastreio." });
     }
-    const live = order.melhor_envio_shipment_id
-      ? await fetchLiveTracking(order.melhor_envio_shipment_id)
-      : await rastreio.consultarCorreios(order.tracking_code);
+    const { live, shipmentId, descoberto } = await rastreioDoPedido({
+      trackingCode: order.tracking_code,
+      shipmentId: order.melhor_envio_shipment_id,
+    });
+    if(descoberto && shipmentId) db.setMelhorEnvioShipmentId(order.external_reference, shipmentId);
     if(!live){
       return res.json({ ok: true, entregue: false, semResposta: true });
     }
@@ -3449,8 +3288,8 @@ app.post("/api/admin/orders/:reference/conferir-entrega", auth.requireAdmin, aut
       ultimoEvento: live.events?.[0]?.description || null,
     });
   } catch (err) {
-    console.error("Erro ao conferir entrega nos Correios:", err);
-    res.status(500).json({ error: "Não foi possível consultar os Correios agora." });
+    console.error("Erro ao conferir entrega no Melhor Envio:", err);
+    res.status(500).json({ error: "Não foi possível consultar o Melhor Envio agora." });
   }
 });
 
@@ -3478,49 +3317,9 @@ app.post("/api/admin/orders/:reference/avisar-postagem", auth.requireAdmin, auth
   }
 });
 
-/* POST /api/admin/orders/:reference/emitir-nota — emite (ou tenta de novo)
-   a nota fiscal do pedido na hora, pelo painel. Serve tanto para quando
-   NFE_AUTO_EMIT está desligado quanto para reprocessar um pedido que
-   falhou (NCM faltando, corrigido depois) ou ficou "processando" — a
-   mesma referência do pedido é reenviada à Focus NFe, que trata como o
-   mesmo pedido de nota (ver lib/notaFiscal.js). */
-app.post("/api/admin/orders/:reference/emitir-nota", auth.requireAdmin, auth.requireAdminTwoFactor, async (req, res) => {
-  try {
-    const reference = String(req.params.reference || "");
-    const order = db.getOrderByExternalReference(reference);
-    if(!order){
-      return res.status(404).json({ error: "Pedido não encontrado." });
-    }
-    if(order.status !== "pago"){
-      return res.status(409).json({ error: "Só é possível emitir nota de um pedido pago." });
-    }
-    const overridesMap = getProductOverridesMap();
-    const items = JSON.parse(order.items_json).map(item => ({
-      id: item.id, qty: item.qty, price: item.price,
-      name: effectiveProduct(item.id, overridesMap)?.name || `Produto #${item.id}`,
-      ncm: effectiveProduct(item.id, overridesMap)?.ncm || null,
-    }));
-    const resultado = await notaFiscal.emitirNotaFiscal({
-      externalReference: reference,
-      items,
-      address: JSON.parse(order.address_json),
-      subtotal: order.subtotal,
-      shippingPrice: order.shipping_price,
-      discountTotal: order.discount + order.pix_discount + order.promo_discount,
-      total: order.total,
-    });
-    db.setOrderNfeStatus(reference, resultado);
-    res.json({ ok: true, nota: resultado });
-  } catch (err) {
-    db.setOrderNfeStatus(String(req.params.reference || ""), { status: "erro", error: err.message });
-    console.error("Erro ao emitir nota fiscal:", err);
-    res.status(err.status || 500).json({ error: err.message || "Não foi possível emitir a nota agora." });
-  }
-});
-
 /* PATCH /api/admin/orders/:reference/delivered — marca manualmente que a
    entrega chegou. Existe porque a resposta de rastreio do Melhor Envio
-   (fetchLiveTracking) não tem formato de "entregue" confirmado — a lojista
+   (lib/melhorEnvio.js) não tem formato de "entregue" confirmado — a lojista
    sempre pode fechar esse último passo à mão, do mesmo jeito que sempre
    pôde digitar o código de rastreio à mão. Só faz sentido depois de
    'postado' (não dá pra pular etapa da linha do tempo). */
@@ -3613,7 +3412,7 @@ app.get("/api/admin/products", auth.requireAdmin, auth.requireAdminTwoFactor, (r
   const overridesMap = getProductOverridesMap();
   const products = getAllProductIds().map(id => {
     const p = effectiveProduct(id, overridesMap);
-    return { id, name: p.name, price: p.price, photoUrl: p.photoUrl, photos: p.photos, category: p.category, badges: p.badges, description: p.description, ncm: p.ncm, hidden: p.hidden, soldOut: p.soldOut };
+    return { id, name: p.name, price: p.price, photoUrl: p.photoUrl, photos: p.photos, category: p.category, badges: p.badges, description: p.description, hidden: p.hidden, soldOut: p.soldOut };
   });
   res.json({ products, categories: getAllCategories(), availableBadges: PRODUCT_BADGES });
 });
@@ -3691,15 +3490,6 @@ function isValidBadges(v){
   if(!Array.isArray(v)) return false;
   if(v.length > PRODUCT_BADGES.length) return false;
   return v.every(b => PRODUCT_BADGES.includes(b)) && new Set(v).size === v.length;
-}
-// NCM: 8 dígitos, sem pontuação — a lojista pode colar com pontos
-// ("6117.10.00", formato comum em tabelas), normalizeNcm tira tudo que não
-// é dígito antes de validar/gravar.
-function normalizeNcm(v){
-  return String(v || "").replace(/\D/g, "");
-}
-function isValidNcm(v){
-  return /^\d{8}$/.test(v);
 }
 // Galeria de fotos: array vazio é um estado real ("removeu todas as fotos"),
 // mesmo racional das outras listas. Teto de 8 fotos por produto — generoso
@@ -3869,13 +3659,6 @@ app.patch("/api/admin/products/:id", auth.requireAdmin, auth.requireAdminTwoFact
       }
       fields.description = description || null;
     }
-    if("ncm" in body){
-      const ncm = normalizeNcm(body.ncm);
-      if(ncm && !isValidNcm(ncm)){
-        return res.status(400).json({ error: "NCM inválido. Use os 8 dígitos do código (com ou sem pontos)." });
-      }
-      fields.ncm = ncm || null;
-    }
     if("hidden" in body){
       fields.hidden = Boolean(body.hidden);
     }
@@ -3891,7 +3674,7 @@ app.patch("/api/admin/products/:id", auth.requireAdmin, auth.requireAdminTwoFact
     else db.upsertProductOverride(id, fields);
 
     const updated = effectiveProduct(id, getProductOverridesMap());
-    res.json({ id, name: updated.name, price: updated.price, photoUrl: updated.photoUrl, photos: updated.photos, category: updated.category, badges: updated.badges, description: updated.description, ncm: updated.ncm, hidden: updated.hidden, soldOut: updated.soldOut });
+    res.json({ id, name: updated.name, price: updated.price, photoUrl: updated.photoUrl, photos: updated.photos, category: updated.category, badges: updated.badges, description: updated.description, hidden: updated.hidden, soldOut: updated.soldOut });
   } catch (err) {
     console.error("Erro ao atualizar produto:", err);
     res.status(500).json({ error: "Não foi possível salvar o produto agora." });

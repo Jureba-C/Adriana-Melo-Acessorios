@@ -494,63 +494,6 @@ test("descrição do produto: PATCH edita, GET /api/products reflete, POST /api/
   assert.equal((await created.json()).description, "Feito sob encomenda.");
 });
 
-test("NCM do produto: PATCH aceita com pontos ou só dígitos, rejeita formato errado, some do catálogo público", async () => {
-  const adminCookie = sharedAdminCookie;
-  assert.ok(adminCookie);
-
-  // Aceita com pontuação (como costuma vir de uma tabela de NCM) e
-  // normaliza para só os 8 dígitos.
-  const comPontos = await patch("/api/admin/products/4", { ncm: "6117.10.00" }, adminCookie);
-  assert.equal(comPontos.status, 200);
-  assert.equal((await comPontos.json()).ncm, "61171000");
-
-  // Aparece na listagem do painel...
-  const adminList = await (await fetch(ORIGIN + "/api/admin/products", { headers: { Cookie: adminCookie } })).json();
-  assert.equal(adminList.products.find(p => p.id === 4).ncm, "61171000");
-
-  // ...mas NUNCA no catálogo público — é dado fiscal, não de vitrine.
-  const pub = await (await fetch(ORIGIN + "/api/products")).json();
-  assert.equal(pub.products.find(p => p.id === 4).ncm, undefined);
-
-  // Menos de 8 dígitos é rejeitado.
-  const curto = await patch("/api/admin/products/4", { ncm: "1234567" }, adminCookie);
-  assert.equal(curto.status, 400);
-
-  // String vazia limpa de volta pro padrão (null) — não é erro.
-  const limpo = await patch("/api/admin/products/4", { ncm: "" }, adminCookie);
-  assert.equal(limpo.status, 200);
-  assert.equal((await limpo.json()).ncm, null);
-});
-
-test("POST /api/admin/orders/:reference/emitir-nota — sem FOCUS_NFE_TOKEN no .env, recusa e grava o erro no pedido", async () => {
-  // Este ambiente de teste nunca tem FOCUS_NFE_TOKEN/dados fiscais no .env
-  // (ver spawn do server.js, no topo do arquivo) — não tem como testar uma
-  // emissão de verdade sem uma conta real na Focus NFe. O que dá pra testar
-  // sem rede é exatamente a guarda que impede a tentativa: configuracaoCompleta()
-  // (lib/notaFiscal.js) falha, a rota responde com o erro e grava
-  // nfe_status:"erro" no pedido, sem derrubar nada.
-  const dona = db.createUser({ name: "Dona Nota", email: "donanota@test.com", passwordHash: "x", cpf: "11144477735" });
-  const pedido = db.createOrder({
-    externalReference: "TEST-EMITIR-NOTA-1", userId: dona.id, status: "pago",
-    items: [{ id: 1, qty: 1, price: 34.9, color: "#F4B4CC" }],
-    address: { nome: "Dona Nota", telefone: "61982749808", rua: "Rua X", numero: "1", bairro: "B", cidade: "Brasília", uf: "DF", cep: "70040020" },
-    shipping: { service_id: "1", name: "PAC", price: 10 },
-    subtotal: 34.9, shippingPrice: 10, total: 44.9, customerPhone: "61982749808",
-  });
-
-  const semLogin = await post(`/api/admin/orders/${pedido.external_reference}/emitir-nota`, {});
-  assert.equal(semLogin.status, 401);
-
-  const res = await post(`/api/admin/orders/${pedido.external_reference}/emitir-nota`, {}, sharedAdminCookie);
-  assert.equal(res.status, 500);
-  const body = await res.json();
-  assert.match(body.error, /não configurada/i);
-
-  const salvo = db.getOrderByExternalReference(pedido.external_reference);
-  assert.equal(salvo.nfe_status, "erro");
-  assert.match(salvo.nfe_error, /não configurada/i);
-});
-
 test("continuar pagamento: 404 se não existe/não é da cliente, 409 se já não está pendente", async () => {
   // Duas clientes novas, cada uma dona de um pedido — tudo inserido direto
   // no banco (db.createUser/createSession/createOrder), sem passar por
@@ -651,9 +594,12 @@ test("GET /api/orders/:reference — detalhe só para a dona do pedido, com rast
   assert.equal(body.status, "pago");
   assert.equal(body.fulfillmentStatus, "postado");
   assert.equal(body.trackingCode, "AA123456789BR");
-  assert.equal(body.carrierUrl, "https://rastreamento.correios.com.br/app/index.php?objetos=AA123456789BR");
+  assert.equal(body.carrierUrl, "https://melhorenvio.com.br/rastreio/AA123456789BR");
   // MELHOR_ENVIO_TOKEN não está configurado neste ambiente de teste — a
-  // consulta de rastreio ao vivo sempre degrada para null, nunca quebra.
+  // busca do envio pelo código e o rastreio ao vivo degradam para null, sem
+  // quebrar a página nem a rota. Repare que o link acima vai para o Melhor
+  // Envio MESMO com código no formato dos Correios: a loja só posta por
+  // eles, e é lá que o código é reconhecido.
   assert.equal(body.tracking, null);
 });
 

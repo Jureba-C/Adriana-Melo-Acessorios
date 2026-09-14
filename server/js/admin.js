@@ -529,21 +529,6 @@
     return `<span class="aviso-postagem is-pendente"><i class="bi bi-hourglass-split me-1"></i>Aviso na fila para envio</span>`;
   }
 
-  function textoDaNota(order){
-    if(order.nfeStatus === "emitida"){
-      const numero = order.nfeNumber ? ` nº ${escapeHTML(order.nfeNumber)}` : "";
-      const link = order.nfeUrl ? ` — <a href="${escapeHTML(order.nfeUrl)}" target="_blank" rel="noopener">ver DANFE</a>` : "";
-      return `<span class="aviso-postagem is-enviado"><i class="bi bi-check-circle me-1"></i>Nota emitida${numero}${link}</span>`;
-    }
-    if(order.nfeStatus === "processando"){
-      return `<span class="aviso-postagem is-pendente"><i class="bi bi-hourglass-split me-1"></i>Nota em processamento — atualize a página em instantes</span>`;
-    }
-    if(order.nfeStatus === "erro"){
-      return `<span class="aviso-postagem is-erro"><i class="bi bi-exclamation-triangle me-1"></i>Não consegui emitir: ${escapeHTML(order.nfeError || "erro desconhecido")}</span>`;
-    }
-    return `<span class="aviso-postagem is-pendente"><i class="bi bi-hourglass-split me-1"></i>Nota ainda não emitida</span>`;
-  }
-
   function renderPendingCarts(orders){
     const now = Date.now();
     const pending = orders.filter(o => {
@@ -720,7 +705,6 @@
   const epName = document.getElementById("epName");
   const epDescription = document.getElementById("epDescription");
   const epPrice = document.getElementById("epPrice");
-  const epNcm = document.getElementById("epNcm");
   const epPhotoFile = document.getElementById("epPhotoFile");
   const epAddPhotoBtn = document.getElementById("epAddPhotoBtn");
   const epPhotosListEl = document.getElementById("epPhotosList");
@@ -828,7 +812,6 @@
     epName.value = product.name;
     epDescription.value = product.description || "";
     epPrice.value = product.price;
-    epNcm.value = product.ncm || "";
     epPhotoFile.value = "";
     epCategory.dataset.categoriaManual = "false";
     renderCategoryOptions(epCategory, product.category || "");
@@ -854,7 +837,6 @@
       photos: [...pendingPhotos],
       category: product.category || "",
       badges: [...(product.badges || [])].sort(),
-      ncm: product.ncm || "",
       soldOut: Boolean(product.soldOut),
     };
     editModal.show();
@@ -1247,7 +1229,6 @@
     const name = epName.value.trim();
     const description = epDescription.value.trim();
     const price = Number(epPrice.value);
-    const ncm = epNcm.value.replace(/\D/g, "");
     const category = epCategory.value;
     const badges = selectedBadges();
 
@@ -1255,7 +1236,6 @@
     if(name !== editOriginal.name) patch.name = name;
     if(description !== editOriginal.description) patch.description = description;
     if(price !== editOriginal.price) patch.price = price;
-    if(ncm !== editOriginal.ncm) patch.ncm = ncm;
     if(JSON.stringify(pendingPhotos) !== JSON.stringify(editOriginal.photos)) patch.photos = pendingPhotos;
     if(category !== editOriginal.category) patch.category = category;
     const sortedBadges = [...badges].sort();
@@ -1756,11 +1736,11 @@
         ${isPaid ? `
         <div class="tracking-row mt-3 pt-3 border-top" style="border-color:var(--blush-100)!important">
           <div class="tracking-bloco">
-            <label class="tracking-bloco-titulo" for="tracking-${escapeHTML(ref)}">Código de rastreio (Correios)</label>
+            <label class="tracking-bloco-titulo" for="tracking-${escapeHTML(ref)}">Código de rastreio</label>
             <div class="d-flex gap-2 flex-wrap align-items-center">
               <input type="text" class="form-control form-control-sm tracking-input" id="tracking-${escapeHTML(ref)}"
-                     value="${escapeHTML(order.trackingCode || "")}" placeholder="Ex.: BR123456789BR" maxlength="60">
-              <button type="button" class="btn-outline-blush save-tracking-btn" data-ref="${escapeHTML(ref)}" title="Comprou a etiqueta direto no site da transportadora (Correios, etc.)? Cole o código aqui e salve — a cliente acompanha ao vivo do mesmo jeito.">Salvar</button>
+                     value="${escapeHTML(order.trackingCode || "")}" placeholder="Ex.: ME123456789BR" maxlength="60">
+              <button type="button" class="btn-outline-blush save-tracking-btn" data-ref="${escapeHTML(ref)}" title="Comprou a etiqueta no site do Melhor Envio? Cole aqui o código de rastreio que eles deram e salve — a cliente acompanha ao vivo do mesmo jeito.">Salvar</button>
               <button type="button" class="btn-outline-blush generate-label-btn" data-ref="${escapeHTML(ref)}" title="Compra a etiqueta no Melhor Envio (gasta saldo real) e preenche o código automaticamente"><i class="bi bi-stars me-1"></i>Comprar etiqueta</button>
             </div>
           </div>
@@ -1770,7 +1750,7 @@
             <span class="tracking-bloco-titulo">Entrega</span>
             <div class="d-flex gap-2 flex-wrap align-items-center">
               ${order.fulfillmentStatus === "postado" ? `
-              <button type="button" class="btn-outline-blush check-delivery-btn" data-ref="${escapeHTML(ref)}" title="Pergunta aos Correios se o pedido já chegou"><i class="bi bi-search me-1"></i>Conferir nos Correios</button>
+              <button type="button" class="btn-outline-blush check-delivery-btn" data-ref="${escapeHTML(ref)}" title="Pergunta ao Melhor Envio se o pedido já chegou"><i class="bi bi-search me-1"></i>Conferir no Melhor Envio</button>
               <button type="button" class="btn-outline-blush mark-delivered-btn" data-ref="${escapeHTML(ref)}" title="Marca este pedido como entregue"><i class="bi bi-check2-circle me-1"></i>Marcar como entregue</button>
               ` : order.fulfillmentStatus === "entregue" ? `<span class="small fw-semibold" style="color:var(--color-success)"><i class="bi bi-check2-circle me-1"></i>Entregue${order.deliveredAt ? " em " + escapeHTML(formatDate(order.deliveredAt)) : ""}</span>` : `<span class="small" style="color:var(--ink-soft)">Aguardando a postagem.</span>`}
             </div>
@@ -1785,16 +1765,6 @@
               <button type="button" class="btn-outline-blush resend-notice-btn" data-ref="${escapeHTML(ref)}" title="Reenvia o e-mail de 'seu pedido foi postado' com o código já salvo"><i class="bi bi-send me-1"></i>Avisar de novo por e-mail</button>
             </div>
             ${textoDoAviso(order)}
-          </div>
-
-          <div class="tracking-bloco">
-            <span class="tracking-bloco-titulo">Nota fiscal</span>
-            ${order.nfeStatus !== "emitida" ? `
-            <div class="d-flex gap-2 flex-wrap align-items-center">
-              <button type="button" class="btn-outline-blush emit-nfe-btn" data-ref="${escapeHTML(ref)}" title="Emite a nota fiscal deste pedido agora"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Emitir nota</button>
-            </div>
-            ` : ""}
-            ${textoDaNota(order)}
           </div>` : ""}
 
           <span class="small tracking-feedback" data-ref-feedback="${escapeHTML(ref)}"></span>
@@ -1919,12 +1889,12 @@
       if(!res.ok) throw new Error(data.error || "Não foi possível consultar.");
       if(data.entregue){
         feedbackEl.textContent = data.quando
-          ? `Os Correios confirmaram a entrega em ${formatDate(data.quando)}.`
-          : "Os Correios confirmaram a entrega.";
+          ? `O Melhor Envio confirmou a entrega em ${formatDate(data.quando)}.`
+          : "O Melhor Envio confirmou a entrega.";
         feedbackEl.classList.add("is-success");
         loadDashboard();
       }else if(data.semResposta){
-        feedbackEl.textContent = "Os Correios não responderam agora. Tente daqui a pouco.";
+        feedbackEl.textContent = "O Melhor Envio não achou movimentação para esse código ainda. Tente daqui a pouco.";
         feedbackEl.classList.add("is-error");
       }else{
         feedbackEl.textContent = data.ultimoEvento
@@ -1932,7 +1902,7 @@
           : "Ainda a caminho.";
       }
     }catch(err){
-      feedbackEl.textContent = err.message || "Erro ao consultar os Correios.";
+      feedbackEl.textContent = err.message || "Erro ao consultar o Melhor Envio.";
       feedbackEl.classList.add("is-error");
     }finally{
       btn.disabled = false;
@@ -1955,31 +1925,6 @@
       loadDashboard();
     }catch(err){
       feedbackEl.textContent = err.message || "Erro ao reenviar o aviso.";
-      feedbackEl.classList.add("is-error");
-    }finally{
-      btn.disabled = false;
-      btn.innerHTML = rotulo;
-    }
-  }
-
-  async function emitirNota(ref, feedbackEl, btn){
-    const rotulo = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = "Emitindo...";
-    feedbackEl.textContent = "";
-    feedbackEl.classList.remove("is-success", "is-error");
-    try{
-      const res = await fetchWithTimeout(`/api/admin/orders/${encodeURIComponent(ref)}/emitir-nota`, { method: "POST" }, 30000);
-      const data = await res.json().catch(() => ({}));
-      if(!res.ok) throw new Error(data.error || "Não foi possível emitir a nota.");
-      const status = data.nota?.status;
-      feedbackEl.textContent = status === "emitida" ? "Nota emitida!"
-        : status === "processando" ? "Nota em processamento — atualize a página em instantes."
-        : (data.nota?.error || "Não emitida.");
-      feedbackEl.classList.add(status === "emitida" ? "is-success" : "is-error");
-      loadDashboard();
-    }catch(err){
-      feedbackEl.textContent = err.message || "Erro ao emitir a nota.";
       feedbackEl.classList.add("is-error");
     }finally{
       btn.disabled = false;
@@ -2047,7 +1992,6 @@
     const labelBtn = e.target.closest(".generate-label-btn");
     const deliveredBtn = e.target.closest(".mark-delivered-btn");
     const resendBtn = e.target.closest(".resend-notice-btn");
-    const emitNfeBtn = e.target.closest(".emit-nfe-btn");
     const checkBtn = e.target.closest(".check-delivery-btn");
     const deleteBtn = e.target.closest(".delete-order-btn");
     const copyBtn = e.target.closest(".copy-field-btn");
@@ -2068,13 +2012,6 @@
       const ref = resendBtn.dataset.ref;
       const feedbackEl = listEl.querySelector(`[data-ref-feedback="${ref}"]`);
       if(feedbackEl) reenviarAviso(ref, feedbackEl, resendBtn);
-      return;
-    }
-
-    if(emitNfeBtn){
-      const ref = emitNfeBtn.dataset.ref;
-      const feedbackEl = listEl.querySelector(`[data-ref-feedback="${ref}"]`);
-      if(feedbackEl) emitirNota(ref, feedbackEl, emitNfeBtn);
       return;
     }
 

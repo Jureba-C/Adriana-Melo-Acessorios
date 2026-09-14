@@ -271,10 +271,12 @@ ensureColumn("orders", "promo_discount", "REAL NOT NULL DEFAULT 0");
 ensureColumn("orders", "payment_method", "TEXT NOT NULL DEFAULT 'card'");
 ensureColumn("product_overrides", "category", "TEXT");
 ensureColumn("product_overrides", "badges", "TEXT");
-// NCM (Nomenclatura Comum do Mercosul) — código da Receita usado para
-// classificar o produto na nota fiscal. NULL = nunca preenchido; a
-// emissão automática (lib/notaFiscal.js) recusa gerar nota de um pedido
-// com algum item sem NCM, em vez de mandar um código fictício.
+// NCM: a loja parou de emitir nota fiscal, então nada mais escreve aqui.
+// As colunas ficam porque apagar coluna em SQLite é recriar a tabela, e
+// o que já foi classificado continua guardado caso a nota volte um dia.
+// ⚠️ Os dois ensureColumn continuam obrigatórios: os INSERT/UPDATE de
+// produto mais abaixo ainda citam a coluna ncm, e sem ela um banco novo
+// quebra no primeiro cadastro.
 ensureColumn("product_overrides", "ncm", "TEXT");
 ensureColumn("custom_products", "ncm", "TEXT");
 // Cores em estoque (array JSON de hex da paleta em js/colors.js). NULL
@@ -910,17 +912,6 @@ function markOrderDelivered(ref, quando) {
 function setMelhorEnvioShipmentId(ref, shipmentId) {
   stmtSetMelhorEnvioShipmentId.run(shipmentId, Date.now(), ref);
 }
-const stmtSetOrderNfe = db.prepare(`
-  UPDATE orders SET nfe_status = ?, nfe_number = ?, nfe_url = ?, nfe_error = ?, updated_at = ?
-  WHERE external_reference = ?
-`);
-// status: "emitida" | "erro" | "sem_ncm" — nunca "nao_emitida" aqui; esse
-// estado é a ausência de linha (coluna NULL), o padrão de todo pedido que
-// nunca passou por emitirNotaFiscal (server/lib/notaFiscal.js).
-function setOrderNfeStatus(ref, { status, number = null, url = null, error = null }) {
-  stmtSetOrderNfe.run(status, number, url, error, Date.now(), ref);
-  return getOrderByExternalReference(ref);
-}
 function getOrderStats() {
   return stmtOrderStats.get();
 }
@@ -1500,7 +1491,6 @@ module.exports = {
   listOrdersAwaitingDelivery,
   markOrderDelivered,
   setMelhorEnvioShipmentId,
-  setOrderNfeStatus,
   getOrderStats,
   deleteOrder,
   hasUsedCoupon,

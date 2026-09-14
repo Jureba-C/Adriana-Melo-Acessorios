@@ -24,7 +24,7 @@
  *     do ar, credencial vencida, caixa cheia. Cada falha aumenta a espera até
  *     a próxima tentativa (5min, 15, 45, 2h15, 6h45) e desiste após 5
  *     tentativas, deixando o erro gravado em last_error para investigação.
- *  2. Pergunta aos Correios se os pedidos postados já chegaram, e fecha a
+ *  2. Pergunta ao Melhor Envio se os pedidos postados já chegaram, e fecha a
  *     entrega (fulfillment_status = 'entregue') nos que já confirmaram.
  */
 const path = require("node:path");
@@ -33,6 +33,7 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env"), quiet: true
 const db = require("../lib/db.js");
 const emailPhotos = require("../lib/emailPhotos.js");
 const rastreio = require("../lib/rastreio.js");
+const melhorEnvio = require("../lib/melhorEnvio.js");
 
 const LOTE = 20;
 
@@ -67,9 +68,11 @@ async function reenviarFilaDeEmail(){
   return { enviados, falhas };
 }
 
-/* Pergunta aos Correios se os pedidos já postados chegaram. Uma pausa entre
-   as consultas porque é o endereço público deles, sem contrato — sair
-   metralhando é o jeito mais rápido de ser bloqueada. */
+/* Pergunta ao Melhor Envio se os pedidos já postados chegaram. Uma pausa
+   entre as consultas para não metralhar a API deles — e porque cada pedido
+   ainda sem id de envio gasta duas chamadas (busca pelo código + rastreio).
+   ⚠️ O id descoberto aqui é gravado no pedido: da próxima rodada em diante
+   esse pedido custa uma chamada só. */
 async function fecharEntregasConfirmadas(){
   const pedidos = db.listOrdersAwaitingDelivery();
   if(!pedidos.length){
@@ -78,8 +81,12 @@ async function fecharEntregasConfirmadas(){
   }
   let entregues = 0;
   for(const pedido of pedidos){
-    const live = await rastreio.consultarCorreios(pedido.tracking_code);
-    const evento = rastreio.eventoDeEntrega(live?.events);
+    const { live, shipmentId, descoberto } = await melhorEnvio.rastreioDoPedido({
+      trackingCode: pedido.tracking_code,
+      shipmentId: pedido.melhor_envio_shipment_id,
+    });
+    if(descoberto && shipmentId) db.setMelhorEnvioShipmentId(pedido.external_reference, shipmentId);
+    const evento = rastreio.eventoDeEntrega(live);
     if(evento){
       db.markOrderDelivered(pedido.external_reference, rastreio.dataDoEvento(evento));
       entregues++;
