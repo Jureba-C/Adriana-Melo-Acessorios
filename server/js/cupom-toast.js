@@ -31,14 +31,6 @@
   const copyBtn = document.getElementById("couponToastCopyBtn");
   const closeBtn = toastEl.querySelector(".coupon-toast-close");
 
-  window.PLCCupomToast = {
-    abrir(){
-      toast.show();
-      if(!emailInput.disabled) emailInput.focus();
-    },
-  };
-  document.dispatchEvent(new CustomEvent("plc:cupom-toast-pronto"));
-
   closeBtn.addEventListener("click", (e) => {
     e.preventDefault();
     const semAnimacao = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -162,6 +154,15 @@
 
   PLCAuth.aoSaberDaSessao(({ user }) => {
     if(user) return;
+
+    window.PLCCupomToast = {
+      abrir(){
+        toast.show();
+        if(!emailInput.disabled) emailInput.focus();
+      },
+    };
+    document.dispatchEvent(new CustomEvent("plc:cupom-toast-pronto"));
+
     setTimeout(() => {
       if(algumOverlayAberto()) return;
       toast.show();
