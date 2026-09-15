@@ -134,6 +134,12 @@ if(!process.env.MELHOR_ENVIO_TOKEN){
 if(!process.env.INSTAGRAM_ACCESS_TOKEN){
   avisoConfig("INSTAGRAM_ACCESS_TOKEN não definido. A seção \"nossa história\" mostra o botão \"Seguir no Instagram\" em vez do feed ao vivo até preencher o .env (ver docs/instagram-setup.md).");
 }
+if(!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS){
+  avisoConfig("SMTP incompleto (SMTP_HOST/PORT/USER/PASS). NENHUM e-mail sai do site: nem o recibo da cliente, nem o aviso de venda nova para a lojista, nem a redefinição de senha.");
+}
+if(!process.env.OWNER_EMAIL){
+  avisoConfig("OWNER_EMAIL não definido. Você NÃO é avisada quando alguém compra nem quando chega mensagem pelo formulário de contato — o pedido entra normalmente, mas ninguém te conta.");
+}
 if(!process.env.ADMIN_EMAIL_HASHES){
   avisoConfig("ADMIN_EMAIL_HASHES não definido. NINGUÉM consegue entrar no painel administrativo (todo login vira cliente comum) até preencher o .env.");
 }
@@ -2106,6 +2112,30 @@ const PAYMENT_STATUS_MAP = {
 /* Tira uma mensagem da fila e tenta entregar. Chamado logo depois de
    enfileirar (o caso normal, em que o e-mail sai na hora) e pelo cron, para
    o que falhou. Nunca lança: a falha vira estado gravado, não exceção. */
+/* Aviso que vai para a LOJISTA (venda nova, mensagem de contato).
+   -------------------------------------------------------------------------
+   Passa pela mesma fila dos e-mails da cliente de propósito: antes era envio
+   direto, e um soluço de SMTP no instante da venda apagava o aviso para
+   sempre — a lojista nunca saberia que perdeu um. Na fila, o cron
+   (scripts/tarefas-periodicas.js) tenta de novo com espera crescente, e o
+   erro fica gravado em vez de sumir no log.
+   Sem OWNER_EMAIL não há o que enfileirar: devolve null e quem chamou segue
+   a vida (o aviso no boot já grita que falta configurar). */
+async function avisarLojista({ kind, orderReference, conteudo }){
+  const destino = process.env.OWNER_EMAIL;
+  if(!destino) return null;
+  const id = db.enqueueEmail({
+    kind,
+    toEmail: destino,
+    orderReference: orderReference || null,
+    subject: conteudo.subject,
+    textBody: conteudo.text,
+    htmlBody: conteudo.html,
+  });
+  await entregarEmailDaFila(id);
+  return id;
+}
+
 async function entregarEmailDaFila(id){
   if(!id) return;
   const linha = db.getOutboxEmail(id);
@@ -2121,7 +2151,7 @@ async function entregarEmailDaFila(id){
       html: linha.html_body,
     });
     db.markEmailSent(id);
-    console.log(`E-mail "${linha.kind}" entregue à cliente (pedido ${linha.order_reference || "-"}).`);
+    console.log(`E-mail "${linha.kind}" entregue a ${linha.to_email} (pedido ${linha.order_reference || "-"}).`);
   }catch(err){
     db.markEmailFailed(id, err.message || err);
     console.error(`Falha ao entregar e-mail "${linha.kind}" — segue na fila para nova tentativa:`, err.message || err);
@@ -2229,21 +2259,30 @@ async function runApprovedOrderSideEffects(orderRow, info){
   // uma falha em qualquer um deles (credenciais ausentes, provedor fora
   // do ar, etc.) nunca pode reverter a confirmação do pedido, que já foi
   // gravada antes de chegar aqui.
-  try{
-    await whatsapp.notifyOwnerOfPaidOrder(notificationOrder);
-    console.log(`Aviso de WhatsApp enviado à lojista para o pedido ${info.external_reference}.`);
-  }catch(waErr){
-    console.error(`Falha ao enviar aviso de WhatsApp (pedido ${info.external_reference} segue pago normalmente):`, waErr.message || waErr);
+  // A loja não usa a Cloud API do WhatsApp (exige número dedicado, que sai
+  // do aplicativo, e modelos aprovados pela Meta). Enquanto o .env estiver
+  // vazio nem tentamos: o aviso que vale é o e-mail, logo abaixo.
+  if(whatsapp.estaConfigurado()){
+    try{
+      await whatsapp.notifyOwnerOfPaidOrder(notificationOrder);
+      console.log(`Aviso de WhatsApp enviado à lojista para o pedido ${info.external_reference}.`);
+    }catch(waErr){
+      console.error(`Falha ao enviar aviso de WhatsApp (pedido ${info.external_reference} segue pago normalmente):`, waErr.message || waErr);
+    }
   }
 
   try{
-    await email.notifyOwnerOfPaidOrder({
-      ...notificationOrder,
-      adminUrl: `${CLIENT_ORIGIN}/admin.html?pedido=${encodeURIComponent(info.external_reference)}`,
+    const naFila = await avisarLojista({
+      kind: "aviso_venda",
+      orderReference: info.external_reference,
+      conteudo: email.formatOrderEmail({
+        ...notificationOrder,
+        adminUrl: `${CLIENT_ORIGIN}/admin.html?pedido=${encodeURIComponent(info.external_reference)}`,
+      }),
     });
-    console.log(`E-mail de aviso enviado à lojista para o pedido ${info.external_reference}.`);
+    if(!naFila) console.warn(`OWNER_EMAIL não configurado — aviso do pedido ${info.external_reference} não foi enfileirado.`);
   }catch(mailErr){
-    console.error(`Falha ao enviar e-mail de aviso (pedido ${info.external_reference} segue pago normalmente):`, mailErr.message || mailErr);
+    console.error(`Falha ao preparar o aviso da lojista (pedido ${info.external_reference} segue pago normalmente):`, mailErr.message || mailErr);
   }
 
   /* Recibo para a CLIENTE. Diferente dos dois avisos acima, este NÃO pode
@@ -2492,9 +2531,12 @@ app.post("/api/contact", strictLimiter, async (req, res) => {
   // painel antes daqui, então uma falha de SMTP nunca pode impedir a
   // cliente de saber que a mensagem foi enviada.
   try{
-    await email.notifyOwnerOfContactMessage({ nome, telefone, ocasiao, mensagem });
+    await avisarLojista({
+      kind: "aviso_contato",
+      conteudo: email.formatContactEmail({ nome, telefone, ocasiao, mensagem }),
+    });
   }catch(err){
-    console.error("Falha ao enviar aviso de mensagem de contato por e-mail:", err.message || err);
+    console.error("Falha ao preparar o aviso de mensagem de contato:", err.message || err);
   }
 
   res.json({ ok: true });
@@ -3024,6 +3066,50 @@ app.get("/api/admin/login-attempts", auth.requireAdmin, auth.requireAdminTwoFact
   } catch (err) {
     console.error("Erro ao listar tentativas de login:", err);
     res.status(500).json({ error: "Não foi possível carregar as tentativas de login." });
+  }
+});
+
+/* GET /api/admin/aviso-de-venda — saúde do aviso que a lojista recebe a cada
+   venda. Existe porque a pergunta "será que o e-mail está chegando?" só
+   tinha resposta abrindo o log do servidor, e a resposta errada custa uma
+   venda que ninguém despacha. Mostra o endereço configurado (o dela, no
+   painel dela — serve pra ela conferir se tem erro de digitação) e o que
+   estiver preso na fila. */
+app.get("/api/admin/aviso-de-venda", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  try {
+    res.json({
+      para: process.env.OWNER_EMAIL || null,
+      smtpConfigurado: !!(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS),
+      ...db.avisosDaLojista(),
+    });
+  } catch (err) {
+    console.error("Erro ao ler a situação do aviso de venda:", err);
+    res.status(500).json({ error: "Não foi possível conferir o aviso de venda agora." });
+  }
+});
+
+/* POST /api/admin/aviso-de-venda/testar — manda um e-mail de teste pelo MESMO
+   caminho do aviso real (lib/email.js → sendEmail), então o que passa aqui
+   passa numa venda de verdade. Sem fila de propósito: aqui a lojista está
+   olhando a tela esperando o resultado, e um erro na tela vale mais que uma
+   retentativa silenciosa. */
+app.post("/api/admin/aviso-de-venda/testar", auth.requireAdmin, auth.requireAdminTwoFactor, strictLimiter, async (req, res) => {
+  const destino = process.env.OWNER_EMAIL;
+  if(!destino){
+    return res.status(409).json({ error: "O servidor não tem nenhum e-mail cadastrado para receber os avisos de venda (falta preencher OWNER_EMAIL no .env)." });
+  }
+  try {
+    const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    await email.sendEmail({
+      to: destino,
+      subject: "🎀 Teste: é assim que você vai saber de uma venda",
+      text: `Se você está lendo isto, o aviso de venda do site está funcionando.\n\nTeste pedido pelo painel em ${quando}.`,
+      html: `<p>Se você está lendo isto, o aviso de venda do site está funcionando. 🎀</p><p>Teste pedido pelo painel em ${quando}.</p>`,
+    });
+    res.json({ ok: true, para: destino });
+  } catch (err) {
+    console.error("Falha no teste de aviso de venda:", err);
+    res.status(502).json({ error: err.message || "O servidor de e-mail recusou o envio." });
   }
 });
 

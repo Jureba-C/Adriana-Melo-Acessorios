@@ -1402,6 +1402,30 @@ function pendingEmails(limite = 20){
   return stmtEmailsPendentes.all(MAX_TENTATIVAS_EMAIL, Date.now(), limite);
 }
 
+// Saúde dos avisos que vão para a LOJISTA (venda nova, contato). Serve ao
+// card do painel: sem isto, um aviso preso na fila só aparece para quem lê o
+// log do servidor — ou seja, para ninguém.
+const stmtAvisosPresos = db.prepare(`
+  SELECT COUNT(*) AS presos,
+         MAX(last_error) AS ultimo_erro,
+         MAX(created_at) AS mais_recente
+    FROM email_outbox
+   WHERE sent_at IS NULL AND kind IN ('aviso_venda', 'aviso_contato')
+`);
+const stmtUltimoAvisoEnviado = db.prepare(`
+  SELECT sent_at FROM email_outbox
+   WHERE sent_at IS NOT NULL AND kind IN ('aviso_venda', 'aviso_contato')
+   ORDER BY sent_at DESC LIMIT 1
+`);
+function avisosDaLojista(){
+  const fila = stmtAvisosPresos.get() || {};
+  return {
+    presos: fila.presos || 0,
+    ultimoErro: fila.ultimo_erro || null,
+    ultimoEnviadoEm: stmtUltimoAvisoEnviado.get()?.sent_at || null,
+  };
+}
+
 const stmtEmailPorId = db.prepare(`SELECT * FROM email_outbox WHERE id = ?`);
 function getOutboxEmail(id){ return stmtEmailPorId.get(id) || null; }
 
@@ -1450,6 +1474,7 @@ module.exports = {
   deleteOutboxEntry,
   getOutboxEntry,
   pendingEmails,
+  avisosDaLojista,
   getOutboxEmail,
   markEmailSent,
   markEmailFailed,

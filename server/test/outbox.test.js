@@ -268,3 +268,68 @@ test("URL externa não vira anexo, entra como imagem remota", async () => {
   assert.deepEqual(await emailPhotos.anexosDeMiniaturas(msg.html), []);
   assert.match(msg.html, /src="https:\/\/exemplo\.com\/f\.jpg"/);
 });
+
+/* =========================================================================
+   Avisos que vão para a LOJISTA (venda nova, mensagem de contato)
+   -------------------------------------------------------------------------
+   Antes eram envio direto: uma falha de SMTP no instante da venda apagava o
+   aviso para sempre, e ela nunca saberia que perdeu um pedido de vista. Os
+   testes abaixo trancam as três garantias que a fila trouxe.
+========================================================================= */
+function avisoDeVenda(extra = {}){
+  return {
+    kind: "aviso_venda",
+    toEmail: "lojista@exemplo.com",
+    subject: "Novo pedido pago",
+    textBody: "texto",
+    htmlBody: "<p>html</p>",
+    orderReference: "AMK-AVISO-1",
+    ...extra,
+  };
+}
+
+test("aviso de venda fica guardado na fila, não se perde numa falha de SMTP", () => {
+  const id = db.enqueueEmail(avisoDeVenda());
+  assert.ok(id);
+
+  db.markEmailFailed(id, "smtp fora do ar");
+  const linha = db.getOutboxEmail(id);
+  assert.equal(linha.sent_at, null, "aviso que falhou não pode contar como enviado");
+  assert.equal(linha.last_error, "smtp fora do ar");
+  assert.equal(linha.attempts, 1, "a falha precisa ficar registrada para o cron tentar de novo");
+});
+
+test("o painel enxerga o aviso preso e o erro que o prendeu", () => {
+  const id = db.enqueueEmail(avisoDeVenda({ orderReference: "AMK-AVISO-2" }));
+  db.markEmailFailed(id, "senha de app vencida");
+
+  const situacao = db.avisosDaLojista();
+  assert.ok(situacao.presos >= 1, "aviso não entregue tem que aparecer como preso");
+  assert.match(String(situacao.ultimoErro), /senha de app vencida|smtp fora do ar/);
+});
+
+test("aviso entregue sai da fila e vira a data do último aviso", () => {
+  const id = db.enqueueEmail(avisoDeVenda({ orderReference: "AMK-AVISO-3" }));
+  const presosAntes = db.avisosDaLojista().presos;
+
+  db.markEmailSent(id);
+
+  const situacao = db.avisosDaLojista();
+  assert.equal(situacao.presos, presosAntes - 1);
+  assert.ok(situacao.ultimoEnviadoEm, "entregue precisa deixar a data, é o que o painel mostra");
+  assert.ok(!db.pendingEmails(100).some(l => l.id === id));
+});
+
+test("aviso de contato usa a mesma fila e não colide com o de venda", () => {
+  const venda = db.enqueueEmail(avisoDeVenda({ orderReference: "AMK-AVISO-4" }));
+  const contato = db.enqueueEmail({
+    kind: "aviso_contato",
+    toEmail: "lojista@exemplo.com",
+    subject: "Nova mensagem de contato",
+    textBody: "texto",
+    htmlBody: "<p>html</p>",
+  });
+  assert.ok(venda && contato, "contato não tem pedido; a fila precisa aceitar sem referência");
+  assert.notEqual(venda, contato);
+  assert.equal(db.getOutboxEmail(contato).order_reference, null);
+});

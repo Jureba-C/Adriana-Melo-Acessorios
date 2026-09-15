@@ -2586,8 +2586,59 @@
     }
   });
 
+  const testarAvisoBtn = document.getElementById("testarAvisoBtn");
+  const testarAvisoResult = document.getElementById("testarAvisoResult");
+  const avisoVendaResumo = document.getElementById("avisoVendaResumo");
+
+  async function carregarSituacaoDoAviso(){
+    if(!avisoVendaResumo) return;
+    try{
+      const res = await fetchWithTimeout("/api/admin/aviso-de-venda", {}, 10000);
+      if(!res.ok) throw new Error();
+      const d = await res.json();
+      const partes = [];
+      if(!d.para){
+        partes.push("⚠️ Nenhum e-mail está cadastrado para receber os avisos: hoje você não fica sabendo quando alguém compra.");
+      }else{
+        partes.push(`Toda venda nova é avisada em ${d.para}.`);
+      }
+      if(!d.smtpConfigurado) partes.push("⚠️ O envio de e-mails do site não está configurado no servidor.");
+      if(d.presos > 0){
+        partes.push(`${d.presos} aviso(s) ainda não saíram${d.ultimoErro ? `: ${d.ultimoErro}` : "."}`);
+      }else if(d.ultimoEnviadoEm){
+        partes.push(`Último aviso entregue em ${formatDate(d.ultimoEnviadoEm)}.`);
+      }
+      partes.push("Não tem certeza se chega? Mande um teste.");
+      avisoVendaResumo.textContent = partes.join(" ");
+    }catch{
+      avisoVendaResumo.textContent = "Não consegui conferir a situação do aviso de venda agora.";
+    }
+  }
+
+  testarAvisoBtn?.addEventListener("click", async () => {
+    const original = testarAvisoBtn.innerHTML;
+    testarAvisoBtn.disabled = true;
+    testarAvisoBtn.innerHTML = `<i class="bi bi-hourglass-split me-1"></i>Enviando...`;
+    testarAvisoResult.textContent = "";
+    testarAvisoResult.classList.remove("is-success", "is-error");
+    try{
+      const res = await fetchWithTimeout("/api/admin/aviso-de-venda/testar", { method: "POST" }, 20000);
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.ok) throw new Error(data.error || "Não foi possível enviar.");
+      testarAvisoResult.textContent = `Enviado para ${data.para} — confira sua caixa de entrada (e o spam).`;
+      testarAvisoResult.classList.add("is-success");
+      carregarSituacaoDoAviso();
+    }catch(err){
+      testarAvisoResult.textContent = err.message || "Não foi possível enviar.";
+      testarAvisoResult.classList.add("is-error");
+    }finally{
+      testarAvisoBtn.disabled = false;
+      testarAvisoBtn.innerHTML = original;
+    }
+  });
+
   PLCAuth.aoSaberDaSessao(({ user, falhou }) => {
-    if(user) return user.isAdmin ? loadDashboard() : showOnly(stateForbidden);
+    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso()) : showOnly(stateForbidden);
     showOnly(falhou ? stateError : stateLoggedOut);
   });
 })();

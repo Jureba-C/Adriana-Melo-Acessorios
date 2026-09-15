@@ -817,16 +817,15 @@ async function sendWelcomeCouponEmail({ to, couponCode, percentOff, shopUrl, uns
 
 /**
  * Aviso para a lojista quando o formulário "Vamos criar seu laço?" da home
- * é enviado (POST /api/contact em server.js). Mesmo padrão de
- * notifyOwnerOfPaidOrder: vai para OWNER_EMAIL, propaga erro — quem chama
- * trata como melhor esforço, porque a mensagem já foi gravada no banco (ver
- * db.createContactMessage) e aparece no painel mesmo se o e-mail falhar.
+ * é enviado (POST /api/contact em server.js).
+ *
+ * Separado em formatar/enviar porque o server.js enfileira o aviso
+ * (email_outbox) em vez de mandar na hora e torcer: envio direto que falha
+ * está perdido para sempre, e o aviso da lojista é justamente o que ela não
+ * pode perder. A função de envio continua aqui para os scripts de teste
+ * (scripts/testar-email.js) e para quem preferir o caminho direto.
  */
-async function notifyOwnerOfContactMessage({ nome, telefone, ocasiao, mensagem }) {
-  const ownerEmail = process.env.OWNER_EMAIL;
-  if (!ownerEmail) {
-    throw new Error("OWNER_EMAIL não configurado no .env — e-mail não enviado.");
-  }
+function formatContactEmail({ nome, telefone, ocasiao, mensagem }) {
   const subject = `🎀 Nova mensagem de contato — ${nome}`;
 
   const text = [
@@ -861,6 +860,15 @@ async function notifyOwnerOfContactMessage({ nome, telefone, ocasiao, mensagem }
     `,
   });
 
+  return { subject, text, html };
+}
+
+async function notifyOwnerOfContactMessage(dados) {
+  const ownerEmail = process.env.OWNER_EMAIL;
+  if (!ownerEmail) {
+    throw new Error("OWNER_EMAIL não configurado no .env — e-mail não enviado.");
+  }
+  const { subject, text, html } = formatContactEmail(dados);
   await sendEmail({ to: ownerEmail, subject, text, html });
 }
 
@@ -917,6 +925,7 @@ async function sendAdminLoginAlert({ email: contaAlvo, ip, failures }) {
 
 module.exports = {
   formatOrderEmail,
+  formatContactEmail,
   formatOrderConfirmationEmail,
   formatTrackingEmail,
   sendEmail,

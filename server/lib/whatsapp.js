@@ -125,6 +125,19 @@ async function sendWhatsAppMessage(toNumber, message) {
  * Propaga erro (não engole) — quem chama decide como logar/isolar a falha,
  * igual ao padrão já usado em purchaseShippingLabel.
  */
+/**
+ * Diz se dá para sequer tentar: sem as três peças (token, número que envia,
+ * número que recebe) a Cloud API recusa na hora. Quem chama consulta isto
+ * ANTES de tentar — sem essa guarda, uma loja que nunca configurou o
+ * WhatsApp grava um erro previsível a cada venda, e esse ruído esconde no
+ * log as falhas que importam.
+ */
+function estaConfigurado() {
+  return !!(process.env.WHATSAPP_CLOUD_API_TOKEN
+    && process.env.WHATSAPP_CLOUD_PHONE_NUMBER_ID
+    && process.env.OWNER_WHATSAPP_NUMBER);
+}
+
 async function notifyOwnerOfPaidOrder(order) {
   const ownerNumber = process.env.OWNER_WHATSAPP_NUMBER;
   if (!ownerNumber) {
@@ -134,4 +147,4 @@ async function notifyOwnerOfPaidOrder(order) {
   await sendWhatsAppMessage(ownerNumber, message);
 }
 
-module.exports = { formatOrderMessage, sendWhatsAppMessage, notifyOwnerOfPaidOrder };
+module.exports = { formatOrderMessage, sendWhatsAppMessage, notifyOwnerOfPaidOrder, estaConfigurado };
