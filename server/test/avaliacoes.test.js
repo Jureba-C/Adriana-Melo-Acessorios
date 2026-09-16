@@ -186,6 +186,10 @@ test("avaliação nasce pendente e a foto pendente não é acessível publicamen
 
   const publica = await fetch(`${ORIGIN}/api/avaliacoes/fotos/${salva.photo_id}`);
   assert.equal(publica.status, 404, "foto não pode sair antes de a lojista publicar");
+  for(const w of [160, 640]){
+    const variante = await fetch(`${ORIGIN}/api/avaliacoes/fotos/${salva.photo_id}?w=${w}`);
+    assert.equal(variante.status, 404, `miniatura ?w=${w} também não pode sair antes de publicar`);
+  }
 
   const home = await (await fetch(ORIGIN + "/")).text();
   assert.ok(!home.includes("Amei!"), "pendente não aparece na home");
@@ -253,12 +257,30 @@ test("publicar pelo painel mostra na home com texto escapado, média real e foto
   assert.ok(!home.includes("Souza"), "sobrenome nunca aparece");
   assert.match(home, /avaliação|avaliações/);
 
+  assert.ok(home.includes("Compra verificada"), "selo de compra verificada no card");
+  assert.ok(home.includes(`/api/avaliacoes/fotos/${avaliacao.photo_id}?w=160`), "card usa a miniatura, não a foto inteira");
+  assert.ok(home.includes(`/api/avaliacoes/fotos/${avaliacao.photo_id}?w=640`), "ampliação usa a variante de 640");
+
   const foto = await fetch(`${ORIGIN}/api/avaliacoes/fotos/${avaliacao.photo_id}`);
   assert.equal(foto.status, 200);
+
+  const miniatura = await fetch(`${ORIGIN}/api/avaliacoes/fotos/${avaliacao.photo_id}?w=160`, { headers: { accept: "image/webp" } });
+  assert.equal(miniatura.status, 200);
+  assert.equal(miniatura.headers.get("content-type"), "image/webp");
+  const metaMiniatura = await sharp(Buffer.from(await miniatura.arrayBuffer())).metadata();
+  assert.ok(metaMiniatura.width <= 160);
+  assert.equal(metaMiniatura.exif, undefined, "miniatura também sai sem metadados");
+  const emCache = await fetch(`${ORIGIN}/api/avaliacoes/fotos/${avaliacao.photo_id}?w=160`, { headers: { accept: "image/webp" } });
+  assert.equal(emCache.status, 200);
 
   const ocultar = await chamar("POST", `/api/admin/avaliacoes/${avaliacao.id}/ocultar`, { body: {}, cookie: adminCookie });
   assert.equal(ocultar.status, 200);
   assert.equal((await fetch(`${ORIGIN}/api/avaliacoes/fotos/${avaliacao.photo_id}`)).status, 404, "ocultou, a foto sai de circulação");
+  assert.equal(
+    (await fetch(`${ORIGIN}/api/avaliacoes/fotos/${avaliacao.photo_id}?w=160`, { headers: { accept: "image/webp" } })).status,
+    404,
+    "miniatura já guardada não pode continuar saindo depois de ocultar"
+  );
 });
 
 test("avaliação já publicada não é reescrita pelo mesmo link", async () => {

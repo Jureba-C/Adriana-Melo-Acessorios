@@ -850,181 +850,189 @@
     );
   }
 
-  function varalDeBilhetes({ carrossel }) {
+  function presenteDasAvaliacoes() {
     const secao = document.getElementById("avaliacoes");
     const grade = secao && secao.querySelector(".avaliacoes-grade");
     const cards = grade ? gsap.utils.toArray(".avaliacao-card", grade) : [];
-    if (!cards.length || !("ResizeObserver" in window)) return null;
+    if (cards.length < 2) return null;
+
+    const total = cards.length;
+    const q = (seletor) => secao.querySelector(seletor);
+    const controles = q(".avaliacoes-controles");
+    const atualEl = q(".avaliacoes-contador-atual");
+    const trilho = q(".avaliacoes-trilho-fita");
+    const [setaAnterior, setaProxima] = [...secao.querySelectorAll(".avaliacoes-seta")];
+    const fita = [...secao.querySelectorAll(".presente-fita path")];
+    const alcas = [q(".laco-alca-esq"), q(".laco-alca-dir")].filter(Boolean);
+    const pontas = [q(".laco-ponta-esq"), q(".laco-ponta-dir")].filter(Boolean);
+    const no = q(".laco-no");
+    const brilhos = [...secao.querySelectorAll(".laco-brilho")];
+    const dois = (n) => String(n).padStart(2, "0");
+    const noCelular = () => window.matchMedia("(max-width: 767.98px)").matches;
+
+    function topoFixo() {
+      const nav = document.getElementById("mainNav");
+      return nav ? Math.round(nav.getBoundingClientRect().bottom) : 0;
+    }
+
+    secao.style.setProperty("--topo-fixo", `${topoFixo()}px`);
+    secao.classList.add("is-presente");
+    if (controles) controles.hidden = false;
     notaQueSobe(secao);
 
-    const NS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("class", "varal");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-    grade.prepend(svg);
+    function peca(el, cx, cy) {
+      const estado = { r: 0, s: 1, x: 0, y: 0, o: 0 };
+      const aplicar = () => {
+        el.setAttribute("transform", `translate(${cx + estado.x} ${cy + estado.y}) rotate(${estado.r}) scale(${Math.max(0.001, estado.s)}) translate(${-cx} ${-cy})`);
+        el.style.opacity = estado.o;
+      };
+      aplicar();
+      return { el, estado, aplicar };
+    }
+    const pAlcas = alcas.map((el) => peca(el, 120, 72));
+    const pPontas = pontas.map((el, i) => peca(el, i ? 126 : 114, 80));
+    const pNo = no ? [peca(no, 120, 72)] : [];
+    const pBrilhos = brilhos.map((el) => peca(el, 120, 72));
+    const todasAsPecas = [...pAlcas, ...pPontas, ...pNo, ...pBrilhos];
+    const anima = (lista, de, para, extra = {}) => ({
+      alvos: lista.map((p) => p.estado),
+      de, para: { ...para, onUpdate: () => lista.forEach((p) => p.aplicar()), ...extra },
+    });
 
-    let linhas = [];
-    const estado = { extra: 0 };
-
-    function medir() {
-      svg.setAttribute("width", 0);
-      svg.setAttribute("height", 0);
-      const largura = carrossel ? grade.scrollWidth : grade.clientWidth;
-      const altura = grade.scrollHeight;
-      svg.setAttribute("width", largura);
-      svg.setAttribute("height", altura);
-      svg.setAttribute("viewBox", `0 0 ${largura} ${altura}`);
-
-      const porLinha = new Map();
-      cards.forEach((card) => {
-        const chave = carrossel ? 0 : card.offsetTop;
-        if (!porLinha.has(chave)) porLinha.set(chave, []);
-        porLinha.get(chave).push({ x: card.offsetLeft + card.offsetWidth / 2, y: card.offsetTop - 4 });
-      });
-
-      const existentes = linhas;
-      linhas = [...porLinha.values()].map((pontos, i) => {
-        pontos.sort((a, b) => a.x - b.x);
-        const y = pontos[0].y;
-        const todos = [{ x: 0, y: y - 10 }, ...pontos, { x: largura, y: y - 10 }];
-        const antiga = existentes[i];
-        if (antiga) return { ...antiga, todos };
-        const grupo = document.createElementNS(NS, "g");
-        const [sombra, fita, brilho] = ["varal-sombra", "varal-fita", "varal-brilho"].map((classe) => {
-          const caminho = document.createElementNS(NS, "path");
-          caminho.setAttribute("class", classe);
-          caminho.setAttribute("pathLength", "1");
-          grupo.append(caminho);
-          return caminho;
-        });
-        svg.append(grupo);
-        return { todos, grupo, sombra, fita, brilho };
-      });
-      existentes.slice(linhas.length).forEach((l) => l.grupo.remove());
-      redesenhar();
+    gsap.set(fita, { strokeDasharray: 1, strokeDashoffset: 1 });
+    const amarrar = gsap.timeline({ scrollTrigger: { trigger: secao, start: "top 85%", once: true } });
+    amarrar.to(fita, { strokeDashoffset: 0, duration: 1.2, ease: "power2.inOut", stagger: 0.08 });
+    pAlcas.forEach((p, i) => {
+      const m = anima([p], { s: 0.2, r: i ? 40 : -40, o: 0 }, { s: 1, r: 0, o: 1, duration: 0.75, ease: "back.out(1.7)" });
+      amarrar.fromTo(m.alvos, m.de, m.para, i ? "<0.09" : "-=0.5");
+    });
+    if (pPontas.length) {
+      const m = anima(pPontas, { y: -16, o: 0 }, { y: 0, o: 1, duration: 0.6, ease: "power3.out", stagger: 0.07 });
+      amarrar.fromTo(m.alvos, m.de, m.para, "-=0.5");
+    }
+    if (pNo.length) {
+      const m = anima(pNo, { s: 0.01, o: 0 }, { s: 1, o: 1, duration: 0.45, ease: "back.out(2.4)" });
+      amarrar.fromTo(m.alvos, m.de, m.para, "-=0.35");
+    }
+    if (pBrilhos.length) {
+      const m = anima(pBrilhos, { o: 0 }, { o: 1, duration: 0.5 });
+      amarrar.fromTo(m.alvos, m.de, m.para, "-=0.2");
     }
 
-    function caminho(pontos, deslocY) {
-      let d = `M ${pontos[0].x} ${pontos[0].y + deslocY}`;
-      for (let i = 1; i < pontos.length; i++) {
-        const a = pontos[i - 1], b = pontos[i];
-        const vao = Math.abs(b.x - a.x);
-        const barriga = Math.min(38, vao * 0.09) + estado.extra * (i % 2 ? 1 : 0.7);
-        d += ` Q ${(a.x + b.x) / 2} ${Math.max(a.y, b.y) + barriga + deslocY} ${b.x} ${b.y + deslocY}`;
-      }
-      return d;
-    }
-
-    function redesenhar() {
-      linhas.forEach((l) => {
-        l.fita.setAttribute("d", caminho(l.todos, 0));
-        l.brilho.setAttribute("d", caminho(l.todos, -1.2));
-        l.sombra.setAttribute("d", caminho(l.todos, 3));
+    amarrar.eventCallback("onComplete", () => {
+      requestAnimationFrame(() => {
+        const p = tl.progress();
+        if (p > 0) tl.progress(0, true).progress(p, true);
       });
+    });
+
+    const PROFUNDIDADE = 3;
+    function lugar(posicao) {
+      const p = Math.min(posicao, PROFUNDIDADE);
+      return { yPercent: 0, y: p * 18, scale: 1 - p * 0.045, rotation: 0, opacity: posicao <= PROFUNDIDADE ? 1 - posicao * 0.13 : 0 };
     }
+    cards.forEach((card, i) => gsap.set(card, { ...lugar(i), zIndex: total - i, transformOrigin: "50% 100%" }));
 
-    medir();
-    const tracos = linhas.flatMap((l) => [l.sombra, l.fita, l.brilho]);
-    gsap.set(tracos, { strokeDasharray: 1, strokeDashoffset: 1 });
-
-    const girar = cards.map((card) => gsap.quickTo(card, "rotation", { duration: 1.5, ease: "elastic.out(1, 0.22)" }));
-    let pronto = false;
-    let volta = null;
-
-    function balancar(velocidade) {
-      if (!pronto) return;
-      const limite = carrossel ? 7 : 9;
-      const forca = gsap.utils.clamp(-limite, limite, velocidade / 150);
-      if (Math.abs(forca) < 0.4) return;
-      cards.forEach((_, i) => girar[i](forca * (i % 2 ? -0.75 : 1)));
-      gsap.to(estado, { extra: Math.min(18, Math.abs(velocidade) / 80), duration: 0.25, overwrite: true, onUpdate: redesenhar });
-      clearTimeout(volta);
-      volta = setTimeout(() => {
-        girar.forEach((g) => g(0));
-        gsap.to(estado, { extra: 0, duration: 1.4, ease: "elastic.out(1, 0.3)", overwrite: true, onUpdate: redesenhar });
-      }, 140);
+    let indiceAtual = -1;
+    let tempoAtual = 0;
+    function marcar(progresso) {
+      tempoAtual = progresso * total;
+      if (tempoAtual > 0.02 && amarrar.progress() < 1) amarrar.progress(1);
+      const indice = gsap.utils.clamp(0, total - 1, Math.round(tempoAtual - 1));
+      if (trilho) trilho.style.transform = `scaleX(${gsap.utils.clamp(0, 1, (tempoAtual - 1) / (total - 1))})`;
+      if (setaAnterior) setaAnterior.disabled = tempoAtual < 1.05;
+      if (setaProxima) setaProxima.disabled = indice >= total - 1 && tempoAtual > total - 0.05;
+      if (indice === indiceAtual || tempoAtual < 0.9) return;
+      indiceAtual = indice;
+      if (atualEl) atualEl.textContent = dois(indice + 1);
+      estrelasAcendendo(cards[indice], 0.05);
     }
 
     const tl = gsap.timeline({
-      scrollTrigger: { trigger: grade, start: carrossel ? "top 88%" : "top 78%", once: true },
-      onComplete: () => { pronto = true; },
-    });
-    tl.to(tracos, { strokeDashoffset: 0, duration: 1, ease: "power2.inOut", stagger: 0.04 });
-    tl.fromTo(cards,
-      { y: -80, rotation: (i) => (i % 2 ? 16 : -13), opacity: 0 },
-      { y: 0, rotation: 0, opacity: 1, duration: 1.7, ease: "elastic.out(1, 0.33)", stagger: carrossel ? 0.1 : 0.13 },
-      "-=0.55"
-    );
-    tl.add(() => cards.forEach((card, i) => estrelasAcendendo(card, 0.25 + i * 0.09)), "-=1.4");
-
-    const gatilho = ScrollTrigger.create({
-      trigger: secao, start: "top bottom", end: "bottom top",
-      onUpdate: (self) => balancar(self.getVelocity() * (carrossel ? 0.5 : 0.35)),
+      defaults: { duration: 1 },
+      scrollTrigger: {
+        trigger: secao,
+        start: () => `top ${topoFixo()}px`,
+        end: () => `+=${total * window.innerHeight * (noCelular() ? 0.6 : 0.72)}`,
+        pin: true,
+        scrub: 0.6,
+        snap: { snapTo: 1 / total, inertia: false, duration: { min: 0.2, max: 0.55 }, delay: 0.1, ease: "power1.inOut" },
+        invalidateOnRefresh: true,
+        onUpdate: (self) => marcar(self.progress),
+        onRefresh: () => secao.style.setProperty("--topo-fixo", `${topoFixo()}px`),
+      },
     });
 
-    let ultimoX = grade.scrollLeft;
-    let ultimoT = performance.now();
-    function aoArrastar() {
-      const agora = performance.now();
-      const dt = Math.max(16, agora - ultimoT);
-      balancar(-((grade.scrollLeft - ultimoX) / dt) * 1000 * 0.6);
-      ultimoX = grade.scrollLeft;
-      ultimoT = agora;
+    const semRender = { immediateRender: false };
+    if (pBrilhos.length) {
+      const m = anima(pBrilhos, { o: 1 }, { o: 0, duration: 0.2, ...semRender });
+      tl.fromTo(m.alvos, m.de, m.para, 0);
     }
-    if (carrossel) grade.addEventListener("scroll", aoArrastar, { passive: true });
-
-    const aoPassar = cards.map((card, i) => {
-      const fn = () => {
-        if (!pronto) return;
-        girar[i](i % 2 ? 6 : -6);
-        setTimeout(() => girar[i](0), 130);
-      };
-      if (!carrossel) card.addEventListener("pointerenter", fn);
-      return fn;
+    pAlcas.forEach((p, i) => {
+      const m = anima([p], { s: 1, r: 0, o: 1 }, { s: 0.15, r: i ? 85 : -85, o: 0, ease: "power2.in", duration: 0.55, ...semRender });
+      tl.fromTo(m.alvos, m.de, m.para, 0.05);
     });
-
-    let empurrao = null;
-    let mexeu = false;
-    function desistirDoEmpurrao() {
-      mexeu = true;
-      if (empurrao) { empurrao.kill(); empurrao = null; }
-      grade.classList.remove("is-empurrando");
-    }
-    if (carrossel) {
-      ["pointerdown", "touchstart", "wheel"].forEach((ev) => grade.addEventListener(ev, desistirDoEmpurrao, { passive: true }));
-    }
-
-    if (carrossel && cards.length > 1) {
-      tl.add(() => {
-        if (mexeu || grade.scrollLeft > 4) return;
-        grade.classList.add("is-empurrando");
-        empurrao = gsap.to(grade, {
-          scrollLeft: 72, duration: 0.55, ease: "power2.inOut", yoyo: true, repeat: 1, repeatDelay: 0.25,
-          onComplete: () => { empurrao = null; grade.classList.remove("is-empurrando"); },
-        });
-      }, "-=0.6");
-    }
-
-    let quadro = 0;
-    const observador = new ResizeObserver(() => {
-      cancelAnimationFrame(quadro);
-      quadro = requestAnimationFrame(medir);
+    pPontas.forEach((p, i) => {
+      const m = anima([p], { y: 0, r: 0, o: 1 }, { y: 44, r: i ? 26 : -26, o: 0, ease: "power2.in", duration: 0.5, ...semRender });
+      tl.fromTo(m.alvos, m.de, m.para, 0.18);
     });
-    observador.observe(grade);
+    if (pNo.length) {
+      const m = anima(pNo, { s: 1, o: 1 }, { s: 0.01, o: 0, ease: "back.in(2)", duration: 0.3, ...semRender });
+      tl.fromTo(m.alvos, m.de, m.para, 0.45);
+    }
+    tl.fromTo(fita, { strokeDashoffset: 0 }, { strokeDashoffset: -1, ease: "power2.inOut", duration: 0.7, ...semRender }, 0.3);
+    tl.from(grade, { y: 36, opacity: 0.18, ease: "power2.out", duration: 0.6 }, 0.35);
+
+    for (let passo = 1; passo < total; passo++) {
+      tl.to(cards[passo - 1], { yPercent: -118, rotation: passo % 2 ? 6 : -6, opacity: 0, scale: 0.96, ease: "power2.in" }, passo);
+      for (let j = passo; j < total; j++) tl.to(cards[j], { ...lugar(j - passo), ease: "power2.out" }, passo);
+    }
+    marcar(0);
+
+    function irPara(delta) {
+      const st = tl.scrollTrigger;
+      if (!st) return;
+      const base = tempoAtual < 0.95 ? -1 : Math.round(tempoAtual - 1);
+      const alvo = gsap.utils.clamp(0, total - 1, base + delta);
+      const destino = st.start + (st.end - st.start) * ((alvo + 1) / total);
+      window.scrollTo({ top: destino, behavior: "smooth" });
+    }
+
+    const aoClicar = (e) => {
+      const seta = e.target.closest(".avaliacoes-seta");
+      if (seta) irPara(Number(seta.dataset.ir) || 1);
+    };
+    const aoTeclar = (e) => {
+      if (e.key === "ArrowRight") { e.preventDefault(); irPara(1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); irPara(-1); }
+    };
+    let toqueX = 0, toqueY = 0;
+    const aoTocar = (e) => { toqueX = e.touches[0].clientX; toqueY = e.touches[0].clientY; };
+    const aoSoltar = (e) => {
+      const dx = e.changedTouches[0].clientX - toqueX;
+      const dy = e.changedTouches[0].clientY - toqueY;
+      if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) irPara(dx < 0 ? 1 : -1);
+    };
+    secao.addEventListener("click", aoClicar);
+    secao.addEventListener("keydown", aoTeclar);
+    grade.addEventListener("touchstart", aoTocar, { passive: true });
+    grade.addEventListener("touchend", aoSoltar, { passive: true });
 
     return () => {
-      if (tl.scrollTrigger) tl.scrollTrigger.kill();
+      if (tl.scrollTrigger) tl.scrollTrigger.kill(true);
       tl.kill();
-      gatilho.kill();
-      observador.disconnect();
-      clearTimeout(volta);
-      grade.removeEventListener("scroll", aoArrastar);
-      ["pointerdown", "touchstart", "wheel"].forEach((ev) => grade.removeEventListener(ev, desistirDoEmpurrao));
-      if (empurrao) empurrao.kill();
-      cards.forEach((card, i) => card.removeEventListener("pointerenter", aoPassar[i]));
-      svg.remove();
-      gsap.set(cards, { clearProps: "transform,opacity" });
+      if (amarrar.scrollTrigger) amarrar.scrollTrigger.kill();
+      amarrar.kill();
+      secao.removeEventListener("click", aoClicar);
+      secao.removeEventListener("keydown", aoTeclar);
+      grade.removeEventListener("touchstart", aoTocar);
+      grade.removeEventListener("touchend", aoSoltar);
+      secao.classList.remove("is-presente");
+      if (controles) controles.hidden = true;
+      gsap.set(cards, { clearProps: "transform,opacity,zIndex,transformOrigin" });
+      gsap.set(grade, { clearProps: "transform,opacity" });
+      todasAsPecas.forEach((p) => { p.el.removeAttribute("transform"); p.el.style.opacity = ""; });
+      gsap.set(fita, { clearProps: "strokeDasharray,strokeDashoffset" });
     };
   }
 
@@ -1046,9 +1054,7 @@
       return () => { if (tl && tl.scrollTrigger) tl.scrollTrigger.kill(); };
     });
 
-    mm.add("(min-width: 576px) and (prefers-reduced-motion: no-preference)", () => varalDeBilhetes({ carrossel: false }));
-
-    mm.add("(max-width: 575.98px) and (prefers-reduced-motion: no-preference)", () => varalDeBilhetes({ carrossel: true }));
+    mm.add("(prefers-reduced-motion: no-preference)", () => presenteDasAvaliacoes());
 
     mm.add("(prefers-reduced-motion: no-preference)", () => {
       entradaDoRodape();

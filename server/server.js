@@ -1123,46 +1123,110 @@ function secaoAvaliacoes(){
   const overridesMap = getProductOverridesMap();
   const { total, media } = db.notaMedia();
   const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const dois = (n) => String(n).padStart(2, "0");
 
-  /* Cada card "pendurado" por um laço (#bow-shape, o mesmo símbolo do
-     resto do site): é o gancho do varal de fita que js/animacoes.js desenha
-     por cima (varalDeBilhetes). Sem JS, ou com movimento reduzido, o card
-     fica parado com o laço — ainda faz sentido sozinho.
+  /* Este HTML é a versão SEM animação — tag de presente com o laço já
+     amarrado, e as avaliações em grade (computador) ou carrossel (celular).
+     É o que aparece sem JS ou com movimento reduzido, e já é bonito sozinho.
+     Com animação, js/animacoes.js (presenteDasAvaliacoes) liga .is-presente:
+     a seção fixa na tela, o laço se desata com a rolagem e as avaliações
+     passam uma por vez. O conteúdo é o mesmo nos dois modos.
 
-     A foto vira MINIATURA ao lado do nome, não bloco no topo do card: no
-     celular o carrossel assume a altura do card mais alto, e uma foto
-     grande num só card deixava todos os outros com um vazio embaixo. Tocar
-     na miniatura abre a foto inteira. */
+     "Compra verificada" é verdade para toda avaliação daqui: elas só nascem
+     pelo link com o token de um pedido pago (rotas /api/avaliar), não existe
+     outro caminho para gravar uma.
+
+     Laço e fita são SVG com os tons da marca (opção "cetim fino" escolhida
+     pela lojista). A fita estica só na largura (preserveAspectRatio=none);
+     como a curva é quase horizontal, a espessura visível quase não muda.
+     ⚠️ NÃO usar vector-effect=non-scaling-stroke aqui: ele faz o pathLength=1
+     da animação de "desenhar" deixar de cobrir a fita inteira — ela aparece
+     tracejada, com buracos. */
   const cards = avaliacoes.map(r => {
-    const produto = effectiveProduct(r.product_id, overridesMap)?.name || "";
+    const produto = effectiveProduct(r.product_id, overridesMap);
+    const nomeProduto = produto?.name || "";
+    const fotoProduto = produto?.photoUrl
+      ? (produto.photoUrl.startsWith("/api/products/photos/") ? `${produto.photoUrl}?w=160` : produto.photoUrl)
+      : "";
     const quem = [r.customer_first_name, r.customer_city].filter(Boolean).map(escaparHtml).join(" · ");
-    const fotoUrl = r.photo_id ? `/api/avaliacoes/fotos/${escaparHtml(r.photo_id)}` : "";
+    const primeiroNome = escaparHtml(r.customer_first_name || "cliente");
+    const foto = r.photo_id ? `/api/avaliacoes/fotos/${escaparHtml(r.photo_id)}` : "";
     return `
-      <article class="avaliacao-card">
-        <svg class="avaliacao-prendedor" viewBox="0 0 100 70" aria-hidden="true" focusable="false"><use href="#bow-shape"/></svg>
-        ${estrelasHtml(r.rating)}
-        ${r.comment ? `<p class="avaliacao-texto">“${escaparHtml(r.comment)}”</p>` : ""}
+      <li class="avaliacao-card">
+        ${nomeProduto ? `<span class="avaliacao-produto-chip">${fotoProduto ? `<img src="${escaparHtml(fotoProduto)}" alt="" width="28" height="28" loading="lazy" decoding="async">` : ""}<span>${escaparHtml(nomeProduto)}</span></span>` : ""}
+        <div class="avaliacao-topo">
+          ${estrelasHtml(r.rating)}
+          <span class="avaliacao-selo"><i class="bi bi-shield-check" aria-hidden="true"></i> Compra verificada</span>
+        </div>
+        ${r.comment ? `<blockquote class="avaliacao-texto"><p>“${escaparHtml(r.comment)}”</p></blockquote>` : ""}
         <footer class="avaliacao-rodape">
-          ${fotoUrl ? `<a class="avaliacao-foto-link" href="${fotoUrl}" target="_blank" rel="noopener" aria-label="Ver foto enviada por ${escaparHtml(r.customer_first_name || "cliente")}"><img class="avaliacao-foto" src="${fotoUrl}" alt="" loading="lazy" decoding="async" width="56" height="56"></a>` : ""}
+          ${foto ? `<button type="button" class="avaliacao-foto-botao" data-foto="${foto}?w=640" data-legenda="Foto enviada por ${quem || primeiroNome}" aria-label="Ampliar foto enviada por ${primeiroNome}"><img class="avaliacao-foto" src="${foto}?w=160" alt="" loading="lazy" decoding="async" width="56" height="56"><span class="avaliacao-foto-zoom" aria-hidden="true"><i class="bi bi-zoom-in"></i></span></button>` : ""}
           <span class="avaliacao-autor">
             ${quem ? `<span class="avaliacao-quem">${quem}</span>` : ""}
-            ${produto ? `<span class="avaliacao-produto">${escaparHtml(produto)}</span>` : ""}
+            ${nomeProduto ? `<span class="avaliacao-produto">${escaparHtml(nomeProduto)}</span>` : ""}
           </span>
         </footer>
-      </article>`;
+      </li>`;
   }).join("");
+
+  const pontos = avaliacoes.length > 1
+    ? `<div class="avaliacoes-pontos" aria-hidden="true">${avaliacoes.map((_, i) => `<span class="avaliacoes-ponto${i === 0 ? " is-ativo" : ""}"></span>`).join("")}</div>`
+    : "";
 
   return `
 <section id="avaliacoes" class="avaliacoes-section" aria-labelledby="avaliacoesTitulo">
-  <div class="container">
-    <div class="text-center mx-auto avaliacoes-head">
-      <span class="section-eyebrow"><i class="bi bi-star-fill"></i> quem já recebeu</span>
-      <h2 class="section-title" id="avaliacoesTitulo">O que dizem as clientes</h2>
-      <p class="avaliacoes-resumo"><i class="bi bi-star-fill" aria-hidden="true"></i> <strong>${nota}</strong> de 5 · ${total === 1 ? "1 avaliação" : `${total} avaliações`}</p>
+  <div class="container avaliacoes-container">
+    <div class="avaliacoes-tag">
+      <div class="avaliacoes-tag-cartao">
+        <svg class="presente-fita" viewBox="0 0 600 24" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="cetimFita" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#F4B4CC"/><stop offset=".5" stop-color="#FBDCE8"/><stop offset="1" stop-color="#EA8FB4"/>
+            </linearGradient>
+          </defs>
+          <path class="presente-fita-corpo" d="M0 13 C150 6 220 17 300 12 C380 7 450 18 600 11" pathLength="1" stroke="url(#cetimFita)"/>
+          <path class="presente-fita-brilho" d="M0 12 C150 5 220 16 300 11 C380 6 450 17 600 10" pathLength="1"/>
+        </svg>
+        <svg class="presente-laco" viewBox="0 0 240 180" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="cetimLaco" x1="0" y1="0" x2="0.4" y2="1">
+              <stop offset="0" stop-color="#FDE7EF"/><stop offset=".45" stop-color="#F4B4CC"/><stop offset="1" stop-color="#DD6E9B"/>
+            </linearGradient>
+            <linearGradient id="cetimLacoNo" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#EA8FB4"/><stop offset="1" stop-color="#C05480"/>
+            </linearGradient>
+          </defs>
+          <g class="laco-corpo">
+            <path class="laco-ponta laco-ponta-esq" d="M114 80 C106 102 88 118 92 146 L101 138 L108 150 C107 124 119 104 124 82Z"/>
+            <path class="laco-ponta laco-ponta-dir" d="M126 80 C134 102 152 118 148 146 L139 138 L132 150 C133 124 121 104 116 82Z"/>
+            <path class="laco-alca laco-alca-esq" d="M120 72 C104 42 62 16 38 34 C16 50 28 90 70 88 C92 87 110 80 120 72Z"/>
+            <path class="laco-alca laco-alca-dir" d="M120 72 C136 42 178 16 202 34 C224 50 212 90 170 88 C148 87 130 80 120 72Z"/>
+            <path class="laco-brilho laco-brilho-esq" d="M48 40 C64 30 88 40 104 58"/>
+            <path class="laco-brilho laco-brilho-dir" d="M192 40 C176 30 152 40 136 58"/>
+            <path class="laco-no" d="M110 62 Q120 56 130 62 Q135 72 130 82 Q120 88 110 82 Q105 72 110 62Z"/>
+          </g>
+        </svg>
+        <span class="section-eyebrow avaliacoes-eyebrow">quem já recebeu</span>
+        <h2 class="section-title avaliacoes-titulo" id="avaliacoesTitulo">O que dizem as clientes</h2>
+        <p class="avaliacoes-resumo">
+          <strong class="avaliacoes-nota">${nota}</strong>
+          <span class="avaliacoes-resumo-lado">
+            <span aria-hidden="true">${estrelasHtml(Math.round(media))}</span>
+            <span>${total === 1 ? "1 avaliação verificada" : `${total} avaliações verificadas`}</span>
+          </span>
+        </p>
+        <div class="avaliacoes-controles" hidden>
+          <button type="button" class="avaliacoes-seta" data-ir="-1" aria-label="Avaliação anterior"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+          <span class="avaliacoes-contador" aria-live="polite"><span class="avaliacoes-contador-atual">01</span><span class="visually-hidden"> de </span><span class="avaliacoes-trilho" aria-hidden="true"><span class="avaliacoes-trilho-fita"></span></span><span class="avaliacoes-contador-total">${dois(avaliacoes.length)}</span></span>
+          <button type="button" class="avaliacoes-seta" data-ir="1" aria-label="Próxima avaliação"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+        </div>
+      </div>
     </div>
-    <div class="avaliacoes-grade" role="region" aria-label="Avaliações das clientes" tabindex="0">${cards}
+    <div class="avaliacoes-palco">
+      <ul class="avaliacoes-grade" aria-label="Avaliações das clientes" tabindex="0">${cards}
+      </ul>
+      ${pontos}
     </div>
-    ${avaliacoes.length > 1 ? `<div class="avaliacoes-pontos" aria-hidden="true">${avaliacoes.map((_, i) => `<span class="avaliacoes-ponto${i === 0 ? " is-ativo" : ""}"></span>`).join("")}</div>` : ""}
   </div>
 </section>`;
 }
@@ -2251,13 +2315,46 @@ const ROTA_FOTO_AVALIACAO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 /* Só serve foto de avaliação PUBLICADA. Cache curto (1h) e não "immutable":
    se a lojista ocultar a avaliação, a foto precisa sair de circulação logo,
    não daqui a um ano. */
-app.get("/api/avaliacoes/fotos/:id", (req, res) => {
+const LARGURAS_FOTO_AVALIACAO = new Set([160, 640]);
+
+/* ?w=160 (miniatura do card) e ?w=640 (ampliação): sem isso a miniatura de
+   56px baixava a foto inteira, de até 1400px. Mesmo esquema das fotos de
+   produto — variante gerada no primeiro pedido e guardada no banco — com a
+   diferença que a checagem de "publicada" vem ANTES de tudo, inclusive do
+   cache de variante: foto ocultada não pode continuar saindo pela miniatura. */
+app.get("/api/avaliacoes/fotos/:id", async (req, res) => {
   if(!ROTA_FOTO_AVALIACAO.test(req.params.id)) return res.status(404).end();
   const foto = db.getReviewPhotoPublicada(req.params.id);
   if(!foto) return res.status(404).end();
   res.setHeader("Cache-Control", "public, max-age=3600");
-  res.setHeader("Content-Type", foto.mime_type);
-  res.end(Buffer.from(foto.data));
+
+  const pedida = Number(req.query.w);
+  const largura = LARGURAS_FOTO_AVALIACAO.has(pedida) ? pedida : null;
+  if(!largura){
+    res.setHeader("Content-Type", foto.mime_type);
+    return res.end(Buffer.from(foto.data));
+  }
+
+  const formato = /\bimage\/webp\b/.test(req.headers.accept || "") ? "webp" : "jpeg";
+  res.vary("Accept");
+  const emCache = db.getReviewPhotoVariant(req.params.id, largura, formato);
+  if(emCache){
+    res.setHeader("Content-Type", emCache.mime_type);
+    return res.end(Buffer.from(emCache.data));
+  }
+  try{
+    const mime = formato === "webp" ? "image/webp" : "image/jpeg";
+    let pipeline = sharp(Buffer.from(foto.data)).resize({ width: largura, withoutEnlargement: true });
+    pipeline = formato === "webp" ? pipeline.webp({ quality: 74 }) : pipeline.jpeg({ quality: 80, mozjpeg: true });
+    const reduzida = await pipeline.toBuffer();
+    db.saveReviewPhotoVariant(req.params.id, largura, formato, mime, reduzida);
+    res.setHeader("Content-Type", mime);
+    res.end(reduzida);
+  }catch(err){
+    console.error("Não foi possível reduzir a foto da avaliação:", err.message || err);
+    res.setHeader("Content-Type", foto.mime_type);
+    res.end(Buffer.from(foto.data));
+  }
 });
 
 /* =========================================================================

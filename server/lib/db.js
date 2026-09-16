@@ -487,6 +487,20 @@ db.exec(`
     created_at  INTEGER NOT NULL
   );
 
+  -- Tamanhos reduzidos (160/640) das fotos de avaliação. É cache: apagar
+  -- custa só um sharp no próximo pedido. CASCADE: excluir a foto (recusa da
+  -- lojista) leva as variantes junto — foto recusada não sobra em tamanho
+  -- nenhum.
+  CREATE TABLE IF NOT EXISTS review_photo_variants (
+    photo_id    TEXT NOT NULL REFERENCES review_photos(id) ON DELETE CASCADE,
+    width       INTEGER NOT NULL,
+    format      TEXT NOT NULL,
+    mime_type   TEXT NOT NULL,
+    data        BLOB NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (photo_id, width, format)
+  );
+
   CREATE TABLE IF NOT EXISTS reviews (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     order_reference     TEXT NOT NULL,
@@ -1480,6 +1494,18 @@ const stmtFotoPublicada = db.prepare(`
 `);
 function getReviewPhotoPublicada(id){ return stmtFotoPublicada.get(id) || null; }
 
+const stmtGetReviewVariant = db.prepare(
+  `SELECT mime_type, data FROM review_photo_variants WHERE photo_id = ? AND width = ? AND format = ?`
+);
+const stmtSaveReviewVariant = db.prepare(`
+  INSERT OR REPLACE INTO review_photo_variants (photo_id, width, format, mime_type, data, created_at)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+function getReviewPhotoVariant(photoId, width, format){ return stmtGetReviewVariant.get(photoId, width, format) || null; }
+function saveReviewPhotoVariant(photoId, width, format, mimeType, buffer){
+  stmtSaveReviewVariant.run(photoId, width, format, mimeType, buffer, Date.now());
+}
+
 // Painel: a lojista precisa ver a foto antes de decidir publicar.
 const stmtFotoQualquer = db.prepare(`SELECT mime_type, data FROM review_photos WHERE id = ?`);
 function getReviewPhoto(id){ return stmtFotoQualquer.get(id) || null; }
@@ -1720,6 +1746,8 @@ module.exports = {
   avaliacoesDoPedido,
   insertReviewPhoto,
   getReviewPhotoPublicada,
+  getReviewPhotoVariant,
+  saveReviewPhotoVariant,
   getReviewPhoto,
   listarAvaliacoesPainel,
   mudarStatusAvaliacao,
