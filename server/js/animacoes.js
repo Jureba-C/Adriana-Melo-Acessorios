@@ -850,72 +850,182 @@
     );
   }
 
-  function bilhetesQueChegam() {
-    const secao = document.getElementById("avaliacoes");
-    if (!secao) return null;
-    const cards = gsap.utils.toArray(".avaliacao-card", secao);
-    if (!cards.length) return null;
-    notaQueSobe(secao);
-
-    const topoDaGrade = cards[0].offsetTop;
-    const esquerdas = [...new Set(cards.map((c) => c.offsetLeft))].sort((a, b) => a - b);
-    const colunaDe = (card) => esquerdas.indexOf(card.offsetLeft);
-
-    cards.forEach((card, i) => {
-      const coluna = colunaDe(card);
-      const linha = Math.round((card.offsetTop - topoDaGrade) / Math.max(1, card.offsetHeight));
-      const atraso = coluna * 0.12 + linha * 0.18;
-      gsap.fromTo(card,
-        { y: 90, rotation: i % 2 ? 7 : -6, scale: 0.88, opacity: 0, transformOrigin: "50% 0%" },
-        {
-          y: 0, rotation: 0, scale: 1, opacity: 1,
-          duration: 1, delay: atraso, ease: "back.out(1.35)",
-          scrollTrigger: { trigger: card, start: "top 92%", once: true },
-          onStart: () => estrelasAcendendo(card, 0.45),
-        }
-      );
-    });
-
-    const ondas = cards.map((card) => {
-      const coluna = colunaDe(card);
-      const amplitude = coluna % 2 ? -9 : 9;
-      return gsap.fromTo(card,
-        { yPercent: amplitude },
-        {
-          yPercent: -amplitude, ease: "none",
-          scrollTrigger: { trigger: secao, start: "top bottom", end: "bottom top", scrub: 0.6, invalidateOnRefresh: true },
-        }
-      );
-    });
-    return () => ondas.forEach((tw) => tw.scrollTrigger && tw.scrollTrigger.kill());
-  }
-
-  function carrosselQueChega() {
+  function varalDeBilhetes({ carrossel }) {
     const secao = document.getElementById("avaliacoes");
     const grade = secao && secao.querySelector(".avaliacoes-grade");
-    if (!grade) return null;
-    const cards = gsap.utils.toArray(".avaliacao-card", grade);
-    if (!cards.length) return null;
+    const cards = grade ? gsap.utils.toArray(".avaliacao-card", grade) : [];
+    if (!cards.length || !("ResizeObserver" in window)) return null;
     notaQueSobe(secao);
 
-    const tl = gsap.timeline({ scrollTrigger: { trigger: grade, start: "top 85%", once: true } });
-    tl.fromTo(cards.slice(0, 3),
-      { x: 140, rotation: 5, opacity: 0 },
-      { x: 0, rotation: 0, opacity: 1, duration: 0.8, stagger: 0.12, ease: "power3.out", clearProps: "transform,opacity" }
-    );
-    tl.add(() => estrelasAcendendo(cards[0], 0), 0.35);
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "varal");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    grade.prepend(svg);
 
-    if (cards.length > 1) {
-      tl.add(() => {
-        if (grade.scrollLeft > 4) return;
-        grade.classList.add("is-empurrando");
-        gsap.to(grade, {
-          scrollLeft: 72, duration: 0.55, ease: "power2.inOut", yoyo: true, repeat: 1, repeatDelay: 0.25,
-          onComplete: () => grade.classList.remove("is-empurrando"),
+    let linhas = [];
+    const estado = { extra: 0 };
+
+    function medir() {
+      svg.setAttribute("width", 0);
+      svg.setAttribute("height", 0);
+      const largura = carrossel ? grade.scrollWidth : grade.clientWidth;
+      const altura = grade.scrollHeight;
+      svg.setAttribute("width", largura);
+      svg.setAttribute("height", altura);
+      svg.setAttribute("viewBox", `0 0 ${largura} ${altura}`);
+
+      const porLinha = new Map();
+      cards.forEach((card) => {
+        const chave = carrossel ? 0 : card.offsetTop;
+        if (!porLinha.has(chave)) porLinha.set(chave, []);
+        porLinha.get(chave).push({ x: card.offsetLeft + card.offsetWidth / 2, y: card.offsetTop - 4 });
+      });
+
+      const existentes = linhas;
+      linhas = [...porLinha.values()].map((pontos, i) => {
+        pontos.sort((a, b) => a.x - b.x);
+        const y = pontos[0].y;
+        const todos = [{ x: 0, y: y - 10 }, ...pontos, { x: largura, y: y - 10 }];
+        const antiga = existentes[i];
+        if (antiga) return { ...antiga, todos };
+        const grupo = document.createElementNS(NS, "g");
+        const [sombra, fita, brilho] = ["varal-sombra", "varal-fita", "varal-brilho"].map((classe) => {
+          const caminho = document.createElementNS(NS, "path");
+          caminho.setAttribute("class", classe);
+          caminho.setAttribute("pathLength", "1");
+          grupo.append(caminho);
+          return caminho;
         });
-      }, "+=0.5");
+        svg.append(grupo);
+        return { todos, grupo, sombra, fita, brilho };
+      });
+      existentes.slice(linhas.length).forEach((l) => l.grupo.remove());
+      redesenhar();
     }
-    return () => tl.scrollTrigger && tl.scrollTrigger.kill();
+
+    function caminho(pontos, deslocY) {
+      let d = `M ${pontos[0].x} ${pontos[0].y + deslocY}`;
+      for (let i = 1; i < pontos.length; i++) {
+        const a = pontos[i - 1], b = pontos[i];
+        const vao = Math.abs(b.x - a.x);
+        const barriga = Math.min(38, vao * 0.09) + estado.extra * (i % 2 ? 1 : 0.7);
+        d += ` Q ${(a.x + b.x) / 2} ${Math.max(a.y, b.y) + barriga + deslocY} ${b.x} ${b.y + deslocY}`;
+      }
+      return d;
+    }
+
+    function redesenhar() {
+      linhas.forEach((l) => {
+        l.fita.setAttribute("d", caminho(l.todos, 0));
+        l.brilho.setAttribute("d", caminho(l.todos, -1.2));
+        l.sombra.setAttribute("d", caminho(l.todos, 3));
+      });
+    }
+
+    medir();
+    const tracos = linhas.flatMap((l) => [l.sombra, l.fita, l.brilho]);
+    gsap.set(tracos, { strokeDasharray: 1, strokeDashoffset: 1 });
+
+    const girar = cards.map((card) => gsap.quickTo(card, "rotation", { duration: 1.5, ease: "elastic.out(1, 0.22)" }));
+    let pronto = false;
+    let volta = null;
+
+    function balancar(velocidade) {
+      if (!pronto) return;
+      const limite = carrossel ? 7 : 9;
+      const forca = gsap.utils.clamp(-limite, limite, velocidade / 150);
+      if (Math.abs(forca) < 0.4) return;
+      cards.forEach((_, i) => girar[i](forca * (i % 2 ? -0.75 : 1)));
+      gsap.to(estado, { extra: Math.min(18, Math.abs(velocidade) / 80), duration: 0.25, overwrite: true, onUpdate: redesenhar });
+      clearTimeout(volta);
+      volta = setTimeout(() => {
+        girar.forEach((g) => g(0));
+        gsap.to(estado, { extra: 0, duration: 1.4, ease: "elastic.out(1, 0.3)", overwrite: true, onUpdate: redesenhar });
+      }, 140);
+    }
+
+    const tl = gsap.timeline({
+      scrollTrigger: { trigger: grade, start: carrossel ? "top 88%" : "top 78%", once: true },
+      onComplete: () => { pronto = true; },
+    });
+    tl.to(tracos, { strokeDashoffset: 0, duration: 1, ease: "power2.inOut", stagger: 0.04 });
+    tl.fromTo(cards,
+      { y: -80, rotation: (i) => (i % 2 ? 16 : -13), opacity: 0 },
+      { y: 0, rotation: 0, opacity: 1, duration: 1.7, ease: "elastic.out(1, 0.33)", stagger: carrossel ? 0.1 : 0.13 },
+      "-=0.55"
+    );
+    tl.add(() => cards.forEach((card, i) => estrelasAcendendo(card, 0.25 + i * 0.09)), "-=1.4");
+
+    const gatilho = ScrollTrigger.create({
+      trigger: secao, start: "top bottom", end: "bottom top",
+      onUpdate: (self) => balancar(self.getVelocity() * (carrossel ? 0.5 : 0.35)),
+    });
+
+    let ultimoX = grade.scrollLeft;
+    let ultimoT = performance.now();
+    function aoArrastar() {
+      const agora = performance.now();
+      const dt = Math.max(16, agora - ultimoT);
+      balancar(-((grade.scrollLeft - ultimoX) / dt) * 1000 * 0.6);
+      ultimoX = grade.scrollLeft;
+      ultimoT = agora;
+    }
+    if (carrossel) grade.addEventListener("scroll", aoArrastar, { passive: true });
+
+    const aoPassar = cards.map((card, i) => {
+      const fn = () => {
+        if (!pronto) return;
+        girar[i](i % 2 ? 6 : -6);
+        setTimeout(() => girar[i](0), 130);
+      };
+      if (!carrossel) card.addEventListener("pointerenter", fn);
+      return fn;
+    });
+
+    let empurrao = null;
+    let mexeu = false;
+    function desistirDoEmpurrao() {
+      mexeu = true;
+      if (empurrao) { empurrao.kill(); empurrao = null; }
+      grade.classList.remove("is-empurrando");
+    }
+    if (carrossel) {
+      ["pointerdown", "touchstart", "wheel"].forEach((ev) => grade.addEventListener(ev, desistirDoEmpurrao, { passive: true }));
+    }
+
+    if (carrossel && cards.length > 1) {
+      tl.add(() => {
+        if (mexeu || grade.scrollLeft > 4) return;
+        grade.classList.add("is-empurrando");
+        empurrao = gsap.to(grade, {
+          scrollLeft: 72, duration: 0.55, ease: "power2.inOut", yoyo: true, repeat: 1, repeatDelay: 0.25,
+          onComplete: () => { empurrao = null; grade.classList.remove("is-empurrando"); },
+        });
+      }, "-=0.6");
+    }
+
+    let quadro = 0;
+    const observador = new ResizeObserver(() => {
+      cancelAnimationFrame(quadro);
+      quadro = requestAnimationFrame(medir);
+    });
+    observador.observe(grade);
+
+    return () => {
+      if (tl.scrollTrigger) tl.scrollTrigger.kill();
+      tl.kill();
+      gatilho.kill();
+      observador.disconnect();
+      clearTimeout(volta);
+      grade.removeEventListener("scroll", aoArrastar);
+      ["pointerdown", "touchstart", "wheel"].forEach((ev) => grade.removeEventListener(ev, desistirDoEmpurrao));
+      if (empurrao) empurrao.kill();
+      cards.forEach((card, i) => card.removeEventListener("pointerenter", aoPassar[i]));
+      svg.remove();
+      gsap.set(cards, { clearProps: "transform,opacity" });
+    };
   }
 
   function animacoesDeRolagem() {
@@ -936,9 +1046,9 @@
       return () => { if (tl && tl.scrollTrigger) tl.scrollTrigger.kill(); };
     });
 
-    mm.add("(min-width: 576px) and (prefers-reduced-motion: no-preference)", () => bilhetesQueChegam());
+    mm.add("(min-width: 576px) and (prefers-reduced-motion: no-preference)", () => varalDeBilhetes({ carrossel: false }));
 
-    mm.add("(max-width: 575.98px) and (prefers-reduced-motion: no-preference)", () => carrosselQueChega());
+    mm.add("(max-width: 575.98px) and (prefers-reduced-motion: no-preference)", () => varalDeBilhetes({ carrossel: true }));
 
     mm.add("(prefers-reduced-motion: no-preference)", () => {
       entradaDoRodape();

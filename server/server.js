@@ -1124,7 +1124,12 @@ function secaoAvaliacoes(){
   const { total, media } = db.notaMedia();
   const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-  /* A foto vira MINIATURA ao lado do nome, não bloco no topo do card: no
+  /* Cada card "pendurado" por um laço (#bow-shape, o mesmo símbolo do
+     resto do site): é o gancho do varal de fita que js/animacoes.js desenha
+     por cima (varalDeBilhetes). Sem JS, ou com movimento reduzido, o card
+     fica parado com o laço — ainda faz sentido sozinho.
+
+     A foto vira MINIATURA ao lado do nome, não bloco no topo do card: no
      celular o carrossel assume a altura do card mais alto, e uma foto
      grande num só card deixava todos os outros com um vazio embaixo. Tocar
      na miniatura abre a foto inteira. */
@@ -1134,6 +1139,7 @@ function secaoAvaliacoes(){
     const fotoUrl = r.photo_id ? `/api/avaliacoes/fotos/${escaparHtml(r.photo_id)}` : "";
     return `
       <article class="avaliacao-card">
+        <svg class="avaliacao-prendedor" viewBox="0 0 100 70" aria-hidden="true" focusable="false"><use href="#bow-shape"/></svg>
         ${estrelasHtml(r.rating)}
         ${r.comment ? `<p class="avaliacao-texto">“${escaparHtml(r.comment)}”</p>` : ""}
         <footer class="avaliacao-rodape">

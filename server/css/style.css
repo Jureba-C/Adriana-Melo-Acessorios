@@ -3293,15 +3293,29 @@ body.admin-gate-active .admin-state-area{
 .avaliacoes-resumo i{ color:var(--gold-500); font-size:.9em; }
 .avaliacoes-resumo strong{ color:var(--ink); font-weight:700; }
 .avaliacoes-grade{
+  position:relative;
   display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 340px));
-  justify-content:center; align-items:stretch; gap:1.25rem;
+  justify-content:center; align-items:stretch; column-gap:1.25rem; row-gap:3.25rem;
+  padding-top:2rem;
 }
+.varal{ position:absolute; left:0; top:0; z-index:0; overflow:visible; pointer-events:none; }
+.varal path{ fill:none; stroke-linecap:round; stroke-linejoin:round; }
+.varal-fita{ stroke:var(--blush-300); stroke-width:5; }
+.varal-brilho{ stroke:rgba(255,255,255,.7); stroke-width:1.4; }
+.varal-sombra{ stroke:rgba(192,84,128,.18); stroke-width:6; }
 .avaliacoes-grade:focus-visible{ outline:2px solid var(--blush-600); outline-offset:4px; border-radius:var(--radius-md); }
 .avaliacao-card{
+  position:relative; z-index:1;
   background:var(--white); border:1px solid var(--blush-100); border-radius:var(--radius-md);
-  box-shadow:var(--shadow-soft); padding:1.3rem 1.3rem 1.15rem;
+  box-shadow:var(--shadow-soft); padding:1.45rem 1.3rem 1.15rem;
   display:flex; flex-direction:column; gap:.7rem;
+  transform-origin:50% -4px;
   transition:box-shadow .3s ease, border-color .3s ease;
+}
+.avaliacao-prendedor{
+  position:absolute; top:-19px; left:50%; width:44px; height:31px; margin-left:-22px;
+  color:var(--blush-500); fill:currentColor; z-index:2; overflow:visible;
+  filter:drop-shadow(0 3px 3px rgba(192,84,128,.28));
 }
 @media (hover: hover){
   .avaliacao-card:hover{ border-color:var(--blush-300); box-shadow:0 26px 48px -22px rgba(192,84,128,.45); }
@@ -3336,7 +3350,7 @@ body.admin-gate-active .admin-state-area{
     display:flex; gap:.75rem; justify-content:flex-start; align-items:stretch;
     overflow-x:auto; overscroll-behavior-x:contain;
     scroll-snap-type:x mandatory; scroll-padding:0 .25rem;
-    padding:.25rem .25rem .5rem;
+    padding:2.1rem .25rem .9rem;
     scrollbar-width:none;
   }
   .avaliacoes-grade::-webkit-scrollbar{ display:none; }
@@ -3344,6 +3358,7 @@ body.admin-gate-active .admin-state-area{
   .avaliacao-card{ flex:0 0 84%; scroll-snap-align:start; padding:1rem 1.05rem .95rem; gap:.55rem; }
   .avaliacao-texto{ font-size:.9rem; line-height:1.5; -webkit-line-clamp:4; }
   .avaliacao-foto{ width:48px; height:48px; border-radius:10px; }
+  .avaliacao-prendedor{ width:38px; height:27px; margin-left:-19px; top:-17px; }
   .avaliacoes-pontos{ display:flex; justify-content:center; gap:.4rem; margin-top:.6rem; }
   .avaliacoes-ponto{
     width:7px; height:7px; border-radius:999px; background:var(--blush-150);
