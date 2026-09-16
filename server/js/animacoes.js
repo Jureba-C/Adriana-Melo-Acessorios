@@ -827,6 +827,97 @@
   mm.add("(prefers-reduced-motion: no-preference)", () => fitaDasGarantias({ animar: true }));
   mm.add("(prefers-reduced-motion: reduce)", () => fitaDasGarantias({ animar: false }));
 
+  function notaQueSobe(secao) {
+    const alvo = secao.querySelector(".avaliacoes-resumo strong");
+    const estrela = secao.querySelector(".avaliacoes-resumo i");
+    if (!alvo) return;
+    const final = Number(String(alvo.textContent).replace(",", "."));
+    if (!Number.isFinite(final)) return;
+    const contador = { v: 0 };
+    const escrever = () => { alvo.textContent = contador.v.toFixed(1).replace(".", ","); };
+    escrever();
+    const tl = gsap.timeline({ scrollTrigger: { trigger: secao, start: "top 80%", once: true } });
+    tl.to(contador, { v: final, duration: 1.2, ease: "power2.out", onUpdate: escrever, onComplete: () => { alvo.textContent = final.toFixed(1).replace(".", ","); } });
+    if (estrela) tl.fromTo(estrela, { rotation: -180, scale: 0.3 }, { rotation: 0, scale: 1, duration: 0.9, ease: "back.out(2.2)" }, 0);
+  }
+
+  function estrelasAcendendo(card, atraso) {
+    const estrelas = card.querySelectorAll(".avaliacao-estrelas i");
+    if (!estrelas.length) return;
+    gsap.fromTo(estrelas,
+      { scale: 0, rotation: -120, opacity: 0 },
+      { scale: 1, rotation: 0, opacity: 1, duration: 0.45, stagger: 0.07, delay: atraso, ease: "back.out(2.6)", clearProps: "transform,opacity" }
+    );
+  }
+
+  function bilhetesQueChegam() {
+    const secao = document.getElementById("avaliacoes");
+    if (!secao) return null;
+    const cards = gsap.utils.toArray(".avaliacao-card", secao);
+    if (!cards.length) return null;
+    notaQueSobe(secao);
+
+    const topoDaGrade = cards[0].offsetTop;
+    const esquerdas = [...new Set(cards.map((c) => c.offsetLeft))].sort((a, b) => a - b);
+    const colunaDe = (card) => esquerdas.indexOf(card.offsetLeft);
+
+    cards.forEach((card, i) => {
+      const coluna = colunaDe(card);
+      const linha = Math.round((card.offsetTop - topoDaGrade) / Math.max(1, card.offsetHeight));
+      const atraso = coluna * 0.12 + linha * 0.18;
+      gsap.fromTo(card,
+        { y: 90, rotation: i % 2 ? 7 : -6, scale: 0.88, opacity: 0, transformOrigin: "50% 0%" },
+        {
+          y: 0, rotation: 0, scale: 1, opacity: 1,
+          duration: 1, delay: atraso, ease: "back.out(1.35)",
+          scrollTrigger: { trigger: card, start: "top 92%", once: true },
+          onStart: () => estrelasAcendendo(card, 0.45),
+        }
+      );
+    });
+
+    const ondas = cards.map((card) => {
+      const coluna = colunaDe(card);
+      const amplitude = coluna % 2 ? -9 : 9;
+      return gsap.fromTo(card,
+        { yPercent: amplitude },
+        {
+          yPercent: -amplitude, ease: "none",
+          scrollTrigger: { trigger: secao, start: "top bottom", end: "bottom top", scrub: 0.6, invalidateOnRefresh: true },
+        }
+      );
+    });
+    return () => ondas.forEach((tw) => tw.scrollTrigger && tw.scrollTrigger.kill());
+  }
+
+  function carrosselQueChega() {
+    const secao = document.getElementById("avaliacoes");
+    const grade = secao && secao.querySelector(".avaliacoes-grade");
+    if (!grade) return null;
+    const cards = gsap.utils.toArray(".avaliacao-card", grade);
+    if (!cards.length) return null;
+    notaQueSobe(secao);
+
+    const tl = gsap.timeline({ scrollTrigger: { trigger: grade, start: "top 85%", once: true } });
+    tl.fromTo(cards.slice(0, 3),
+      { x: 140, rotation: 5, opacity: 0 },
+      { x: 0, rotation: 0, opacity: 1, duration: 0.8, stagger: 0.12, ease: "power3.out", clearProps: "transform,opacity" }
+    );
+    tl.add(() => estrelasAcendendo(cards[0], 0), 0.35);
+
+    if (cards.length > 1) {
+      tl.add(() => {
+        if (grade.scrollLeft > 4) return;
+        grade.classList.add("is-empurrando");
+        gsap.to(grade, {
+          scrollLeft: 72, duration: 0.55, ease: "power2.inOut", yoyo: true, repeat: 1, repeatDelay: 0.25,
+          onComplete: () => grade.classList.remove("is-empurrando"),
+        });
+      }, "+=0.5");
+    }
+    return () => tl.scrollTrigger && tl.scrollTrigger.kill();
+  }
+
   function animacoesDeRolagem() {
     gsap.registerPlugin(ScrollTrigger);
 
@@ -844,6 +935,10 @@
       const tl = entregaGuiada();
       return () => { if (tl && tl.scrollTrigger) tl.scrollTrigger.kill(); };
     });
+
+    mm.add("(min-width: 576px) and (prefers-reduced-motion: no-preference)", () => bilhetesQueChegam());
+
+    mm.add("(max-width: 575.98px) and (prefers-reduced-motion: no-preference)", () => carrosselQueChega());
 
     mm.add("(prefers-reduced-motion: no-preference)", () => {
       entradaDoRodape();

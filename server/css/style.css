@@ -3301,6 +3301,10 @@ body.admin-gate-active .admin-state-area{
   background:var(--white); border:1px solid var(--blush-100); border-radius:var(--radius-md);
   box-shadow:var(--shadow-soft); padding:1.3rem 1.3rem 1.15rem;
   display:flex; flex-direction:column; gap:.7rem;
+  transition:box-shadow .3s ease, border-color .3s ease;
+}
+@media (hover: hover){
+  .avaliacao-card:hover{ border-color:var(--blush-300); box-shadow:0 26px 48px -22px rgba(192,84,128,.45); }
 }
 .avaliacao-estrelas{ display:inline-flex; gap:.15rem; color:var(--gold-500); font-size:.95rem; }
 .avaliacao-estrelas .is-apagada{ color:var(--blush-150); }
@@ -3336,6 +3340,7 @@ body.admin-gate-active .admin-state-area{
     scrollbar-width:none;
   }
   .avaliacoes-grade::-webkit-scrollbar{ display:none; }
+  .avaliacoes-grade.is-empurrando{ scroll-snap-type:none; }
   .avaliacao-card{ flex:0 0 84%; scroll-snap-align:start; padding:1rem 1.05rem .95rem; gap:.55rem; }
   .avaliacao-texto{ font-size:.9rem; line-height:1.5; -webkit-line-clamp:4; }
   .avaliacao-foto{ width:48px; height:48px; border-radius:10px; }
