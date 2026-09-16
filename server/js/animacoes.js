@@ -864,6 +864,8 @@
     const [setaAnterior, setaProxima] = [...secao.querySelectorAll(".avaliacoes-seta")];
     const fita = q(".presente-fita");
     const lacinho = q(".presente-lacinho");
+    const camadaEnfeites = q(".avaliacoes-enfeites");
+    const enfeites = [...secao.querySelectorAll(".avaliacoes-enfeite")];
     const lacinhoFitas = lacinho ? [...lacinho.querySelectorAll("path")] : [];
     const alcas = [q(".laco-alca-esq"), q(".laco-alca-dir")].filter(Boolean);
     const pontas = [q(".laco-ponta-esq"), q(".laco-ponta-dir")].filter(Boolean);
@@ -990,7 +992,22 @@
       tl.to(cards[passo - 1], { yPercent: -118, rotation: passo % 2 ? 6 : -6, opacity: 0, scale: 0.96, ease: "power2.in" }, passo);
       for (let j = passo; j < total; j++) tl.to(cards[j], { ...lugar(j - passo), ease: "power2.out" }, passo);
     }
+    enfeites.forEach((el, i) => {
+      const p = Number(el.dataset.profundidade) || 1;
+      tl.fromTo(el, { y: 0, rotation: 0 }, { y: -p * 38, rotation: (i % 2 ? 1 : -1) * p * 5, ease: "none", duration: total, immediateRender: false }, 0);
+    });
     marcar(0);
+
+    let aoMoverMouse = null;
+    if (camadaEnfeites && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      const xPara = gsap.quickTo(camadaEnfeites, "x", { duration: 1.2, ease: "power3.out" });
+      const yPara = gsap.quickTo(camadaEnfeites, "y", { duration: 1.2, ease: "power3.out" });
+      aoMoverMouse = (e) => {
+        xPara((e.clientX / window.innerWidth - 0.5) * -22);
+        yPara((e.clientY / window.innerHeight - 0.5) * -14);
+      };
+      secao.addEventListener("pointermove", aoMoverMouse);
+    }
 
     let navegacao = null;
     let alvoNavegacao = -1;
@@ -1058,6 +1075,8 @@
       window.removeEventListener("wheel", aoRolarManual);
       window.removeEventListener("touchmove", aoRolarManual);
       pararNavegacao();
+      if (aoMoverMouse) secao.removeEventListener("pointermove", aoMoverMouse);
+      gsap.set([camadaEnfeites, ...enfeites].filter(Boolean), { clearProps: "transform" });
       if (balanco) balanco.kill();
       if (lacinhoTl) lacinhoTl.kill();
       secao.classList.remove("is-amarrado");

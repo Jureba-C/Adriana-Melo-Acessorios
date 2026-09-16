@@ -1117,6 +1117,32 @@ function blocoNotaMedia(){
   return `<div><span class="num">${nota}<i class="bi bi-star-fill" style="font-size:.9rem"></i></span><span class="lbl">${rotulo}</span></div>`;
 }
 
+/* Lacinhos e brilhos de fundo da seção de avaliações. Posições fixas (não
+   aleatórias) para o HTML sair igual em todo request e continuar em cache
+   de navegador; profundidade (--p) define quanto cada um sobe no parallax. */
+const ENFEITES_AVALIACOES = [
+  ["laco", "4%", "12%", "48px", "-18deg", "rosa", 1],
+  ["laco", "38%", "6%", "30px", "14deg", "ouro", 2],
+  ["laco", "57%", "80%", "56px", "10deg", "claro", 3],
+  ["laco", "93%", "16%", "40px", "-10deg", "forte", 2],
+  ["laco", "88%", "80%", "70px", "20deg", "claro", 1],
+  ["laco", "7%", "80%", "36px", "12deg", "ouro", 3],
+  ["laco", "46%", "42%", "22px", "-24deg", "rosa", 4],
+  ["laco", "72%", "5%", "26px", "6deg", "rosa", 3],
+  ["laco", "30%", "91%", "28px", "-12deg", "forte", 2],
+  ["brilho", "16%", "5%", "14px", "0deg", "ouro", 2],
+  ["brilho", "50%", "20%", "10px", "0deg", "ouro", 3],
+  ["brilho", "97%", "48%", "16px", "0deg", "ouro", 1],
+  ["brilho", "66%", "92%", "12px", "0deg", "ouro", 4],
+  ["brilho", "2%", "46%", "11px", "0deg", "ouro", 2],
+  ["brilho", "42%", "70%", "9px", "0deg", "ouro", 3],
+].map(([tipo, x, y, t, r, cor, p], i) => {
+  const desenho = tipo === "laco"
+    ? `<svg viewBox="0 0 100 70" focusable="false"><use href="#bow-shape"/></svg>`
+    : `<svg viewBox="0 0 20 20" focusable="false"><path d="M10 0 C11 7 13 9 20 10 C13 11 11 13 10 20 C9 13 7 11 0 10 C7 9 9 7 10 0Z"/></svg>`;
+  return `<span class="avaliacoes-enfeite enfeite-${tipo} enfeite-${cor}" data-profundidade="${p}" style="--x:${x};--y:${y};--t:${t};--r:${r};--atraso:-${(i * 0.9).toFixed(1)}s">${desenho}</span>`;
+}).join("");
+
 function secaoAvaliacoes(){
   const avaliacoes = db.avaliacoesPublicadas(6);
   if(!avaliacoes.length) return "";
@@ -1152,6 +1178,7 @@ function secaoAvaliacoes(){
     const foto = r.photo_id ? `/api/avaliacoes/fotos/${escaparHtml(r.photo_id)}` : "";
     return `
       <li class="avaliacao-card">
+        <svg class="avaliacao-laco" viewBox="0 0 100 70" aria-hidden="true" focusable="false"><use href="#bow-shape"/></svg>
         ${nomeProduto ? `<span class="avaliacao-produto-chip">${fotoProduto ? `<img src="${escaparHtml(fotoProduto)}" alt="" width="28" height="28" loading="lazy" decoding="async">` : ""}<span>${escaparHtml(nomeProduto)}</span></span>` : ""}
         <div class="avaliacao-topo">
           ${estrelasHtml(r.rating)}
@@ -1174,6 +1201,7 @@ function secaoAvaliacoes(){
 
   return `
 <section id="avaliacoes" class="avaliacoes-section" aria-labelledby="avaliacoesTitulo">
+  <div class="avaliacoes-enfeites" aria-hidden="true">${ENFEITES_AVALIACOES}</div>
   <div class="container avaliacoes-container">
     <div class="avaliacoes-tag">
       <div class="avaliacoes-tag-cartao">
