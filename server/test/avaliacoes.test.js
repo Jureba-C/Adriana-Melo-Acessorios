@@ -371,5 +371,61 @@ test("dona do pedido recebe o link de avaliar na API de acompanhamento", async (
   const lista = await (await fetch(`${ORIGIN}/api/orders`, { headers: { Cookie: `plc_session=${token}` } })).json();
   const pedido = lista.orders.find(o => o.reference === ref);
   assert.match(pedido.avaliarUrl, new RegExp(`^avaliar\\.html\\?pedido=${ref}#t=[0-9a-f]{64}$`));
-  assert.equal(pedido.avaliado, false);
+  assert.deepEqual(pedido.avaliacao, { produtos: 1, feitas: 0, pendentes: 0, completa: false });
+});
+
+test("reenviar pelo mesmo link sem foto mantém a foto; trocar ou remover apaga a antiga do banco", async () => {
+  const { ref, token } = criarPedido({ entregue: true });
+  const fotoDoProduto = () => db.avaliacoesDoPedido(ref).find(r => r.product_id === 1)?.photo_id || null;
+  const existe = (id) => Boolean(db.getReviewPhoto(id));
+
+  await chamar("POST", `/api/avaliar/${ref}`, {
+    token, form: formDeAvaliacao([{ productId: 1, rating: 5, comment: "primeira", autorizaFoto: true }], { 1: await fotoComGps() }),
+  });
+  const primeira = fotoDoProduto();
+  assert.ok(primeira);
+
+  const propria = await fetch(`${ORIGIN}/api/avaliar/${ref}/foto/1`, { headers: { "X-Avaliar-Token": token } });
+  assert.equal(propria.status, 200, "a cliente vê a própria foto pendente pelo link");
+  assert.equal((await fetch(`${ORIGIN}/api/avaliar/${ref}/foto/1`)).status, 404, "sem token, nada");
+
+  const ajuste = await chamar("POST", `/api/avaliar/${ref}`, {
+    token, form: formDeAvaliacao([{ productId: 1, rating: 4, comment: "ajustei o texto" }]),
+  });
+  assert.equal(ajuste.status, 200);
+  assert.equal(fotoDoProduto(), primeira, "ajustar só o texto não pode tirar a foto");
+  assert.equal(db.avaliacoesDoPedido(ref)[0].comment, "ajustei o texto");
+
+  await chamar("POST", `/api/avaliar/${ref}`, {
+    token, form: formDeAvaliacao([{ productId: 1, rating: 4, autorizaFoto: true }], { 1: await fotoComGps() }),
+  });
+  const segunda = fotoDoProduto();
+  assert.ok(segunda && segunda !== primeira);
+  assert.equal(existe(primeira), false, "foto trocada é apagada, não fica órfã");
+
+  await chamar("POST", `/api/avaliar/${ref}`, {
+    token, form: formDeAvaliacao([{ productId: 1, rating: 4, removerFoto: true }]),
+  });
+  assert.equal(fotoDoProduto(), null);
+  assert.equal(existe(segunda), false, "foto removida pela cliente é apagada do banco");
+});
+
+test("pedido com uma peça avaliada de duas ainda mostra que falta avaliar", async () => {
+  const cliente = db.createUser({ name: "Duas", email: `duas-${Date.now()}@t.com`, passwordHash: "x", cpf: null });
+  const sessao = crypto.randomBytes(32).toString("hex");
+  db.createSession({ tokenHash: crypto.createHash("sha256").update(sessao).digest("hex"), userId: cliente.id, expiresAt: Date.now() + DIA });
+  const ref = `AVAL-DUAS-${Date.now()}`;
+  db.createOrder({
+    externalReference: ref, userId: cliente.id, status: "pago",
+    items: [{ id: 1, qty: 1, price: 30 }, { id: 2, qty: 1, price: 30 }], address: { nome: "Duas" },
+    shipping: { name: "PAC", price: 10 }, subtotal: 60, shippingPrice: 10, total: 70,
+  });
+  db.updateOrderTracking(ref, "ME2");
+  db.markOrderDelivered(ref);
+  const token = db.garantirTokenDeAvaliacao(ref);
+  await chamar("POST", `/api/avaliar/${ref}`, { token, form: formDeAvaliacao([{ productId: 1, rating: 5 }]) });
+
+  const lista = await (await fetch(`${ORIGIN}/api/orders`, { headers: { Cookie: `plc_session=${sessao}` } })).json();
+  const pedido = lista.orders.find(o => o.reference === ref);
+  assert.deepEqual(pedido.avaliacao, { produtos: 2, feitas: 1, pendentes: 1, completa: false });
 });

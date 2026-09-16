@@ -1477,7 +1477,7 @@ function salvarAvaliacao({ orderReference, productId, rating, comment, photoId, 
 }
 
 const stmtAvaliacoesDoPedido = db.prepare(
-  `SELECT product_id, rating, comment, status, photo_id FROM reviews WHERE order_reference = ?`
+  `SELECT product_id, rating, comment, status, photo_id, photo_consent_at FROM reviews WHERE order_reference = ?`
 );
 function avaliacoesDoPedido(ref){ return stmtAvaliacoesDoPedido.all(ref); }
 

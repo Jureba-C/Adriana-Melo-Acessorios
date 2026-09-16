@@ -2176,7 +2176,7 @@ app.get("/api/orders/:reference", statusPollLimiter, auth.requireAuth, async (re
       tracking: live,
       avaliarUrl: ["postado", "entregue"].includes(entregou ? "entregue" : order.fulfillment_status)
         ? linkDeAvaliacao(order.external_reference) : null,
-      avaliado: db.avaliacoesDoPedido(order.external_reference).length > 0,
+      avaliado: resumoDaAvaliacao(order).completa,
     });
   } catch (err) {
     console.error("Erro ao carregar detalhe do pedido:", err);
@@ -2225,6 +2225,20 @@ function produtosDoPedido(order){
   return lista;
 }
 
+// "Avaliado" é ter nota em TODAS as peças: com uma só avaliada, a cliente
+// ainda precisa do botão para chegar nas outras. Pendentes ainda podem ser
+// ajustadas pelo mesmo link.
+function resumoDaAvaliacao(order){
+  const produtos = produtosDoPedido(order).length;
+  const feitas = db.avaliacoesDoPedido(order.external_reference);
+  return {
+    produtos,
+    feitas: feitas.length,
+    pendentes: feitas.filter(r => r.status === "pendente").length,
+    completa: produtos > 0 && feitas.length >= produtos,
+  };
+}
+
 function linkDeAvaliacao(reference){
   const token = db.garantirTokenDeAvaliacao(reference);
   return token ? `avaliar.html?pedido=${encodeURIComponent(reference)}#t=${token}` : null;
@@ -2252,6 +2266,21 @@ app.post("/api/avaliar/:reference/recebi", strictLimiter, (req, res) => {
   }
   db.markOrderDelivered(order.external_reference);
   res.json({ ok: true });
+});
+
+/* A própria cliente vê a foto que mandou (ainda pendente) ao reabrir o
+   link — pela rota pública ela é 404 até a lojista publicar. Mesmo token no
+   cabeçalho; a página busca por fetch e mostra como blob. */
+app.get("/api/avaliar/:reference/foto/:productId", strictLimiter, (req, res) => {
+  const order = pedidoDoToken(req);
+  if(!order) return res.status(404).end();
+  const productId = Number(req.params.productId);
+  const avaliacao = db.avaliacoesDoPedido(order.external_reference).find(r => r.product_id === productId);
+  const foto = avaliacao?.photo_id ? db.getReviewPhoto(avaliacao.photo_id) : null;
+  if(!foto) return res.status(404).end();
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Content-Type", foto.mime_type);
+  res.end(Buffer.from(foto.data));
 });
 
 /* Fotos da cliente: mesmo cuidado do upload de produto (allowlist de tipo,
@@ -2316,7 +2345,7 @@ app.post("/api/avaliar/:reference", strictLimiter, (req, res) => {
         return res.status(400).json({ error: "Para enviar foto, marque a autorização de uso da imagem." });
       }
       validas.push({
-        productId, rating, arquivo,
+        productId, rating, arquivo, removerFoto: item?.removerFoto === true,
         comment: String(item?.comment || "").trim().slice(0, MAX_COMENTARIO_AVALIACAO),
       });
     }
@@ -2324,22 +2353,36 @@ app.post("/api/avaliar/:reference", strictLimiter, (req, res) => {
       return res.status(400).json({ error: "Escolha as estrelas de pelo menos um produto." });
     }
 
+    // Reenvio pelo mesmo link (ajustar texto de uma avaliação pendente)
+    // chega SEM o arquivo da foto que já foi: sem manter a anterior, a foto
+    // sumia da avaliação e os bytes ficavam órfãos no banco, sem nunca
+    // aparecer nem ser apagados. Trocar ou tirar a foto apaga a antiga.
+    const existentes = new Map(db.avaliacoesDoPedido(order.external_reference).map(r => [r.product_id, r]));
     let salvas = 0;
     try{
       for(const v of validas){
+        const anterior = existentes.get(v.productId);
         let photoId = null;
+        let consentimento = null;
         if(v.arquivo){
           photoId = randomUUID();
+          consentimento = Date.now();
           db.insertReviewPhoto(photoId, "image/jpeg", await processarFotoDeAvaliacao(v.arquivo.buffer));
+        } else if(!v.removerFoto && anterior?.photo_id){
+          photoId = anterior.photo_id;
+          consentimento = anterior.photo_consent_at;
         }
         const gravou = db.salvarAvaliacao({
           orderReference: order.external_reference, productId: v.productId, rating: v.rating,
-          comment: v.comment, photoId, photoConsentAt: photoId ? Date.now() : null, firstName, city,
+          comment: v.comment, photoId, photoConsentAt: consentimento, firstName, city,
         });
-        if(gravou) salvas++;
+        if(gravou){
+          salvas++;
+          if(anterior?.photo_id && anterior.photo_id !== photoId) db.apagarFotoOrfaDeAvaliacao(anterior.photo_id);
+        }
         // Avaliação já publicada não é reescrita — e a foto que veio junto
         // não pode ficar guardada órfã no banco.
-        else if(photoId) db.apagarFotoOrfaDeAvaliacao(photoId);
+        else if(v.arquivo) db.apagarFotoOrfaDeAvaliacao(photoId);
       }
     }catch(procErr){
       console.error("Erro ao gravar avaliação:", procErr);
@@ -3348,7 +3391,6 @@ app.get("/api/orders", auth.requireAuth, (req, res) => {
   try {
     const rows = db.listOrdersByUser(req.user.id);
     const overridesMap = getProductOverridesMap();
-    const notas = db.notasPorPedido();
     const orders = rows.map(row => {
       const items = JSON.parse(row.items_json).map(item => ({
         id: item.id, qty: item.qty,
@@ -3376,7 +3418,7 @@ app.get("/api/orders", auth.requireAuth, (req, res) => {
         shippingPrice: row.shipping_price,
         total: row.total,
         createdAt: row.created_at,
-        avaliado: notas.has(row.external_reference),
+        avaliacao: row.status === "pago" ? resumoDaAvaliacao(row) : null,
         avaliarUrl: row.status === "pago" && ["postado", "entregue"].includes(row.fulfillment_status)
           ? linkDeAvaliacao(row.external_reference) : null,
       };

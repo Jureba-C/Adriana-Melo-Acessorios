@@ -37,6 +37,50 @@
     });
   }
 
+  function blocoDeAvaliacao(order){
+    if(!order.avaliarUrl) return "";
+    const url = escapeHTML(order.avaliarUrl);
+    const resumo = order.avaliacao || { produtos: 0, feitas: 0, pendentes: 0, completa: false };
+
+    if(order.fulfillmentStatus === "postado"){
+      return `
+        <a href="${url}" class="pedido-avaliar is-chegou">
+          <span class="pedido-avaliar-icone" aria-hidden="true"><i class="bi bi-gift"></i></span>
+          <span class="pedido-avaliar-texto">
+            <strong>Seu pedido já chegou?</strong>
+            <span>Confirme o recebimento e conte o que achou das peças.</span>
+          </span>
+          <span class="pedido-avaliar-acao">Recebi <i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+        </a>`;
+    }
+
+    if(!resumo.completa){
+      const faltam = resumo.produtos - resumo.feitas;
+      const detalhe = resumo.feitas > 0
+        ? `Falta${faltam === 1 ? "" : "m"} ${faltam} ${faltam === 1 ? "peça" : "peças"} para avaliar.`
+        : "Leva um minutinho e ajuda outras clientes a escolher.";
+      return `
+        <a href="${url}" class="pedido-avaliar is-avaliar">
+          <span class="pedido-avaliar-texto">
+            <span class="pedido-avaliar-estrelas" aria-hidden="true">${'<i class="bi bi-star-fill"></i>'.repeat(5)}</span>
+            <strong>Como ficaram os laços?</strong>
+            <span>${detalhe}</span>
+          </span>
+          <span class="pedido-avaliar-acao">Avaliar <i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+        </a>`;
+    }
+
+    return `
+      <div class="pedido-avaliar is-feita">
+        <span class="pedido-avaliar-icone" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+        <span class="pedido-avaliar-texto">
+          <strong>Você avaliou este pedido</strong>
+          <span>${resumo.pendentes > 0 ? "A loja ainda vai ler antes de publicar." : "Obrigada por contar pra gente!"}</span>
+        </span>
+        ${resumo.pendentes > 0 ? `<a href="${url}" class="pedido-avaliar-link">Ajustar</a>` : ""}
+      </div>`;
+  }
+
   function renderOrders(orders){
     if(!orders.length){ showOnly(stateEmpty); return; }
     listEl.innerHTML = orders.map(order => {
@@ -65,17 +109,10 @@
               <a href="acompanhar-pedido.html?pedido=${encodeURIComponent(order.reference)}" class="btn btn-outline-blush btn-sm">
                 Acompanhar pedido
               </a>` : ""}
-              ${order.avaliarUrl && order.fulfillmentStatus === "postado" ? `
-              <a href="${escapeHTML(order.avaliarUrl)}" class="btn btn-outline-blush btn-sm">
-                Já recebi
-              </a>` : ""}
-              ${order.avaliarUrl && order.fulfillmentStatus === "entregue" && !order.avaliado ? `
-              <a href="${escapeHTML(order.avaliarUrl)}" class="btn btn-blush btn-sm">
-                Avaliar
-              </a>` : ""}
             </div>
           </div>
           ${order.status === "pendente" ? `<div class="small text-danger mb-2 resume-payment-error d-none"></div>` : ""}
+          ${blocoDeAvaliacao(order)}
           <ul class="list-unstyled small mb-2">${itemsHtml}</ul>
           <div class="d-flex justify-content-between small">
             <span>Subtotal</span><span>${formatMoney(order.subtotal)}</span>

@@ -3,6 +3,8 @@
 
   const LADO_MAXIMO_FOTO = 1600;
   const ROTULOS_NOTA = ["", "Não gostei", "Poderia ser melhor", "Gostei", "Gostei muito", "Amei!"];
+  const SUGESTOES = ["Acabamento perfeito", "Chegou rápido", "Veio bem embalado", "Cor igual à foto", "Ficou lindo no cabelo"];
+  const MAX_COMENTARIO = 1000;
 
   const params = new URLSearchParams(location.search);
   const referencia = params.get("pedido") || "";
@@ -10,6 +12,9 @@
 
   const el = {
     titulo: document.getElementById("avaliarTitulo"),
+    pedido: document.getElementById("avaliarPedido"),
+    passos: document.getElementById("avaliarPassos"),
+    progresso: document.getElementById("avaliarProgresso"),
     carregando: document.getElementById("avaliarCarregando"),
     invalido: document.getElementById("avaliarInvalido"),
     confirmar: document.getElementById("avaliarConfirmar"),
@@ -25,10 +30,23 @@
 
   const estado = new Map();
 
+  const PASSO_ATUAL = { confirmar: "recebido", form: "avaliar", obrigado: "loja" };
+  const ORDEM_PASSOS = ["recebido", "avaliar", "loja"];
+
   function mostrar(qual){
     for(const chave of ["carregando", "invalido", "confirmar", "form", "obrigado"]){
       el[chave].classList.toggle("d-none", chave !== qual);
     }
+    const atual = PASSO_ATUAL[qual];
+    el.passos.classList.toggle("d-none", !atual);
+    if(!atual) return;
+    const indice = ORDEM_PASSOS.indexOf(atual);
+    el.passos.querySelectorAll("li").forEach(li => {
+      const i = ORDEM_PASSOS.indexOf(li.dataset.passo);
+      li.classList.toggle("is-feito", i < indice || (qual === "obrigado" && i <= indice));
+      li.classList.toggle("is-agora", i === indice && qual !== "obrigado");
+      if(i === indice) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
+    });
   }
 
   function escapeHTML(texto){
@@ -44,11 +62,11 @@
   }
 
   async function carregar(){
-    if(!referencia || !token){ mostrar("invalido"); return; }
+    if(!referencia || !token){ el.titulo.textContent = "Não encontramos esse pedido"; mostrar("invalido"); return; }
     mostrar("carregando");
     try{
       const res = await fetch(`/api/avaliar/${encodeURIComponent(referencia)}`, { headers: cabecalhos() });
-      if(res.status === 404){ mostrar("invalido"); return; }
+      if(res.status === 404){ el.titulo.textContent = "Não encontramos esse pedido"; mostrar("invalido"); return; }
       if(!res.ok) throw new Error();
       render(await res.json());
     }catch{
@@ -58,8 +76,14 @@
   }
 
   function render(pedido){
-    el.titulo.textContent = `Pedido #${pedido.reference.slice(0, 8)}`;
-    if(pedido.fulfillmentStatus === "postado"){ mostrar("confirmar"); return; }
+    const pecas = pedido.produtos.length;
+    el.pedido.textContent = `Pedido #${pedido.reference.slice(0, 8)} · ${pecas} ${pecas === 1 ? "peça" : "peças"}`;
+    if(pedido.fulfillmentStatus === "postado"){
+      el.titulo.textContent = "Confirme a entrega";
+      mostrar("confirmar");
+      return;
+    }
+    el.titulo.textContent = "Como ficaram os laços?";
     if(pedido.fulfillmentStatus !== "entregue"){
       el.invalido.querySelector("p").textContent = "Seu pedido ainda está sendo preparado. Assim que ele chegar, você poderá avaliar por aqui.";
       mostrar("invalido");
@@ -80,10 +104,12 @@
     estado.clear();
     el.produtos.innerHTML = abertos.map(p => {
       const feita = jaFeitas.get(p.id);
-      estado.set(p.id, { nota: feita?.rating || 0, foto: null });
+      estado.set(p.id, { nota: feita?.rating || 0, foto: null, fotoEnviada: Boolean(feita?.temFoto), removerFoto: false });
       return cartaoProduto(p, feita);
     }).join("");
-    for(const p of abertos) pintarEstrelas(p.id);
+    for(const p of abertos){ pintarEstrelas(p.id); contarCaracteres(p.id); }
+    atualizarProgresso();
+    for(const p of abertos) if(estado.get(p.id).fotoEnviada) carregarFotoEnviada(p.id);
     mostrar("form");
   }
 
@@ -106,18 +132,30 @@
           ${miniatura(p.photoUrl)}
           <div>
             <h2 class="avaliar-produto-nome">${escapeHTML(p.name)}</h2>
-            ${feita ? `<span class="small avaliar-ja-enviada">Você já enviou — pode ajustar antes de publicarmos.</span>` : ""}
+            ${feita ? `<span class="avaliar-selo-enviada"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Enviada · dá para ajustar</span>` : ""}
           </div>
         </div>
         <div class="avaliar-estrelas" role="radiogroup" aria-label="Sua nota para ${escapeHTML(p.name)}">${estrelas}</div>
         <p class="small avaliar-rotulo-nota" id="rotulo-${id}" aria-live="polite"></p>
+        <div class="avaliar-sugestoes" aria-label="Sugestões para o comentário">
+          ${SUGESTOES.map(t => `<button type="button" class="avaliar-sugestao" data-produto="${id}" data-texto="${escapeHTML(t)}">${escapeHTML(t)}</button>`).join("")}
+        </div>
         <label class="visually-hidden" for="comentario-${id}">Comentário sobre ${escapeHTML(p.name)}</label>
-        <textarea class="form-control avaliar-comentario" id="comentario-${id}" rows="3" maxlength="1000"
+        <textarea class="form-control avaliar-comentario" id="comentario-${id}" data-produto="${id}" rows="3" maxlength="${MAX_COMENTARIO}"
                   placeholder="Conte o que achou (opcional)">${escapeHTML(feita?.comment || "")}</textarea>
+        <span class="avaliar-contador" id="contador-${id}" aria-hidden="true"></span>
 
         <div class="avaliar-foto">
           <input type="file" accept="image/jpeg,image/png,image/webp" id="foto-${id}" class="visually-hidden avaliar-foto-input" data-produto="${id}">
-          <label for="foto-${id}" class="btn-outline-blush btn-sm-blush avaliar-foto-botao"><i class="bi bi-image me-1"></i>Adicionar foto (opcional)</label>
+          <label for="foto-${id}" class="avaliar-foto-botao" id="foto-botao-${id}"><i class="bi bi-image" aria-hidden="true"></i><span>${feita?.temFoto ? "Trocar foto" : "Adicionar foto (opcional)"}</span></label>
+          ${feita?.temFoto ? `
+          <div class="avaliar-foto-previa avaliar-foto-enviada" id="enviada-${id}">
+            <img alt="Foto que você já enviou" id="enviada-img-${id}">
+            <span class="d-flex flex-column align-items-start gap-1">
+              <span class="small avaliar-ja-enviada"><i class="bi bi-check2-circle me-1"></i>Foto já enviada</span>
+              <button type="button" class="avaliar-foto-remover avaliar-foto-remover-enviada" data-produto="${id}">Remover foto</button>
+            </span>
+          </div>` : ""}
           <div class="avaliar-foto-previa d-none" id="previa-${id}">
             <img alt="Prévia da foto escolhida" id="previa-img-${id}">
             <button type="button" class="avaliar-foto-remover" data-produto="${id}">Remover foto</button>
@@ -130,6 +168,45 @@
           </div>
         </div>
       </section>`;
+  }
+
+  async function carregarFotoEnviada(id){
+    try{
+      const res = await fetch(`/api/avaliar/${encodeURIComponent(referencia)}/foto/${id}`, { headers: cabecalhos() });
+      if(!res.ok) return;
+      const img = document.getElementById(`enviada-img-${id}`);
+      const blob = await res.blob();
+      const leitor = new FileReader();
+      leitor.onload = () => { if(img) img.src = leitor.result; };
+      leitor.readAsDataURL(blob);
+    }catch{}
+  }
+
+  function mostrarFotoEnviada(id){
+    const item = estado.get(id);
+    const visivel = item.fotoEnviada && !item.removerFoto && !item.foto;
+    document.getElementById(`enviada-${id}`)?.classList.toggle("d-none", !visivel);
+    const botao = document.getElementById(`foto-botao-${id}`);
+    const texto = botao?.querySelector("span");
+    if(texto) texto.textContent = visivel || item.foto ? "Trocar foto" : "Adicionar foto (opcional)";
+  }
+
+  function contarCaracteres(id){
+    const campo = document.getElementById(`comentario-${id}`);
+    const contador = document.getElementById(`contador-${id}`);
+    if(!campo || !contador) return;
+    contador.textContent = campo.value.length ? `${campo.value.length}/${MAX_COMENTARIO}` : "";
+    const atual = campo.value.toLowerCase();
+    el.produtos.querySelectorAll(`.avaliar-sugestao[data-produto="${id}"]`).forEach(chip => {
+      chip.classList.toggle("is-usada", atual.includes(chip.dataset.texto.toLowerCase()));
+    });
+  }
+
+  function atualizarProgresso(){
+    const total = estado.size;
+    const comNota = [...estado.values()].filter(item => item.nota > 0).length;
+    el.progresso.textContent = total > 1 ? `${comNota} de ${total} peças com nota` : (comNota ? "Pronto para enviar" : "Escolha as estrelas");
+    el.progresso.classList.toggle("is-pronto", comNota > 0);
   }
 
   function pintarEstrelas(id){
@@ -175,7 +252,31 @@
       const id = Number(estrela.dataset.produto);
       estado.get(id).nota = Number(estrela.dataset.nota);
       pintarEstrelas(id);
+      estrela.classList.remove("is-pop");
+      void estrela.offsetWidth;
+      estrela.classList.add("is-pop");
+      atualizarProgresso();
       esconderErro();
+      return;
+    }
+    const sugestao = e.target.closest(".avaliar-sugestao");
+    if(sugestao){
+      const id = Number(sugestao.dataset.produto);
+      const campo = document.getElementById(`comentario-${id}`);
+      const texto = sugestao.dataset.texto;
+      if(!campo || campo.value.toLowerCase().includes(texto.toLowerCase())) return;
+      const base = campo.value.trim();
+      const junto = base ? `${base}${/[.!?]$/.test(base) ? "" : "."} ${texto}.` : `${texto}.`;
+      if(junto.length > MAX_COMENTARIO) return;
+      campo.value = junto;
+      contarCaracteres(id);
+      return;
+    }
+    const removerEnviada = e.target.closest(".avaliar-foto-remover-enviada");
+    if(removerEnviada){
+      const id = Number(removerEnviada.dataset.produto);
+      estado.get(id).removerFoto = true;
+      mostrarFotoEnviada(id);
       return;
     }
     const remover = e.target.closest(".avaliar-foto-remover");
@@ -186,7 +287,13 @@
       document.getElementById(`previa-${id}`).classList.add("d-none");
       document.getElementById(`consent-wrap-${id}`).classList.add("d-none");
       document.getElementById(`consent-${id}`).checked = false;
+      mostrarFotoEnviada(id);
     }
+  });
+
+  el.produtos.addEventListener("input", (e) => {
+    const campo = e.target.closest(".avaliar-comentario");
+    if(campo) contarCaracteres(Number(campo.dataset.produto));
   });
 
   el.produtos.addEventListener("change", async (e) => {
@@ -201,6 +308,7 @@
       document.getElementById(`previa-img-${id}`).src = previa;
       document.getElementById(`previa-${id}`).classList.remove("d-none");
       document.getElementById(`consent-wrap-${id}`).classList.remove("d-none");
+      mostrarFotoEnviada(id);
     }catch{
       input.value = "";
       mostrarErro("Não conseguimos abrir essa foto. Tente outra imagem (JPG ou PNG).");
@@ -232,6 +340,7 @@
         rating: item.nota,
         comment: document.getElementById(`comentario-${id}`)?.value || "",
         autorizaFoto,
+        removerFoto: Boolean(item.removerFoto && !item.foto),
       });
       if(item.foto) dados.append(`foto-${id}`, item.foto, `foto-${id}.jpg`);
     }
