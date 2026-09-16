@@ -1137,11 +1137,10 @@ function secaoAvaliacoes(){
      outro caminho para gravar uma.
 
      Laço e fita são SVG com os tons da marca (opção "cetim fino" escolhida
-     pela lojista). A fita estica só na largura (preserveAspectRatio=none);
-     como a curva é quase horizontal, a espessura visível quase não muda.
-     ⚠️ NÃO usar vector-effect=non-scaling-stroke aqui: ele faz o pathLength=1
-     da animação de "desenhar" deixar de cobrir a fita inteira — ela aparece
-     tracejada, com buracos. */
+     pela lojista). A fita é uma faixa preenchida, não um traço: com traço e
+     brilho no meio ela parecia um cano. O estreitamento em dois pontos faz
+     a torção do cetim, e ela aparece por clip-path (não dá para "desenhar"
+     preenchimento com stroke-dashoffset). */
   const cards = avaliacoes.map(r => {
     const produto = effectiveProduct(r.product_id, overridesMap);
     const nomeProduto = produto?.name || "";
@@ -1180,12 +1179,25 @@ function secaoAvaliacoes(){
       <div class="avaliacoes-tag-cartao">
         <svg class="presente-fita" viewBox="0 0 600 24" preserveAspectRatio="none" aria-hidden="true" focusable="false">
           <defs>
-            <linearGradient id="cetimFita" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#F4B4CC"/><stop offset=".5" stop-color="#FBDCE8"/><stop offset="1" stop-color="#EA8FB4"/>
+            <linearGradient id="cetimFita" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="600" y2="0">
+              <stop offset="0" stop-color="#F2ABC6"/><stop offset=".17" stop-color="#F8C8D9"/><stop offset=".25" stop-color="#E48DB0"/><stop offset=".3" stop-color="#FCE1EB"/><stop offset=".42" stop-color="#F5B8CE"/><stop offset=".6" stop-color="#F7C4D7"/><stop offset=".75" stop-color="#DF84A9"/><stop offset=".8" stop-color="#FDE6EE"/><stop offset=".92" stop-color="#F4B4CC"/><stop offset="1" stop-color="#F0A6C2"/>
             </linearGradient>
+            <linearGradient id="cetimFitaTrama" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#8C3B5E" stop-opacity=".12"/>
+            </linearGradient>
+            <linearGradient id="fitaReflexo" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+            </linearGradient>
+            <clipPath id="fitaForma"><path d="M0 5 C60 5 110 7 150 9 C200 11 240 4 300 5 C360 6 410 8 450 9.5 C500 11 550 5 600 5 L600 20 C550 20 500 16 450 15.5 C410 15 360 20 300 20 C240 20 200 17 150 16 C110 15 60 20 0 20 Z"/></clipPath>
           </defs>
-          <path class="presente-fita-corpo" d="M0 13 C150 6 220 17 300 12 C380 7 450 18 600 11" pathLength="1" stroke="url(#cetimFita)"/>
-          <path class="presente-fita-brilho" d="M0 12 C150 5 220 16 300 11 C380 6 450 17 600 10" pathLength="1"/>
+          <path class="presente-fita-corpo" d="M0 5 C60 5 110 7 150 9 C200 11 240 4 300 5 C360 6 410 8 450 9.5 C500 11 550 5 600 5 L600 20 C550 20 500 16 450 15.5 C410 15 360 20 300 20 C240 20 200 17 150 16 C110 15 60 20 0 20 Z" fill="url(#cetimFita)"/>
+          <path class="presente-fita-trama" d="M0 5 C60 5 110 7 150 9 C200 11 240 4 300 5 C360 6 410 8 450 9.5 C500 11 550 5 600 5 L600 20 C550 20 500 16 450 15.5 C410 15 360 20 300 20 C240 20 200 17 150 16 C110 15 60 20 0 20 Z" fill="url(#cetimFitaTrama)"/>
+          <g clip-path="url(#fitaForma)"><rect class="presente-fita-reflexo" x="-90" y="0" width="90" height="24" fill="url(#fitaReflexo)"/></g>
+          <path class="presente-fita-ouro" d="M0 5 C60 5 110 7 150 9 C200 11 240 4 300 5 C360 6 410 8 450 9.5 C500 11 550 5 600 5 L600 20 C550 20 500 16 450 15.5 C410 15 360 20 300 20 C240 20 200 17 150 16 C110 15 60 20 0 20 Z"/>
+        </svg>
+        <svg class="presente-lacinho" viewBox="0 0 80 50" aria-hidden="true" focusable="false">
+          <path class="lacinho-fita" d="M6 44 C18 38 30 32 40 24 C30 10 12 6 12 18 C12 28 30 28 40 24 C50 20 68 28 68 18 C68 6 50 10 40 24 C48 32 60 38 74 44" pathLength="1"/>
+          <path class="lacinho-ouro" d="M6 44 C18 38 30 32 40 24 C30 10 12 6 12 18 C12 28 30 28 40 24 C50 20 68 28 68 18 C68 6 50 10 40 24 C48 32 60 38 74 44" pathLength="1"/>
         </svg>
         <svg class="presente-laco" viewBox="0 0 240 180" aria-hidden="true" focusable="false">
           <defs>
@@ -1194,6 +1206,9 @@ function secaoAvaliacoes(){
             </linearGradient>
             <linearGradient id="cetimLacoNo" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#EA8FB4"/><stop offset="1" stop-color="#C05480"/>
+            </linearGradient>
+            <linearGradient id="ouroLaco" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#F3E3BF"/><stop offset=".5" stop-color="#C9A66B"/><stop offset="1" stop-color="#E6CC98"/>
             </linearGradient>
           </defs>
           <g class="laco-corpo">

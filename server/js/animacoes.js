@@ -862,7 +862,9 @@
     const atualEl = q(".avaliacoes-contador-atual");
     const trilho = q(".avaliacoes-trilho-fita");
     const [setaAnterior, setaProxima] = [...secao.querySelectorAll(".avaliacoes-seta")];
-    const fita = [...secao.querySelectorAll(".presente-fita path")];
+    const fita = q(".presente-fita");
+    const lacinho = q(".presente-lacinho");
+    const lacinhoFitas = lacinho ? [...lacinho.querySelectorAll("path")] : [];
     const alcas = [q(".laco-alca-esq"), q(".laco-alca-dir")].filter(Boolean);
     const pontas = [q(".laco-ponta-esq"), q(".laco-ponta-dir")].filter(Boolean);
     const no = q(".laco-no");
@@ -899,9 +901,9 @@
       de, para: { ...para, onUpdate: () => lista.forEach((p) => p.aplicar()), ...extra },
     });
 
-    gsap.set(fita, { strokeDasharray: 1, strokeDashoffset: 1 });
+    if (fita) gsap.set(fita, { clipPath: "inset(0% 50% 0% 50%)" });
     const amarrar = gsap.timeline({ scrollTrigger: { trigger: secao, start: "top 85%", once: true } });
-    amarrar.to(fita, { strokeDashoffset: 0, duration: 1.2, ease: "power2.inOut", stagger: 0.08 });
+    if (fita) amarrar.to(fita, { clipPath: "inset(0% 0% 0% 0%)", duration: 1.3, ease: "power2.inOut" });
     pAlcas.forEach((p, i) => {
       const m = anima([p], { s: 0.2, r: i ? 40 : -40, o: 0 }, { s: 1, r: 0, o: 1, duration: 0.75, ease: "back.out(1.7)" });
       amarrar.fromTo(m.alvos, m.de, m.para, i ? "<0.09" : "-=0.5");
@@ -919,11 +921,30 @@
       amarrar.fromTo(m.alvos, m.de, m.para, "-=0.2");
     }
 
+    let balanco = null;
+    let lacinhoTl = null;
+    function formarLacinho() {
+      if (!lacinho || !secao.classList.contains("is-amarrado")) return;
+      if (lacinhoTl) lacinhoTl.kill();
+      lacinhoTl = gsap.timeline()
+        .set(lacinho, { opacity: 1, y: 8, rotation: -10, scale: 0.9 })
+        .set(lacinhoFitas, { strokeDashoffset: 1 })
+        .to(lacinhoFitas, { strokeDashoffset: 0, duration: 1.2, ease: "power2.inOut", stagger: 0.06 })
+        .to(lacinho, { y: 0, rotation: 0, scale: 1, duration: 1.2, ease: "sine.out" }, 0)
+        .to(lacinho, { y: -3, rotation: 4, duration: 1.3, ease: "sine.inOut" })
+        .to(lacinhoFitas, { strokeDashoffset: -1, duration: 1, ease: "power2.in", stagger: 0.04 })
+        .to(lacinho, { y: -12, rotation: 14, opacity: 0, duration: 1, ease: "power1.in" }, "<");
+    }
+
     amarrar.eventCallback("onComplete", () => {
-      requestAnimationFrame(() => {
-        const p = tl.progress();
-        if (p > 0) tl.progress(0, true).progress(p, true);
-      });
+      secao.classList.add("is-amarrado");
+      if (pPontas.length && !balanco) {
+        balanco = gsap.to(pPontas.map((p) => p.estado), {
+          r: (i) => (i ? 5 : -5), duration: 2.8, ease: "sine.inOut", yoyo: true, repeat: -1,
+          stagger: 0.4, onUpdate: () => pPontas.forEach((p) => p.aplicar()),
+        });
+      }
+      formarLacinho();
     });
 
     const PROFUNDIDADE = 3;
@@ -937,7 +958,6 @@
     let tempoAtual = 0;
     function marcar(progresso) {
       tempoAtual = progresso * total;
-      if (tempoAtual > 0.02 && amarrar.progress() < 1) amarrar.progress(1);
       const indice = gsap.utils.clamp(0, total - 1, Math.round(tempoAtual - 1));
       if (trilho) trilho.style.transform = `scaleX(${gsap.utils.clamp(0, 1, (tempoAtual - 1) / (total - 1))})`;
       if (setaAnterior) setaAnterior.disabled = tempoAtual < 1.05;
@@ -946,6 +966,7 @@
       indiceAtual = indice;
       if (atualEl) atualEl.textContent = dois(indice + 1);
       estrelasAcendendo(cards[indice], 0.05);
+      formarLacinho();
     }
 
     const tl = gsap.timeline({
@@ -963,24 +984,6 @@
       },
     });
 
-    const semRender = { immediateRender: false };
-    if (pBrilhos.length) {
-      const m = anima(pBrilhos, { o: 1 }, { o: 0, duration: 0.2, ...semRender });
-      tl.fromTo(m.alvos, m.de, m.para, 0);
-    }
-    pAlcas.forEach((p, i) => {
-      const m = anima([p], { s: 1, r: 0, o: 1 }, { s: 0.15, r: i ? 85 : -85, o: 0, ease: "power2.in", duration: 0.55, ...semRender });
-      tl.fromTo(m.alvos, m.de, m.para, 0.05);
-    });
-    pPontas.forEach((p, i) => {
-      const m = anima([p], { y: 0, r: 0, o: 1 }, { y: 44, r: i ? 26 : -26, o: 0, ease: "power2.in", duration: 0.5, ...semRender });
-      tl.fromTo(m.alvos, m.de, m.para, 0.18);
-    });
-    if (pNo.length) {
-      const m = anima(pNo, { s: 1, o: 1 }, { s: 0.01, o: 0, ease: "back.in(2)", duration: 0.3, ...semRender });
-      tl.fromTo(m.alvos, m.de, m.para, 0.45);
-    }
-    tl.fromTo(fita, { strokeDashoffset: 0 }, { strokeDashoffset: -1, ease: "power2.inOut", duration: 0.7, ...semRender }, 0.3);
     tl.from(grade, { y: 36, opacity: 0.18, ease: "power2.out", duration: 0.6 }, 0.35);
 
     for (let passo = 1; passo < total; passo++) {
@@ -989,14 +992,37 @@
     }
     marcar(0);
 
+    let navegacao = null;
+    let alvoNavegacao = -1;
+    function indiceDaRolagem(st) {
+      const t = st.progress * total;
+      return t < 0.95 ? -1 : gsap.utils.clamp(0, total - 1, Math.round(t - 1));
+    }
+    function pararNavegacao() {
+      if (navegacao) navegacao.kill();
+      navegacao = null;
+    }
     function irPara(delta) {
       const st = tl.scrollTrigger;
       if (!st) return;
-      const base = tempoAtual < 0.95 ? -1 : Math.round(tempoAtual - 1);
+      const base = navegacao ? alvoNavegacao : indiceDaRolagem(st);
       const alvo = gsap.utils.clamp(0, total - 1, base + delta);
-      const destino = st.start + (st.end - st.start) * ((alvo + 1) / total);
-      window.scrollTo({ top: destino, behavior: "smooth" });
+      if (alvo === base && navegacao) return;
+      const destino = Math.round(st.start + (st.end - st.start) * ((alvo + 1) / total));
+      const encaixe = st.getTween && st.getTween(true);
+      if (encaixe) encaixe.kill();
+      pararNavegacao();
+      alvoNavegacao = alvo;
+      const rolagem = { y: window.scrollY };
+      navegacao = gsap.to(rolagem, {
+        y: destino,
+        duration: gsap.utils.clamp(0.45, 0.9, Math.abs(destino - rolagem.y) / 1400),
+        ease: "power2.inOut",
+        onUpdate: () => window.scrollTo({ top: rolagem.y, behavior: "instant" }),
+        onComplete: () => { navegacao = null; },
+      });
     }
+    const aoRolarManual = () => { if (navegacao) pararNavegacao(); };
 
     const aoClicar = (e) => {
       const seta = e.target.closest(".avaliacoes-seta");
@@ -1017,6 +1043,8 @@
     secao.addEventListener("keydown", aoTeclar);
     grade.addEventListener("touchstart", aoTocar, { passive: true });
     grade.addEventListener("touchend", aoSoltar, { passive: true });
+    window.addEventListener("wheel", aoRolarManual, { passive: true });
+    window.addEventListener("touchmove", aoRolarManual, { passive: true });
 
     return () => {
       if (tl.scrollTrigger) tl.scrollTrigger.kill(true);
@@ -1027,12 +1055,20 @@
       secao.removeEventListener("keydown", aoTeclar);
       grade.removeEventListener("touchstart", aoTocar);
       grade.removeEventListener("touchend", aoSoltar);
+      window.removeEventListener("wheel", aoRolarManual);
+      window.removeEventListener("touchmove", aoRolarManual);
+      pararNavegacao();
+      if (balanco) balanco.kill();
+      if (lacinhoTl) lacinhoTl.kill();
+      secao.classList.remove("is-amarrado");
+      gsap.set(lacinho, { clearProps: "all" });
+      gsap.set(lacinhoFitas, { clearProps: "strokeDashoffset" });
       secao.classList.remove("is-presente");
       if (controles) controles.hidden = true;
       gsap.set(cards, { clearProps: "transform,opacity,zIndex,transformOrigin" });
       gsap.set(grade, { clearProps: "transform,opacity" });
       todasAsPecas.forEach((p) => { p.el.removeAttribute("transform"); p.el.style.opacity = ""; });
-      gsap.set(fita, { clearProps: "strokeDasharray,strokeDashoffset" });
+      if (fita) gsap.set(fita, { clearProps: "clipPath" });
     };
   }
 
