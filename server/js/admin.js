@@ -1713,6 +1713,7 @@
               <span class="order-card-sub">${formatDate(order.createdAt)} · ${formatMoney(order.total)}</span>
             </span>
             <span class="order-card-tags">
+              ${order.avaliacao ? `<span class="order-avaliado" title="Nota média que a cliente deu">★ ${escapeHTML(String(order.avaliacao.media).replace(".", ","))}</span>` : ""}
               ${passo ? `<span class="order-passo ${passo.cls}">${passo.texto}</span>` : ""}
               <span class="order-status ${status.cls}">${status.label}</span>
             </span>
@@ -2586,6 +2587,96 @@
     }
   });
 
+  const avaliacoesListaEl = document.getElementById("avaliacoesLista");
+  const avaliacoesVazioEl = document.getElementById("avaliacoesVazio");
+  const avaliacoesContadorEl = document.getElementById("avaliacoesContador");
+  const ROTULO_STATUS_AVALIACAO = { pendente: "Aguardando você", publicada: "Publicada", oculta: "Oculta" };
+
+  function estrelasTexto(nota){
+    return "★".repeat(nota) + "☆".repeat(5 - nota);
+  }
+
+  function cartaoAvaliacao(r){
+    const quem = [r.firstName, r.city].filter(Boolean).map(escapeHTML).join(" · ") || "Cliente";
+    const acoes = [];
+    if(r.status !== "publicada"){
+      acoes.push(`<button type="button" class="btn-blush btn-sm-blush avaliacao-acao" data-acao="publicar" data-id="${r.id}"><i class="bi bi-check2-circle me-1"></i>Publicar</button>`);
+      if(r.photoUrl) acoes.push(`<button type="button" class="btn-outline-blush btn-sm-blush avaliacao-acao" data-acao="publicar-sem-foto" data-id="${r.id}">Publicar sem a foto</button>`);
+    }
+    if(r.status !== "oculta") acoes.push(`<button type="button" class="btn-outline-blush btn-sm-blush avaliacao-acao" data-acao="ocultar" data-id="${r.id}">Ocultar</button>`);
+    acoes.push(`<button type="button" class="btn-outline-blush btn-sm-blush avaliacao-acao" data-acao="excluir" data-id="${r.id}"><i class="bi bi-trash3 me-1"></i>Excluir</button>`);
+
+    return `
+      <div class="order-card admin-avaliacao" id="avaliacao-${r.id}">
+        <div class="admin-avaliacao-topo">
+          <div>
+            <div class="admin-avaliacao-produto">${escapeHTML(r.productName)}</div>
+            <div class="admin-avaliacao-quem">${quem} · ${formatDate(r.createdAt)} · pedido #${escapeHTML(String(r.reference).slice(0, 8))}</div>
+          </div>
+          <span class="admin-avaliacao-status is-${escapeHTML(r.status)}">${ROTULO_STATUS_AVALIACAO[r.status] || escapeHTML(r.status)}</span>
+        </div>
+        <div class="avaliacao-estrelas" role="img" aria-label="${r.rating} de 5 estrelas" style="font-size:1.1rem">${estrelasTexto(r.rating)}</div>
+        ${r.comment ? `<p class="admin-avaliacao-texto">${escapeHTML(r.comment)}</p>` : `<p class="admin-avaliacao-texto text-ink-soft">Sem comentário.</p>`}
+        ${r.photoUrl ? `<img class="admin-avaliacao-foto" src="${escapeHTML(r.photoUrl)}" alt="Foto enviada pela cliente" loading="lazy" width="140" height="140">
+        <span class="small text-ink-soft">Uso da imagem autorizado em ${formatDate(r.photoConsentAt)}.</span>` : ""}
+        <div class="admin-avaliacao-acoes">${acoes.join("")}</div>
+        <span class="small tracking-feedback" data-avaliacao-feedback="${r.id}"></span>
+      </div>`;
+  }
+
+  async function carregarAvaliacoes(){
+    if(!avaliacoesListaEl) return;
+    try{
+      const res = await fetchWithTimeout("/api/admin/avaliacoes", {}, 15000);
+      if(!res.ok) throw new Error();
+      const dados = await res.json();
+      const lista = Array.isArray(dados.avaliacoes) ? dados.avaliacoes : [];
+      avaliacoesVazioEl.classList.toggle("d-none", lista.length > 0);
+      avaliacoesListaEl.classList.toggle("d-none", lista.length === 0);
+      avaliacoesListaEl.innerHTML = lista.map(cartaoAvaliacao).join("");
+      const pendentes = Number(dados.pendentes) || 0;
+      avaliacoesContadorEl.textContent = String(pendentes);
+      avaliacoesContadorEl.classList.toggle("d-none", pendentes === 0);
+    }catch{
+      avaliacoesVazioEl.classList.remove("d-none");
+      avaliacoesVazioEl.querySelector("p").textContent = "Não consegui carregar as avaliações agora.";
+    }
+  }
+
+  avaliacoesListaEl?.addEventListener("click", async (e) => {
+    const botao = e.target.closest(".avaliacao-acao");
+    if(!botao) return;
+    const id = botao.dataset.id;
+    const acao = botao.dataset.acao;
+    if(acao === "excluir" && !confirm("Excluir esta avaliação de vez? A foto, se houver, também é apagada.")) return;
+    const feedback = avaliacoesListaEl.querySelector(`[data-avaliacao-feedback="${id}"]`);
+    const rotas = {
+      "publicar": { url: `/api/admin/avaliacoes/${id}/publicar`, method: "POST", body: {} },
+      "publicar-sem-foto": { url: `/api/admin/avaliacoes/${id}/publicar`, method: "POST", body: { semFoto: true } },
+      "ocultar": { url: `/api/admin/avaliacoes/${id}/ocultar`, method: "POST", body: {} },
+      "excluir": { url: `/api/admin/avaliacoes/${id}`, method: "DELETE" },
+    };
+    const rota = rotas[acao];
+    if(!rota) return;
+    botao.disabled = true;
+    try{
+      const res = await fetchWithTimeout(rota.url, {
+        method: rota.method,
+        headers: rota.body ? { "Content-Type": "application/json" } : undefined,
+        body: rota.body ? JSON.stringify(rota.body) : undefined,
+      }, 15000);
+      const corpo = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(corpo.error || "Não foi possível concluir.");
+      await carregarAvaliacoes();
+    }catch(err){
+      botao.disabled = false;
+      if(feedback){
+        feedback.textContent = err.message || "Não foi possível concluir.";
+        feedback.classList.add("is-error");
+      }
+    }
+  });
+
   const testarAvisoBtn = document.getElementById("testarAvisoBtn");
   const testarAvisoResult = document.getElementById("testarAvisoResult");
   const avisoVendaResumo = document.getElementById("avisoVendaResumo");
@@ -2607,6 +2698,13 @@
         partes.push(`${d.presos} aviso(s) ainda não saíram${d.ultimoErro ? `: ${d.ultimoErro}` : "."}`);
       }else if(d.ultimoEnviadoEm){
         partes.push(`Último aviso entregue em ${formatDate(d.ultimoEnviadoEm)}.`);
+      }
+      if(!d.tarefasEm){
+        partes.push("⚠️ As tarefas automáticas (entrega automática, \"seu pedido chegou?\" e pedido de avaliação) nunca rodaram neste servidor — o agendamento no painel da hospedagem precisa ser criado.");
+      }else if(Date.now() - d.tarefasEm > 60 * 60 * 1000){
+        partes.push(`⚠️ As tarefas automáticas não rodam desde ${formatDate(d.tarefasEm)} — confira o agendamento no painel da hospedagem.`);
+      }else{
+        partes.push(`Tarefas automáticas rodando (última vez em ${formatDate(d.tarefasEm)}).`);
       }
       partes.push("Não tem certeza se chega? Mande um teste.");
       avisoVendaResumo.textContent = partes.join(" ");
@@ -2638,7 +2736,7 @@
   });
 
   PLCAuth.aoSaberDaSessao(({ user, falhou }) => {
-    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso()) : showOnly(stateForbidden);
+    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes()) : showOnly(stateForbidden);
     showOnly(falhou ? stateError : stateLoggedOut);
   });
 })();

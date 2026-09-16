@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Avaliar pedido — Adriana Melo Acessórios</title>
+<meta name="description" content="Conte o que achou do seu pedido na Adriana Melo Acessórios.">
+<meta name="robots" content="noindex, nofollow">
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data:; connect-src 'self'; object-src 'none'; form-action 'self'">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="referrer" content="no-referrer">
+
+<link rel="stylesheet" href="css/vendor/bootstrap.purged.css">
+<link rel="stylesheet" href="css/vendor/bootstrap-icons.subset.css">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="simple-header">
+  <div class="container d-flex align-items-center justify-content-between">
+    <a href="index.html" class="plc-brand" aria-label="Adriana Melo Acessórios — página inicial">
+      <img src="img/logo-adriana-melo-6e53bc.png" alt="Adriana Melo Acessórios" width="168" height="54">
+    </a>
+  </div>
+</header>
+
+<main class="account-main">
+  <div class="container">
+    <div class="orders-wrap mx-auto">
+      <div class="mb-4">
+        <span class="section-eyebrow"><i class="bi bi-star-fill"></i> sua opinião</span>
+        <h1 class="section-title" style="font-size:1.8rem" id="avaliarTitulo">Seu pedido</h1>
+      </div>
+
+      <div id="avaliarCarregando" class="text-center py-5">
+        <div class="spinner-border" role="status" style="color:var(--blush-600)">
+          <span class="visually-hidden">Carregando pedido...</span>
+        </div>
+        <p class="section-sub mt-3">Carregando seu pedido...</p>
+      </div>
+
+      <div id="avaliarInvalido" class="account-card text-center d-none">
+        <i class="bi bi-question-circle" style="font-size:2rem; color:var(--blush-300)"></i>
+        <p class="section-sub mt-3 mb-3">Este link não é válido. Abra de novo pelo e-mail que enviamos, ou entre na sua conta para ver seus pedidos.</p>
+        <a href="pedidos.html" class="btn-blush">Ver meus pedidos</a>
+      </div>
+
+      <div id="avaliarConfirmar" class="account-card text-center d-none">
+        <i class="bi bi-heart-fill" style="font-size:2rem; color:var(--blush-500)"></i>
+        <p class="mt-3 mb-1 fw-semibold">Seu pedido já chegou?</p>
+        <p class="section-sub mb-4">Confirme que recebeu e, se quiser, conte o que achou de cada peça.</p>
+        <button type="button" class="btn-blush" id="avaliarRecebiBtn"><i class="bi bi-check2-circle me-1"></i>Sim, recebi meu pedido</button>
+        <p class="small mt-3 mb-0">Ainda não chegou? Responda o e-mail que enviamos ou fale com a gente pelo WhatsApp.</p>
+        <p class="small mt-2 mb-0 avaliar-erro d-none" id="avaliarRecebiErro" role="alert"></p>
+      </div>
+
+      <form id="avaliarForm" class="d-none" novalidate>
+        <p class="section-sub mb-4">Toque nas estrelas de cada peça. O comentário e a foto são opcionais.</p>
+        <div id="avaliarProdutos" class="avaliar-produtos"></div>
+        <p class="small avaliar-aviso">As avaliações passam pela loja antes de aparecer no site. Só mostramos seu primeiro nome e sua cidade.</p>
+        <p class="small avaliar-erro d-none" id="avaliarErro" role="alert"></p>
+        <button type="submit" class="btn-blush w-100" id="avaliarEnviarBtn"><i class="bi bi-send me-1"></i>Enviar avaliação</button>
+      </form>
+
+      <div id="avaliarObrigado" class="account-card text-center d-none">
+        <i class="bi bi-heart-fill" style="font-size:2rem; color:var(--blush-500)"></i>
+        <p class="mt-3 mb-1 fw-semibold">Obrigada por contar pra gente! 💗</p>
+        <p class="section-sub mb-4" id="avaliarObrigadoTexto">A gente lê cada avaliação com carinho.</p>
+        <a href="index.html#colecoes" class="btn-outline-blush">Voltar para a loja</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="js/error-boundary.js" defer></script>
+<script src="js/loading.js" defer></script>
+<script src="js/avaliar.js" defer></script>
+<script src="js/cookie-consent.js" defer></script>
+</body>
+</html>

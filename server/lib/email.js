@@ -923,7 +923,117 @@ async function sendAdminLoginAlert({ email: contaAlvo, ip, failures }) {
   await sendEmail({ to: contaAlvo, subject, text, html });
 }
 
+/* =========================================================================
+   "Seu pedido chegou?" e "Como ficaram os laços?"
+   -------------------------------------------------------------------------
+   Os dois apontam para avaliar.html com o token depois do "#": essa parte
+   do endereço nunca sai do navegador, então o token não fica gravado em log
+   de acesso nem vai em cabeçalho Referer para outro site.
+   Enfileirados pelo cron (scripts/tarefas-periodicas.js), uma vez por
+   pedido — o índice único da fila garante.
+========================================================================= */
+function primeiroNome(address){
+  return (address && address.nome) ? String(address.nome).trim().split(" ")[0] : "";
+}
+
+function formatConfirmarRecebimentoEmail({ externalReference, address, avaliarUrl }){
+  const nome = primeiroNome(address);
+  const subject = "Seu pedido já chegou? 🎀";
+
+  const text = [
+    nome ? `Oi, ${nome}!` : "Oi!",
+    "",
+    `Seu pedido ${externalReference} já deveria ter chegado. Chegou tudo certinho?`,
+    "",
+    `Se sim, é só confirmar aqui (leva um segundo): ${avaliarUrl}`,
+    "",
+    "Se ainda não chegou ou veio algum problema, responda este e-mail que a gente resolve.",
+    "",
+    "Adriana Melo Acessórios — ateliê artesanal de laços, Brasília/DF",
+  ].join("\n");
+
+  const html = emailShell({
+    titulo: subject,
+    preheader: "Confirme em um clique que recebeu seu pedido.",
+    eyebrow: "entrega",
+    tituloCartao: "Chegou tudo certinho? 💌",
+    corpoHtml: `
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:15px; line-height:1.6; padding-bottom:26px;">
+          ${nome ? `Oi, ${escapeHTML(nome)}! ` : ""}Seu pedido <strong class="e-texto" style="color:${CORES.texto};">${escapeHTML(externalReference)}</strong> já deveria ter chegado. Se recebeu, é só confirmar — leva um segundo.
+        </td>
+      </tr>
+      ${botaoEmail(avaliarUrl, "Sim, recebi meu pedido")}
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:13px; line-height:1.6; padding-top:22px;">
+          Ainda não chegou ou veio algum problema? Responda este e-mail que a gente resolve.
+        </td>
+      </tr>
+    `,
+  });
+
+  return { subject, text, html };
+}
+
+function formatPedirAvaliacaoEmail({ externalReference, address, items, avaliarUrl }){
+  const nome = primeiroNome(address);
+  const subject = "Como ficaram os laços? 💗";
+  const lista = (items || []).map(i => `• ${i.name}`).join("\n");
+
+  const text = [
+    nome ? `Oi, ${nome}!` : "Oi!",
+    "",
+    "Esperamos que tenha amado o que chegou:",
+    lista,
+    "",
+    `Conta pra gente o que achou? Leva menos de um minuto: ${avaliarUrl}`,
+    "",
+    "Sua avaliação ajuda outras mamães a escolherem — e a gente lê cada uma com carinho.",
+    "",
+    "Adriana Melo Acessórios — ateliê artesanal de laços, Brasília/DF",
+  ].join("\n");
+
+  const itensHtml = (items || []).map((i, indice) => `
+      <tr>
+        ${celulaMiniatura(indice < MAX_MINIATURAS ? i.photoUrl : null, i.name)}
+        ${CELULA_ESPACO}
+        <td class="e-texto e-borda" valign="middle" style="font-family:${FONT_CORPO}; color:${CORES.texto}; font-size:14px; padding:8px 0; border-bottom:1px solid ${CORES.faixa};">
+          ${escapeHTML(i.name)}
+        </td>
+      </tr>`).join("");
+
+  const html = emailShell({
+    titulo: subject,
+    preheader: "Conta pra gente o que achou — leva menos de um minuto.",
+    eyebrow: "sua opinião",
+    tituloCartao: "Como ficaram os laços? 💗",
+    corpoHtml: `
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:15px; line-height:1.6; padding-bottom:20px;">
+          ${nome ? `Oi, ${escapeHTML(nome)}! ` : ""}Esperamos que tenha amado. Conta pra gente o que achou de cada peça?
+        </td>
+      </tr>
+      ${itensHtml ? `
+      <tr>
+        <td style="padding-bottom:26px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${itensHtml}</table>
+        </td>
+      </tr>` : ""}
+      ${botaoEmail(avaliarUrl, "Avaliar meu pedido")}
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:13px; line-height:1.6; padding-top:22px;">
+          Sua avaliação ajuda outras mamães a escolherem — e a gente lê cada uma com carinho.
+        </td>
+      </tr>
+    `,
+  });
+
+  return { subject, text, html };
+}
+
 module.exports = {
+  formatConfirmarRecebimentoEmail,
+  formatPedirAvaliacaoEmail,
   formatOrderEmail,
   formatContactEmail,
   formatOrderConfirmationEmail,

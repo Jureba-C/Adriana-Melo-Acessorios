@@ -65,6 +65,14 @@
               <a href="acompanhar-pedido.html?pedido=${encodeURIComponent(order.reference)}" class="btn btn-outline-blush btn-sm">
                 Acompanhar pedido
               </a>` : ""}
+              ${order.avaliarUrl && order.fulfillmentStatus === "postado" ? `
+              <a href="${escapeHTML(order.avaliarUrl)}" class="btn btn-outline-blush btn-sm">
+                Já recebi
+              </a>` : ""}
+              ${order.avaliarUrl && order.fulfillmentStatus === "entregue" && !order.avaliado ? `
+              <a href="${escapeHTML(order.avaliarUrl)}" class="btn btn-blush btn-sm">
+                Avaliar
+              </a>` : ""}
             </div>
           </div>
           ${order.status === "pendente" ? `<div class="small text-danger mb-2 resume-payment-error d-none"></div>` : ""}

@@ -145,6 +145,7 @@
           <button type="button" class="admin-tab-btn" data-tab="pedidos"><i class="bi bi-bag-check"></i> Vendas e pedidos</button>
           <button type="button" class="admin-tab-btn" data-tab="clientes"><i class="bi bi-people"></i> Clientes</button>
           <button type="button" class="admin-tab-btn" data-tab="mensagens"><i class="bi bi-chat-dots"></i> Mensagens</button>
+          <button type="button" class="admin-tab-btn" data-tab="avaliacoes"><i class="bi bi-star-fill"></i> Avaliações <span class="admin-tab-contador d-none" id="avaliacoesContador"></span></button>
         </nav>
 
         <div class="admin-tab-panels">
@@ -393,6 +394,16 @@
               <p class="section-sub mt-3 mb-0">Nenhuma mensagem recebida ainda.</p>
             </div>
             <div id="messagesList" class="orders-list d-none"></div>
+          </section>
+
+          <section class="admin-tab-panel d-none" data-tab-panel="avaliacoes">
+            <h2 class="admin-section-title">Avaliações das clientes</h2>
+            <p class="admin-hint">Nada aparece no site antes de você publicar. Só o primeiro nome e a cidade da cliente ficam visíveis. As pendentes vêm primeiro.</p>
+            <div id="avaliacoesVazio" class="admin-empty d-none">
+              <i class="bi bi-star-fill" style="font-size:2rem; color:var(--blush-300)"></i>
+              <p class="section-sub mt-3 mb-0">Nenhuma avaliação recebida ainda. Elas chegam depois que as clientes recebem os pedidos.</p>
+            </div>
+            <div id="avaliacoesLista" class="orders-list d-none"></div>
           </section>
 
         </div>

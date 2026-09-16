@@ -149,15 +149,26 @@
   const recebiWrap = document.getElementById("trackRecebiWrap");
   const recebiBtn = document.getElementById("trackRecebiBtn");
   const recebiFeedback = document.getElementById("trackRecebiFeedback");
+  const avaliarWrap = document.getElementById("trackAvaliarWrap");
+  const avaliarLink = document.getElementById("trackAvaliarLink");
   let referenciaAtual = "";
+  let avaliarUrlAtual = "";
+
+  function mostrarAvaliar(visivel){
+    if(!avaliarWrap || !avaliarLink) return;
+    if(visivel && avaliarUrlAtual) avaliarLink.href = avaliarUrlAtual;
+    avaliarWrap.classList.toggle("d-none", !(visivel && avaliarUrlAtual));
+  }
 
   function renderConfirmacao(order){
     if(!recebiWrap) return;
     referenciaAtual = order.reference;
+    avaliarUrlAtual = order.avaliarUrl || "";
     const podeConfirmar = order.fulfillmentStatus === "postado";
     recebiWrap.classList.toggle("d-none", !podeConfirmar);
     recebiFeedback.classList.add("d-none");
     if(recebiBtn) recebiBtn.disabled = false;
+    mostrarAvaliar(order.fulfillmentStatus === "entregue" && !order.avaliado);
   }
 
   recebiBtn?.addEventListener("click", async () => {
@@ -172,6 +183,7 @@
       recebiFeedback.classList.remove("d-none");
       recebiWrap.classList.remove("d-none");
       recebiBtn.classList.add("d-none");
+      mostrarAvaliar(true);
     }catch(err){
       recebiBtn.disabled = false;
     }

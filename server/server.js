@@ -698,7 +698,7 @@ const statusPollLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500, handle
 const SITE_ROOT = __dirname;
 const PUBLIC_TOP_LEVEL = new Set([
   "index.html", "conta.html", "pedidos.html", "admin.html",
-  "acompanhar-pedido.html",
+  "acompanhar-pedido.html", "avaliar.html",
   "pagamento-sucesso.html", "pagamento-erro.html", "pagamento-pendente.html",
   "pagamento-pix.html",
   "redefinir-senha.html", "politica.html", "404.html", "429.html", "css", "js", "img",
@@ -1070,9 +1070,105 @@ function htmlVersionado(absoluto){
 }
 
 function comCupom(html){
-  return html.includes(MARCA_CUPOM)
+  const comCupomTrocado = html.includes(MARCA_CUPOM)
     ? html.replace(MARCA_CUPOM, atributoCupomBoasVindas())
     : html;
+  return comAvaliacoes(comCupomTrocado);
+}
+
+/* =========================================================================
+   Avaliações na home — "O que dizem as clientes" e a nota média do topo
+   -------------------------------------------------------------------------
+   Montadas aqui, no HTML, e não por fetch no navegador: sem requisição
+   extra, sem o layout pular quando a seção aparece, e visível para o
+   Google. Ficam FORA do CACHE_HTML, igual ao cupom — é uma consulta pequena,
+   e assim publicar ou ocultar uma avaliação no painel aparece na próxima
+   visita.
+
+   ⚠️ Com zero avaliações publicadas, o bloco da nota e a seção somem
+   inteiros. O "4,9" que existia antes era texto fixo, inventado; mostrar
+   nota nenhuma é melhor do que mostrar uma que não é de ninguém.
+
+   ⚠️ TODO texto vindo de avaliação é escrito por qualquer pessoa com o link
+   — passa por escaparHtml antes de encostar no HTML. Sem exceção.
+========================================================================= */
+const MARCA_NOTA_MEDIA = "<!--#NOTA-MEDIA#-->";
+const MARCA_AVALIACOES = "<!--#AVALIACOES#-->";
+
+function escaparHtml(valor){
+  return String(valor ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function estrelasHtml(nota){
+  let html = "";
+  for(let i = 1; i <= 5; i++){
+    html += `<i class="bi bi-star-fill${i <= nota ? "" : " is-apagada"}" aria-hidden="true"></i>`;
+  }
+  return `<span class="avaliacao-estrelas" role="img" aria-label="${nota} de 5 estrelas">${html}</span>`;
+}
+
+function blocoNotaMedia(){
+  const { total, media } = db.notaMedia();
+  if(!total) return "";
+  const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const rotulo = total === 1 ? "de 1 avaliação" : `de ${total} avaliações`;
+  return `<div><span class="num">${nota}<i class="bi bi-star-fill" style="font-size:.9rem"></i></span><span class="lbl">${rotulo}</span></div>`;
+}
+
+function secaoAvaliacoes(){
+  const avaliacoes = db.avaliacoesPublicadas(6);
+  if(!avaliacoes.length) return "";
+  const overridesMap = getProductOverridesMap();
+  const { total, media } = db.notaMedia();
+  const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  /* A foto vira MINIATURA ao lado do nome, não bloco no topo do card: no
+     celular o carrossel assume a altura do card mais alto, e uma foto
+     grande num só card deixava todos os outros com um vazio embaixo. Tocar
+     na miniatura abre a foto inteira. */
+  const cards = avaliacoes.map(r => {
+    const produto = effectiveProduct(r.product_id, overridesMap)?.name || "";
+    const quem = [r.customer_first_name, r.customer_city].filter(Boolean).map(escaparHtml).join(" · ");
+    const fotoUrl = r.photo_id ? `/api/avaliacoes/fotos/${escaparHtml(r.photo_id)}` : "";
+    return `
+      <article class="avaliacao-card">
+        ${estrelasHtml(r.rating)}
+        ${r.comment ? `<p class="avaliacao-texto">“${escaparHtml(r.comment)}”</p>` : ""}
+        <footer class="avaliacao-rodape">
+          ${fotoUrl ? `<a class="avaliacao-foto-link" href="${fotoUrl}" target="_blank" rel="noopener" aria-label="Ver foto enviada por ${escaparHtml(r.customer_first_name || "cliente")}"><img class="avaliacao-foto" src="${fotoUrl}" alt="" loading="lazy" decoding="async" width="56" height="56"></a>` : ""}
+          <span class="avaliacao-autor">
+            ${quem ? `<span class="avaliacao-quem">${quem}</span>` : ""}
+            ${produto ? `<span class="avaliacao-produto">${escaparHtml(produto)}</span>` : ""}
+          </span>
+        </footer>
+      </article>`;
+  }).join("");
+
+  return `
+<section id="avaliacoes" class="avaliacoes-section" aria-labelledby="avaliacoesTitulo">
+  <div class="container">
+    <div class="text-center mx-auto avaliacoes-head">
+      <span class="section-eyebrow"><i class="bi bi-star-fill"></i> quem já recebeu</span>
+      <h2 class="section-title" id="avaliacoesTitulo">O que dizem as clientes</h2>
+      <p class="avaliacoes-resumo"><i class="bi bi-star-fill" aria-hidden="true"></i> <strong>${nota}</strong> de 5 · ${total === 1 ? "1 avaliação" : `${total} avaliações`}</p>
+    </div>
+    <div class="avaliacoes-grade" role="region" aria-label="Avaliações das clientes" tabindex="0">${cards}
+    </div>
+    ${avaliacoes.length > 1 ? `<div class="avaliacoes-pontos" aria-hidden="true">${avaliacoes.map((_, i) => `<span class="avaliacoes-ponto${i === 0 ? " is-ativo" : ""}"></span>`).join("")}</div>` : ""}
+  </div>
+</section>`;
+}
+
+function comAvaliacoes(html){
+  let saida = html;
+  // Substituição por FUNÇÃO, não por string: numa string de troca o JS
+  // interpreta "$&", "$1"... — um comentário de cliente contendo "$&"
+  // reinjetaria o próprio marcador no meio da página.
+  if(saida.includes(MARCA_NOTA_MEDIA)) saida = saida.replace(MARCA_NOTA_MEDIA, () => blocoNotaMedia());
+  if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
+  return saida;
 }
 
 app.use((req, res, next) => {
@@ -1965,11 +2061,197 @@ app.get("/api/orders/:reference", statusPollLimiter, auth.requireAuth, async (re
       trackingCode,
       carrierUrl: rastreio.linkDaTransportadora(trackingCode),
       tracking: live,
+      avaliarUrl: ["postado", "entregue"].includes(entregou ? "entregue" : order.fulfillment_status)
+        ? linkDeAvaliacao(order.external_reference) : null,
+      avaliado: db.avaliacoesDoPedido(order.external_reference).length > 0,
     });
   } catch (err) {
     console.error("Erro ao carregar detalhe do pedido:", err);
     res.status(500).json({ error: "Não foi possível carregar o pedido agora." });
   }
+});
+
+/* =========================================================================
+   AVALIAÇÕES E CONFIRMAÇÃO DE RECEBIMENTO — avaliar.html
+   -------------------------------------------------------------------------
+   Funciona SEM login, pelo token do pedido (orders.review_token), porque o
+   link chega por e-mail e pedir senha ali derruba a resposta. O token vem
+   no cabeçalho X-Avaliar-Token: na página ele fica depois do "#" do
+   endereço, que o navegador nunca manda ao servidor.
+
+   ⚠️ Token errado e pedido inexistente respondem IGUAL (404): nada aqui
+   pode servir para descobrir se um número de pedido existe.
+
+   A confirmação de recebimento por aqui NÃO substitui a automática
+   (Melhor Envio pelo cron, fecharEntregaPeloRastreio) nem o botão da
+   lojista: as três só avançam de "postado" para "entregue", então quem
+   chegar primeiro fecha e as outras viram no-op.
+========================================================================= */
+const MAX_COMENTARIO_AVALIACAO = 1000;
+
+function pedidoDoToken(req){
+  const reference = String(req.params.reference || "");
+  const token = String(req.headers["x-avaliar-token"] || "");
+  if(!reference || !token) return null;
+  const order = db.getOrderByExternalReference(reference);
+  if(!order || order.status !== "pago") return null;
+  return db.tokenDeAvaliacaoConfere(reference, token) ? order : null;
+}
+
+// Um produto aparece uma vez só, mesmo comprado em duas cores.
+function produtosDoPedido(order){
+  const overridesMap = getProductOverridesMap();
+  const vistos = new Set();
+  const lista = [];
+  for(const item of JSON.parse(order.items_json)){
+    if(vistos.has(item.id)) continue;
+    vistos.add(item.id);
+    const produto = effectiveProduct(item.id, overridesMap);
+    lista.push({ id: item.id, name: produto?.name || `Produto #${item.id}`, photoUrl: produto?.photoUrl || null });
+  }
+  return lista;
+}
+
+function linkDeAvaliacao(reference){
+  const token = db.garantirTokenDeAvaliacao(reference);
+  return token ? `avaliar.html?pedido=${encodeURIComponent(reference)}#t=${token}` : null;
+}
+
+app.get("/api/avaliar/:reference", strictLimiter, (req, res) => {
+  const order = pedidoDoToken(req);
+  if(!order) return res.status(404).json({ error: "Link inválido ou expirado." });
+  res.json({
+    reference: order.external_reference,
+    fulfillmentStatus: order.fulfillment_status || null,
+    produtos: produtosDoPedido(order),
+    avaliacoes: db.avaliacoesDoPedido(order.external_reference).map(r => ({
+      productId: r.product_id, rating: r.rating, comment: r.comment, status: r.status, temFoto: !!r.photo_id,
+    })),
+  });
+});
+
+app.post("/api/avaliar/:reference/recebi", strictLimiter, (req, res) => {
+  const order = pedidoDoToken(req);
+  if(!order) return res.status(404).json({ error: "Link inválido ou expirado." });
+  if(order.fulfillment_status === "entregue") return res.json({ ok: true, jaEstava: true });
+  if(order.fulfillment_status !== "postado"){
+    return res.status(409).json({ error: "Este pedido ainda não foi postado." });
+  }
+  db.markOrderDelivered(order.external_reference);
+  res.json({ ok: true });
+});
+
+/* Fotos da cliente: mesmo cuidado do upload de produto (allowlist de tipo,
+   4MB, sharp reencodando) e mais um — o reencode do sharp descarta os
+   metadados por padrão, INCLUSIVE a localização GPS que o celular grava na
+   foto. Numa foto de criança, isso é o endereço da casa dela. Não trocar
+   por .withMetadata()/.keepMetadata(): o teste de avaliações tranca isso. */
+const reviewPhotoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024, files: 10, fields: 20, fieldSize: 20000 },
+  fileFilter(req, file, cb){ cb(null, Boolean(PRODUCT_PHOTO_MIME_EXT[file.mimetype])); },
+});
+
+async function processarFotoDeAvaliacao(buffer){
+  return sharp(buffer)
+    .rotate()
+    .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 80, mozjpeg: true })
+    .toBuffer();
+}
+
+app.post("/api/avaliar/:reference", strictLimiter, (req, res) => {
+  const order = pedidoDoToken(req);
+  if(!order) return res.status(404).json({ error: "Link inválido ou expirado." });
+  if(order.fulfillment_status !== "entregue"){
+    return res.status(409).json({ error: "Confirme que recebeu o pedido antes de avaliar." });
+  }
+
+  reviewPhotoUpload.any()(req, res, async (err) => {
+    if(err instanceof multer.MulterError){
+      const msg = err.code === "LIMIT_FILE_SIZE" ? "Uma das fotos passou de 4MB." : "Não foi possível receber as fotos.";
+      return res.status(413).json({ error: msg });
+    }
+    if(err){
+      console.error("Erro no upload da avaliação:", err);
+      return res.status(500).json({ error: "Não foi possível enviar agora." });
+    }
+
+    let enviadas;
+    try { enviadas = JSON.parse(req.body?.avaliacoes || "[]"); } catch { enviadas = null; }
+    if(!Array.isArray(enviadas) || enviadas.length === 0){
+      return res.status(400).json({ error: "Escolha as estrelas de pelo menos um produto." });
+    }
+
+    const doPedido = new Set(produtosDoPedido(order).map(p => p.id));
+    const fotos = new Map((req.files || []).map(f => [f.fieldname, f]));
+    let endereco = {};
+    try { endereco = JSON.parse(order.address_json) || {}; } catch {}
+    const firstName = String(endereco.nome || "").trim().split(" ")[0].slice(0, 40) || null;
+    const city = endereco.cidade ? `${String(endereco.cidade).trim().slice(0, 60)}${endereco.uf ? "/" + String(endereco.uf).trim().slice(0, 2).toUpperCase() : ""}` : null;
+
+    // Valida TUDO antes de gravar qualquer coisa: uma foto sem autorização
+    // no terceiro produto não pode deixar os dois primeiros gravados pela
+    // metade.
+    const validas = [];
+    for(const item of enviadas.slice(0, 20)){
+      const productId = Number(item?.productId);
+      const rating = Number(item?.rating);
+      if(!doPedido.has(productId) || !Number.isInteger(rating) || rating < 1 || rating > 5) continue;
+      const arquivo = fotos.get(`foto-${productId}`) || null;
+      if(arquivo && item?.autorizaFoto !== true){
+        return res.status(400).json({ error: "Para enviar foto, marque a autorização de uso da imagem." });
+      }
+      validas.push({
+        productId, rating, arquivo,
+        comment: String(item?.comment || "").trim().slice(0, MAX_COMENTARIO_AVALIACAO),
+      });
+    }
+    if(validas.length === 0){
+      return res.status(400).json({ error: "Escolha as estrelas de pelo menos um produto." });
+    }
+
+    let salvas = 0;
+    try{
+      for(const v of validas){
+        let photoId = null;
+        if(v.arquivo){
+          photoId = randomUUID();
+          db.insertReviewPhoto(photoId, "image/jpeg", await processarFotoDeAvaliacao(v.arquivo.buffer));
+        }
+        const gravou = db.salvarAvaliacao({
+          orderReference: order.external_reference, productId: v.productId, rating: v.rating,
+          comment: v.comment, photoId, photoConsentAt: photoId ? Date.now() : null, firstName, city,
+        });
+        if(gravou) salvas++;
+        // Avaliação já publicada não é reescrita — e a foto que veio junto
+        // não pode ficar guardada órfã no banco.
+        else if(photoId) db.apagarFotoOrfaDeAvaliacao(photoId);
+      }
+    }catch(procErr){
+      console.error("Erro ao gravar avaliação:", procErr);
+      return res.status(500).json({ error: "Não foi possível processar a foto enviada." });
+    }
+
+    if(salvas === 0){
+      return res.status(409).json({ error: "Essas avaliações já foram enviadas e estão com a loja." });
+    }
+    res.json({ ok: true, salvas });
+  });
+});
+
+const ROTA_FOTO_AVALIACAO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/* Só serve foto de avaliação PUBLICADA. Cache curto (1h) e não "immutable":
+   se a lojista ocultar a avaliação, a foto precisa sair de circulação logo,
+   não daqui a um ano. */
+app.get("/api/avaliacoes/fotos/:id", (req, res) => {
+  if(!ROTA_FOTO_AVALIACAO.test(req.params.id)) return res.status(404).end();
+  const foto = db.getReviewPhotoPublicada(req.params.id);
+  if(!foto) return res.status(404).end();
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.setHeader("Content-Type", foto.mime_type);
+  res.end(Buffer.from(foto.data));
 });
 
 /* =========================================================================
@@ -2920,6 +3202,7 @@ app.get("/api/orders", auth.requireAuth, (req, res) => {
   try {
     const rows = db.listOrdersByUser(req.user.id);
     const overridesMap = getProductOverridesMap();
+    const notas = db.notasPorPedido();
     const orders = rows.map(row => {
       const items = JSON.parse(row.items_json).map(item => ({
         id: item.id, qty: item.qty,
@@ -2947,6 +3230,9 @@ app.get("/api/orders", auth.requireAuth, (req, res) => {
         shippingPrice: row.shipping_price,
         total: row.total,
         createdAt: row.created_at,
+        avaliado: notas.has(row.external_reference),
+        avaliarUrl: row.status === "pago" && ["postado", "entregue"].includes(row.fulfillment_status)
+          ? linkDeAvaliacao(row.external_reference) : null,
       };
     });
     res.json({ orders });
@@ -3081,6 +3367,10 @@ app.get("/api/admin/aviso-de-venda", auth.requireAdmin, auth.requireAdminTwoFact
       para: process.env.OWNER_EMAIL || null,
       smtpConfigurado: !!(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS),
       ...db.avisosDaLojista(),
+      // Entrega automática, "seu pedido chegou?" e pedido de avaliação
+      // dependem do cron do hPanel. Sem esta data, cron não agendado é
+      // invisível: tudo simplesmente não acontece.
+      tarefasEm: db.lerEstado("tarefas_periodicas_em")?.updated_at || null,
     });
   } catch (err) {
     console.error("Erro ao ler a situação do aviso de venda:", err);
@@ -3113,10 +3403,74 @@ app.post("/api/admin/aviso-de-venda/testar", auth.requireAdmin, auth.requireAdmi
   }
 });
 
+/* ---------- Moderação de avaliações ----------
+   Nada vai ao ar sem passar por aqui. A foto pendente só é visível por esta
+   rota de admin, com no-store: não pode ficar em cache de navegador nenhum. */
+app.get("/api/admin/avaliacoes", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  try {
+    const overridesMap = getProductOverridesMap();
+    res.json({
+      pendentes: db.contarAvaliacoesPendentes(),
+      avaliacoes: db.listarAvaliacoesPainel().map(r => ({
+        id: r.id,
+        reference: r.order_reference,
+        productId: r.product_id,
+        productName: effectiveProduct(r.product_id, overridesMap)?.name || `Produto #${r.product_id}`,
+        rating: r.rating,
+        comment: r.comment,
+        photoUrl: r.photo_id ? `/api/admin/avaliacoes/fotos/${r.photo_id}` : null,
+        photoConsentAt: r.photo_consent_at,
+        status: r.status,
+        firstName: r.customer_first_name,
+        city: r.customer_city,
+        createdAt: r.created_at,
+        publishedAt: r.published_at,
+      })),
+    });
+  } catch (err) {
+    console.error("Erro ao listar avaliações:", err);
+    res.status(500).json({ error: "Não foi possível carregar as avaliações." });
+  }
+});
+
+app.get("/api/admin/avaliacoes/fotos/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  if(!ROTA_FOTO_AVALIACAO.test(req.params.id)) return res.status(404).end();
+  const foto = db.getReviewPhoto(req.params.id);
+  if(!foto) return res.status(404).end();
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Content-Type", foto.mime_type);
+  res.end(Buffer.from(foto.data));
+});
+
+app.post("/api/admin/avaliacoes/:id/publicar", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const id = Number(req.params.id);
+  if(!Number.isInteger(id)) return res.status(404).json({ error: "Avaliação não encontrada." });
+  if(req.body?.semFoto === true) db.tirarFotoDaAvaliacao(id);
+  if(!db.mudarStatusAvaliacao(id, "publicada")) return res.status(404).json({ error: "Avaliação não encontrada." });
+  res.json({ ok: true });
+});
+
+app.post("/api/admin/avaliacoes/:id/ocultar", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const id = Number(req.params.id);
+  if(!Number.isInteger(id) || !db.mudarStatusAvaliacao(id, "oculta")){
+    return res.status(404).json({ error: "Avaliação não encontrada." });
+  }
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/avaliacoes/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const id = Number(req.params.id);
+  if(!Number.isInteger(id) || !db.excluirAvaliacao(id)){
+    return res.status(404).json({ error: "Avaliação não encontrada." });
+  }
+  res.json({ ok: true });
+});
+
 app.get("/api/admin/orders", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
   try {
     const rows = db.listAllOrders();
     const overridesMap = getProductOverridesMap();
+    const notas = db.notasPorPedido();
     const orders = rows.map(row => {
       const items = JSON.parse(row.items_json).map(item => ({
         id: item.id, qty: item.qty,
@@ -3144,6 +3498,7 @@ app.get("/api/admin/orders", auth.requireAdmin, auth.requireAdminTwoFactor, (req
         shippedAt: row.shipped_at || null,
         deliveredAt: row.delivered_at || null,
         avisoDePostagem: estadoDoAvisoDePostagem(row.external_reference),
+        avaliacao: notas.get(row.external_reference) || null,
         subtotal: row.subtotal,
         discount: row.discount,
         pixDiscount: row.pix_discount || 0,

@@ -26,6 +26,19 @@
  *     tentativas, deixando o erro gravado em last_error para investigação.
  *  2. Pergunta ao Melhor Envio se os pedidos postados já chegaram, e fecha a
  *     entrega (fulfillment_status = 'entregue') nos que já confirmaram.
+ *  3. Enfileira "seu pedido chegou?" para quem passou do prazo do frete sem
+ *     entrega confirmada, e "como ficaram os laços?" para quem recebeu há 2
+ *     dias e não avaliou. Cada um sai UMA vez por pedido (índice único da
+ *     fila). Só entram pedidos postados nos últimos 45 dias / entregues nos
+ *     últimos 30 — trava para o primeiro deploy não disparar e-mail para
+ *     cliente de meses atrás.
+ *  4. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
+ *     1 hora — é o único sinal de que o agendamento no hPanel sumiu.
+ *
+ *  A ordem importa: fechar entregas ANTES de escolher quem recebe "seu
+ *  pedido chegou?" (quem o Melhor Envio acabou de confirmar não precisa da
+ *  pergunta), e enfileirar ANTES de reenviar a fila (o e-mail novo já sai
+ *  nesta mesma rodada).
  */
 const path = require("node:path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env"), quiet: true });
@@ -34,6 +47,9 @@ const db = require("../lib/db.js");
 const emailPhotos = require("../lib/emailPhotos.js");
 const rastreio = require("../lib/rastreio.js");
 const melhorEnvio = require("../lib/melhorEnvio.js");
+const email = require("../lib/email.js");
+
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3333";
 
 const LOTE = 20;
 
@@ -98,9 +114,65 @@ async function fecharEntregasConfirmadas(){
   return { conferidos: pedidos.length, entregues };
 }
 
+function linkDeAvaliacao(reference){
+  const token = db.garantirTokenDeAvaliacao(reference);
+  return `${CLIENT_ORIGIN}/avaliar.html?pedido=${encodeURIComponent(reference)}#t=${token}`;
+}
+
+function enderecoDe(pedido){
+  try { return JSON.parse(pedido.address_json); } catch { return null; }
+}
+
+function enfileirarConfirmacoesDeRecebimento(agora = Date.now()){
+  let novos = 0;
+  for(const pedido of db.pedidosParaConfirmarRecebimento(agora)){
+    const conteudo = email.formatConfirmarRecebimentoEmail({
+      externalReference: pedido.external_reference,
+      address: enderecoDe(pedido),
+      avaliarUrl: linkDeAvaliacao(pedido.external_reference),
+    });
+    const id = db.enqueueEmail({
+      kind: "confirmar_recebimento",
+      toEmail: pedido.customer_email,
+      orderReference: pedido.external_reference,
+      subject: conteudo.subject,
+      textBody: conteudo.text,
+      htmlBody: conteudo.html,
+    });
+    if(id) novos++;
+  }
+  console.log(`"Seu pedido chegou?": ${novos} novo(s) na fila.`);
+  return novos;
+}
+
+function enfileirarPedidosDeAvaliacao(agora = Date.now()){
+  let novos = 0;
+  for(const pedido of db.pedidosParaPedirAvaliacao(agora)){
+    const conteudo = email.formatPedirAvaliacaoEmail({
+      externalReference: pedido.external_reference,
+      address: enderecoDe(pedido),
+      avaliarUrl: linkDeAvaliacao(pedido.external_reference),
+    });
+    const id = db.enqueueEmail({
+      kind: "pedir_avaliacao",
+      toEmail: pedido.customer_email,
+      orderReference: pedido.external_reference,
+      subject: conteudo.subject,
+      textBody: conteudo.text,
+      htmlBody: conteudo.html,
+    });
+    if(id) novos++;
+  }
+  console.log(`"Como ficaram os laços?": ${novos} novo(s) na fila.`);
+  return novos;
+}
+
 async function main(){
-  await reenviarFilaDeEmail();
   await fecharEntregasConfirmadas();
+  enfileirarConfirmacoesDeRecebimento();
+  enfileirarPedidosDeAvaliacao();
+  await reenviarFilaDeEmail();
+  db.gravarEstado("tarefas_periodicas_em", new Date().toISOString());
 }
 
 if(require.main === module){
@@ -110,4 +182,4 @@ if(require.main === module){
   });
 }
 
-module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas };
+module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao };

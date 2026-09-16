@@ -461,6 +461,68 @@ ensureColumn("two_factor_challenges", "email_code_expires_at", "INTEGER");
 ensureColumn("two_factor_challenges", "email_code_attempts", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("two_factor_challenges", "email_code_sent_at", "INTEGER");
 
+/* =========================================================================
+   AVALIAÇÕES DE PRODUTO
+   -------------------------------------------------------------------------
+   Uma avaliação por produto por pedido (índice único) — reenviar o
+   formulário substitui a pendente em vez de duplicar.
+
+   ⚠️ Nasce SEMPRE 'pendente' e só aparece no site depois que a lojista
+   publica pelo painel: é texto (e às vezes foto de criança) enviado por
+   qualquer pessoa com o link.
+
+   Nome exibido é só o primeiro nome + cidade/UF, COPIADOS do pedido na hora
+   de gravar: a vitrine nunca precisa ler address_json (que tem CPF,
+   telefone e endereço completo) para montar a seção da home.
+
+   Fotos em tabela própria, e não em product_photos: a rota pública de foto
+   de produto serve qualquer id, e foto de avaliação não pode ser acessível
+   por link antes de publicada.
+========================================================================= */
+db.exec(`
+  CREATE TABLE IF NOT EXISTS review_photos (
+    id          TEXT PRIMARY KEY,
+    mime_type   TEXT NOT NULL,
+    data        BLOB NOT NULL,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reviews (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_reference     TEXT NOT NULL,
+    product_id          INTEGER NOT NULL,
+    rating              INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment             TEXT,
+    photo_id            TEXT REFERENCES review_photos(id) ON DELETE SET NULL,
+    photo_consent_at    INTEGER,
+    status              TEXT NOT NULL DEFAULT 'pendente'
+                        CHECK (status IN ('pendente', 'publicada', 'oculta')),
+    customer_first_name TEXT,
+    customer_city       TEXT,
+    created_at          INTEGER NOT NULL,
+    published_at        INTEGER
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_pedido_produto
+    ON reviews(order_reference, product_id);
+  CREATE INDEX IF NOT EXISTS idx_reviews_publicadas
+    ON reviews(status, published_at DESC);
+
+  -- Uma linha por chave. Hoje só guarda a última rodada do cron
+  -- (tarefas_periodicas_em), para o painel denunciar quando o agendamento
+  -- no hPanel não existe ou parou.
+  CREATE TABLE IF NOT EXISTS app_state (
+    chave       TEXT PRIMARY KEY,
+    valor       TEXT,
+    updated_at  INTEGER NOT NULL
+  );
+`);
+// Token do link "avaliar / confirmar recebimento" mandado por e-mail. Vale
+// sem login de propósito: quem recebe o e-mail do pedido é quem comprou, e
+// pedir login ali derruba a taxa de resposta. Criado sob demanda
+// (garantirTokenDeAvaliacao), nunca junto com o pedido.
+ensureColumn("orders", "review_token", "TEXT");
+
 // Garante que o cupom que já existia fixo no código (BEMVINDA10) continua
 // funcionando depois da migração pra banco — só insere se a tabela
 // coupons estiver vazia (banco novo, ou banco de antes dessa tabela
@@ -1355,6 +1417,189 @@ function deleteInstagramToken() {
    Enfileirar antes de enviar é o que separa "o e-mail não saiu" de "ninguém
    nunca vai saber que não saiu". A tentativa imediata cobre o caso normal; o
    que falhar fica gravado com o erro e é retentado pelo cron. */
+/* ---------- Avaliações ---------- */
+const stmtGetReviewToken = db.prepare(`SELECT review_token FROM orders WHERE external_reference = ?`);
+const stmtSetReviewToken = db.prepare(
+  `UPDATE orders SET review_token = ? WHERE external_reference = ? AND review_token IS NULL`
+);
+function garantirTokenDeAvaliacao(ref){
+  const atual = stmtGetReviewToken.get(ref)?.review_token;
+  if(atual) return atual;
+  stmtSetReviewToken.run(crypto.randomBytes(32).toString("hex"), ref);
+  // Relê em vez de devolver o que gerou: se duas chamadas correrem juntas,
+  // o `AND review_token IS NULL` deixa só a primeira gravar, e as duas
+  // precisam devolver o MESMO token.
+  return stmtGetReviewToken.get(ref)?.review_token || null;
+}
+
+function tokenDeAvaliacaoConfere(ref, token){
+  const certo = stmtGetReviewToken.get(ref)?.review_token;
+  if(!certo || typeof token !== "string" || token.length !== certo.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(certo), Buffer.from(token));
+}
+
+const stmtUpsertReview = db.prepare(`
+  INSERT INTO reviews
+    (order_reference, product_id, rating, comment, photo_id, photo_consent_at,
+     status, customer_first_name, customer_city, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?)
+  ON CONFLICT(order_reference, product_id) DO UPDATE SET
+    rating = excluded.rating,
+    comment = excluded.comment,
+    photo_id = excluded.photo_id,
+    photo_consent_at = excluded.photo_consent_at,
+    created_at = excluded.created_at
+  WHERE reviews.status = 'pendente'
+`);
+/* Devolve true se gravou. Avaliação já publicada ou oculta NÃO é
+   reescrita: senão a cliente trocaria, pelo mesmo link, um texto que a
+   lojista já aprovou por outro que ela nunca leu. */
+function salvarAvaliacao({ orderReference, productId, rating, comment, photoId, photoConsentAt, firstName, city }){
+  const r = stmtUpsertReview.run(
+    orderReference, productId, rating, comment || null, photoId || null,
+    photoConsentAt || null, firstName || null, city || null, Date.now()
+  );
+  return r.changes > 0;
+}
+
+const stmtAvaliacoesDoPedido = db.prepare(
+  `SELECT product_id, rating, comment, status, photo_id FROM reviews WHERE order_reference = ?`
+);
+function avaliacoesDoPedido(ref){ return stmtAvaliacoesDoPedido.all(ref); }
+
+const stmtInsertReviewPhoto = db.prepare(
+  `INSERT INTO review_photos (id, mime_type, data, created_at) VALUES (?, ?, ?, ?)`
+);
+function insertReviewPhoto(id, mimeType, buffer){ stmtInsertReviewPhoto.run(id, mimeType, buffer, Date.now()); }
+
+// Pública: só entrega a foto se ALGUMA avaliação publicada a usa.
+const stmtFotoPublicada = db.prepare(`
+  SELECT p.mime_type, p.data FROM review_photos p
+    JOIN reviews r ON r.photo_id = p.id AND r.status = 'publicada'
+   WHERE p.id = ? LIMIT 1
+`);
+function getReviewPhotoPublicada(id){ return stmtFotoPublicada.get(id) || null; }
+
+// Painel: a lojista precisa ver a foto antes de decidir publicar.
+const stmtFotoQualquer = db.prepare(`SELECT mime_type, data FROM review_photos WHERE id = ?`);
+function getReviewPhoto(id){ return stmtFotoQualquer.get(id) || null; }
+
+const stmtListaAvaliacoesPainel = db.prepare(`
+  SELECT id, order_reference, product_id, rating, comment, photo_id, photo_consent_at,
+         status, customer_first_name, customer_city, created_at, published_at
+    FROM reviews
+   ORDER BY CASE status WHEN 'pendente' THEN 0 ELSE 1 END, created_at DESC
+   LIMIT 500
+`);
+function listarAvaliacoesPainel(){ return stmtListaAvaliacoesPainel.all(); }
+
+const stmtStatusAvaliacao = db.prepare(`
+  UPDATE reviews SET status = ?,
+         published_at = CASE WHEN ? = 'publicada' THEN COALESCE(published_at, ?) ELSE published_at END
+   WHERE id = ?
+`);
+function mudarStatusAvaliacao(id, status){
+  return stmtStatusAvaliacao.run(status, status, Date.now(), id).changes > 0;
+}
+
+const stmtTiraFotoDaAvaliacao = db.prepare(`UPDATE reviews SET photo_id = NULL WHERE id = ?`);
+const stmtFotoDaAvaliacao = db.prepare(`SELECT photo_id FROM reviews WHERE id = ?`);
+const stmtApagaFotoOrfa = db.prepare(`
+  DELETE FROM review_photos WHERE id = ?
+     AND NOT EXISTS (SELECT 1 FROM reviews WHERE photo_id = ?)
+`);
+/* "Publicar sem a foto" e "Excluir" apagam os bytes de verdade, não só o
+   vínculo: foto de criança recusada pela lojista não fica guardada no banco
+   (nem no backup) sem motivo. */
+function tirarFotoDaAvaliacao(id){
+  const photoId = stmtFotoDaAvaliacao.get(id)?.photo_id;
+  stmtTiraFotoDaAvaliacao.run(id);
+  if(photoId) stmtApagaFotoOrfa.run(photoId, photoId);
+}
+function apagarFotoOrfaDeAvaliacao(photoId){ stmtApagaFotoOrfa.run(photoId, photoId); }
+const stmtApagaAvaliacao = db.prepare(`DELETE FROM reviews WHERE id = ?`);
+function excluirAvaliacao(id){
+  const photoId = stmtFotoDaAvaliacao.get(id)?.photo_id;
+  const apagou = stmtApagaAvaliacao.run(id).changes > 0;
+  if(photoId) stmtApagaFotoOrfa.run(photoId, photoId);
+  return apagou;
+}
+
+const stmtAvaliacoesPublicadas = db.prepare(`
+  SELECT id, product_id, rating, comment, photo_id, customer_first_name, customer_city, published_at
+    FROM reviews WHERE status = 'publicada'
+   ORDER BY published_at DESC LIMIT ?
+`);
+function avaliacoesPublicadas(limite = 6){ return stmtAvaliacoesPublicadas.all(limite); }
+
+const stmtNotaMedia = db.prepare(
+  `SELECT COUNT(*) AS total, AVG(rating) AS media FROM reviews WHERE status = 'publicada'`
+);
+function notaMedia(){
+  const r = stmtNotaMedia.get();
+  return { total: r?.total || 0, media: r?.total ? r.media : null };
+}
+
+const stmtNotaPorPedido = db.prepare(`
+  SELECT order_reference, ROUND(AVG(rating), 1) AS media, COUNT(*) AS total
+    FROM reviews GROUP BY order_reference
+`);
+function notasPorPedido(){
+  const mapa = new Map();
+  for(const r of stmtNotaPorPedido.all()) mapa.set(r.order_reference, { media: r.media, total: r.total });
+  return mapa;
+}
+
+const stmtContaPendentes = db.prepare(`SELECT COUNT(*) AS n FROM reviews WHERE status = 'pendente'`);
+function contarAvaliacoesPendentes(){ return stmtContaPendentes.get()?.n || 0; }
+
+/* ---------- Seleção do cron ---------- */
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+/* Postados há mais que o prazo do frete + folga, e ainda não entregues.
+   ⚠️ A janela de 45 dias é a trava contra disparo em massa no primeiro
+   deploy: sem ela, todo pedido antigo "esquecido" como postado receberia um
+   "seu pedido chegou?" meses depois. */
+const stmtPostadosAntigos = db.prepare(`
+  SELECT external_reference, customer_email, shipping_json, shipped_at, address_json
+    FROM orders
+   WHERE status = 'pago' AND fulfillment_status = 'postado'
+     AND customer_email IS NOT NULL AND customer_email <> ''
+     AND shipped_at IS NOT NULL AND shipped_at >= ?
+`);
+function pedidosParaConfirmarRecebimento(agora = Date.now(), folgaDias = 3){
+  return stmtPostadosAntigos.all(agora - 45 * DIA_MS).filter(p => {
+    let prazo = 7;
+    try{
+      const dias = Number(JSON.parse(p.shipping_json)?.delivery_time);
+      if(Number.isFinite(dias) && dias > 0) prazo = dias;
+    }catch{}
+    return p.shipped_at + (prazo + folgaDias) * DIA_MS <= agora;
+  });
+}
+
+// Mesma trava, 30 dias: só pede avaliação de quem recebeu há pouco.
+const stmtEntreguesSemAvaliacao = db.prepare(`
+  SELECT o.external_reference, o.customer_email, o.items_json, o.address_json
+    FROM orders o
+   WHERE o.status = 'pago' AND o.fulfillment_status = 'entregue'
+     AND o.customer_email IS NOT NULL AND o.customer_email <> ''
+     AND COALESCE(o.delivered_at, o.updated_at) BETWEEN ? AND ?
+     AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.order_reference = o.external_reference)
+`);
+function pedidosParaPedirAvaliacao(agora = Date.now(), esperaDias = 2){
+  return stmtEntreguesSemAvaliacao.all(agora - 30 * DIA_MS, agora - esperaDias * DIA_MS);
+}
+
+/* ---------- Estado da aplicação ---------- */
+const stmtGravaEstado = db.prepare(`
+  INSERT INTO app_state (chave, valor, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, updated_at = excluded.updated_at
+`);
+const stmtLeEstado = db.prepare(`SELECT valor, updated_at FROM app_state WHERE chave = ?`);
+function gravarEstado(chave, valor){ stmtGravaEstado.run(chave, valor == null ? null : String(valor), Date.now()); }
+function lerEstado(chave){ return stmtLeEstado.get(chave) || null; }
+
 const MAX_TENTATIVAS_EMAIL = 5;
 
 const stmtEnfileiraEmail = db.prepare(`
@@ -1469,6 +1714,26 @@ function hashCurto(texto){
 }
 
 module.exports = {
+  garantirTokenDeAvaliacao,
+  tokenDeAvaliacaoConfere,
+  salvarAvaliacao,
+  avaliacoesDoPedido,
+  insertReviewPhoto,
+  getReviewPhotoPublicada,
+  getReviewPhoto,
+  listarAvaliacoesPainel,
+  mudarStatusAvaliacao,
+  tirarFotoDaAvaliacao,
+  excluirAvaliacao,
+  apagarFotoOrfaDeAvaliacao,
+  avaliacoesPublicadas,
+  notaMedia,
+  notasPorPedido,
+  contarAvaliacoesPendentes,
+  pedidosParaConfirmarRecebimento,
+  pedidosParaPedirAvaliacao,
+  gravarEstado,
+  lerEstado,
   catalogVersion,
   enqueueEmail,
   deleteOutboxEntry,
