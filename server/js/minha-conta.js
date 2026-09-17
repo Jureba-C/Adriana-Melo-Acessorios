@@ -46,13 +46,45 @@
   });
   window.addEventListener("hashchange", () => abrirAba(location.hash.slice(1), { atualizarHash: false }));
 
+  const temporizadores = new WeakMap();
   function mensagem(el, texto, tipo){
     if(!el) return;
-    el.textContent = texto;
-    el.classList.remove("d-none", "is-ok", "is-erro");
+    clearTimeout(temporizadores.get(el));
+    el.innerHTML = "";
+    const icone = document.createElement("i");
+    icone.className = `bi ${tipo === "ok" ? "bi-check2-circle" : "bi-exclamation-circle-fill"}`;
+    icone.setAttribute("aria-hidden", "true");
+    const span = document.createElement("span");
+    span.textContent = texto;
+    el.append(icone, span);
+    el.classList.remove("d-none", "is-ok", "is-erro", "is-sumindo");
     el.classList.add(tipo === "ok" ? "is-ok" : "is-erro");
+    if(tipo === "ok"){
+      temporizadores.set(el, setTimeout(() => {
+        el.classList.add("is-sumindo");
+        temporizadores.set(el, setTimeout(() => el.classList.add("d-none"), 450));
+      }, 4000));
+    }
   }
-  function limpar(el){ el?.classList.add("d-none"); }
+  function limpar(el){
+    if(!el) return;
+    clearTimeout(temporizadores.get(el));
+    el.classList.add("d-none");
+  }
+
+  document.querySelectorAll(".conta-senha-olho").forEach(botao => {
+    botao.addEventListener("click", () => {
+      const campo = botao.parentElement.querySelector("input");
+      const mostrar = campo.type === "password";
+      campo.type = mostrar ? "text" : "password";
+      botao.setAttribute("aria-pressed", String(mostrar));
+      botao.setAttribute("aria-label", mostrar ? "Esconder senha" : "Mostrar senha");
+      botao.querySelector("i").className = `bi ${mostrar ? "bi-eye-slash" : "bi-eye"}`;
+    });
+  });
+  function esconderSenhas(form){
+    form.querySelectorAll(".conta-senha-olho[aria-pressed=\"true\"]").forEach(b => b.click());
+  }
 
   async function enviar(url, metodo, corpo){
     const res = await fetch(url, {
@@ -93,14 +125,49 @@
     msg: document.getElementById("perfilMsg"),
     salvar: document.getElementById("perfilSalvar"),
     emailAtual: document.getElementById("emailAtual"),
+    avatar: document.getElementById("perfilAvatar"),
+    cabNome: document.getElementById("perfilCabecalhoNome"),
+    cabEmail: document.getElementById("perfilCabecalhoEmail"),
+    cabDesde: document.getElementById("perfilCabecalhoDesde"),
   };
+  let salvo = { nome: "", telefone: "", nascimento: "" };
+
+  function iniciais(nome){
+    const partes = String(nome || "").trim().split(/\s+/).filter(Boolean);
+    if(!partes.length) return "·";
+    const primeira = partes[0][0];
+    const ultima = partes.length > 1 ? partes[partes.length - 1][0] : "";
+    return (primeira + ultima).toUpperCase();
+  }
+
+  function valoresAtuais(){
+    return {
+      nome: perfil.nome.value.trim().replace(/\s+/g, " "),
+      telefone: perfil.telefone.value.replace(/\D/g, ""),
+      nascimento: perfil.nascimento.value,
+    };
+  }
+
+  function atualizarBotaoSalvar(){
+    const atual = valoresAtuais();
+    const mudou = atual.nome !== salvo.nome || atual.telefone !== salvo.telefone || atual.nascimento !== salvo.nascimento;
+    perfil.salvar.disabled = !mudou;
+  }
 
   function preencherPerfil(dados){
     perfil.nome.value = dados.name || "";
     perfil.telefone.value = mascaraTelefone(dados.telefone);
     perfil.nascimento.value = dados.nascimento || "";
-    perfil.cpf.textContent = dados.cpfMascarado || "não informado";
+    perfil.cpf.textContent = dados.cpfMascarado || "Não cadastrado";
     perfil.emailAtual.textContent = dados.email || "—";
+    perfil.avatar.textContent = iniciais(dados.name);
+    perfil.cabNome.textContent = dados.name || "Sua conta";
+    perfil.cabEmail.textContent = dados.email || "";
+    perfil.cabDesde.textContent = dados.criadoEm
+      ? `Cliente desde ${new Date(dados.criadoEm).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`
+      : "";
+    salvo = valoresAtuais();
+    atualizarBotaoSalvar();
   }
 
   async function carregarPerfil(){
@@ -122,6 +189,8 @@
   perfil.telefone.addEventListener("input", () => {
     perfil.telefone.value = mascaraTelefone(perfil.telefone.value);
   });
+  perfil.form.addEventListener("input", () => { atualizarBotaoSalvar(); limpar(perfil.msg); });
+  perfil.form.addEventListener("change", atualizarBotaoSalvar);
 
   perfil.form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -131,6 +200,7 @@
       perfil.nome.focus();
       return;
     }
+    if(perfil.salvar.disabled) return;
     comBotao(perfil.salvar, "Salvando...", async () => {
       try{
         const dados = await enviar("/api/auth/perfil", "PUT", {
@@ -139,18 +209,39 @@
           nascimento: perfil.nascimento.value,
         });
         preencherPerfil(dados);
-        mensagem(perfil.msg, "Dados salvos. 💗", "ok");
+        mensagem(perfil.msg, "Dados salvos", "ok");
         window.PLCAuth?.checkSession?.();
       }catch(err){
         mensagem(perfil.msg, err.message, "erro");
       }
-    })();
+    })().then(atualizarBotaoSalvar);
   });
 
   const emailForm = document.getElementById("emailForm");
   const emailNovo = document.getElementById("emailNovo");
   const emailSenha = document.getElementById("emailSenha");
   const emailMsg = document.getElementById("emailMsg");
+  const emailMsgFora = document.getElementById("emailMsgFora");
+  const emailAbrir = document.getElementById("emailAbrir");
+
+  function abrirEmail(aberto){
+    emailForm.hidden = !aberto;
+    emailAbrir.hidden = aberto;
+    emailAbrir.setAttribute("aria-expanded", String(aberto));
+    limpar(emailMsg);
+    if(aberto){
+      limpar(emailMsgFora);
+      emailNovo.focus();
+    }else{
+      emailForm.reset();
+      esconderSenhas(emailForm);
+    }
+  }
+  emailAbrir.addEventListener("click", () => abrirEmail(true));
+  document.getElementById("emailCancelar").addEventListener("click", () => {
+    abrirEmail(false);
+    emailAbrir.focus();
+  });
   emailForm.addEventListener("submit", (e) => {
     e.preventDefault();
     limpar(emailMsg);
@@ -168,9 +259,9 @@
       try{
         const dados = await enviar("/api/auth/email", "PUT", { email: emailNovo.value, senhaAtual: emailSenha.value });
         preencherPerfil(dados);
-        emailNovo.value = "";
-        emailSenha.value = "";
-        mensagem(emailMsg, "Pronto! Use o novo e-mail para entrar. Mandamos um aviso para o e-mail antigo.", "ok");
+        abrirEmail(false);
+        mensagem(emailMsgFora, "E-mail trocado. Use o novo para entrar — avisamos o antigo.", "ok");
+        emailAbrir.focus();
       }catch(err){
         mensagem(emailMsg, err.message, "erro");
       }
@@ -192,6 +283,7 @@
       try{
         const dados = await enviar("/api/auth/senha", "PUT", { senhaAtual: senhaAtual.value, novaSenha: senhaNova.value });
         senhaForm.reset();
+        esconderSenhas(senhaForm);
         const outros = dados.sessoesEncerradas > 0 ? ` Saímos de ${dados.sessoesEncerradas === 1 ? "1 outro aparelho" : `${dados.sessoesEncerradas} outros aparelhos`}.` : "";
         mensagem(senhaMsg, `Senha trocada.${outros}`, "ok");
       }catch(err){

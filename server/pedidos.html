@@ -73,85 +73,172 @@
       </div>
 
       <div id="painelDados" role="tabpanel" aria-labelledby="abaDados" hidden>
+        <div class="conta-perfil">
+          <span class="conta-avatar" id="perfilAvatar" aria-hidden="true">·</span>
+          <div class="conta-perfil-texto">
+            <p class="conta-perfil-nome" id="perfilCabecalhoNome">Sua conta</p>
+            <p class="conta-perfil-email" id="perfilCabecalhoEmail"></p>
+            <p class="conta-perfil-desde" id="perfilCabecalhoDesde"></p>
+          </div>
+        </div>
+
         <form class="account-card conta-form" id="perfilForm" novalidate>
-          <h2 class="conta-form-titulo"><i class="bi bi-person" aria-hidden="true"></i> Dados pessoais</h2>
-          <div class="conta-campo">
-            <label class="form-label" for="perfilNome">Nome</label>
-            <input type="text" class="form-control" id="perfilNome" autocomplete="name" maxlength="80" required>
+          <div class="conta-form-cabeca">
+            <span class="conta-form-icone" aria-hidden="true"><i class="bi bi-person"></i></span>
+            <div>
+              <h2 class="conta-form-titulo">Dados pessoais</h2>
+              <p class="conta-form-sub">Usados para entregar e avisar sobre os seus pedidos.</p>
+            </div>
           </div>
-          <div class="conta-campo">
-            <label class="form-label" for="perfilTelefone">WhatsApp</label>
-            <input type="tel" class="form-control" id="perfilTelefone" autocomplete="tel-national" inputmode="numeric" placeholder="(61) 99999-9999" maxlength="15">
-            <span class="conta-dica">Para avisos do seu pedido. A gente não manda propaganda por aqui.</span>
+
+          <div class="conta-grade">
+            <div class="conta-campo conta-campo-inteiro">
+              <label class="form-label" for="perfilNome">Nome</label>
+              <div class="conta-input-icone">
+                <i class="bi bi-person" aria-hidden="true"></i>
+                <input type="text" class="form-control" id="perfilNome" autocomplete="name" maxlength="80" required>
+              </div>
+            </div>
+            <div class="conta-campo">
+              <label class="form-label" for="perfilTelefone">WhatsApp</label>
+              <div class="conta-input-icone">
+                <i class="bi bi-whatsapp" aria-hidden="true"></i>
+                <input type="tel" class="form-control" id="perfilTelefone" autocomplete="tel-national" inputmode="numeric" placeholder="(61) 99999-9999" maxlength="15" aria-describedby="perfilTelefoneDica">
+              </div>
+              <span class="conta-dica" id="perfilTelefoneDica">Só para avisos do pedido, sem propaganda.</span>
+            </div>
+            <div class="conta-campo">
+              <label class="form-label" for="perfilNascimento">Data de nascimento <span class="conta-opcional">opcional</span></label>
+              <div class="conta-input-icone">
+                <i class="bi bi-gift" aria-hidden="true"></i>
+                <input type="date" class="form-control" id="perfilNascimento" autocomplete="bday" aria-describedby="perfilNascimentoDica">
+              </div>
+            </div>
+            <p class="conta-callout conta-campo-inteiro" id="perfilNascimentoDica"><i class="bi bi-gift" aria-hidden="true"></i><span>No seu aniversário chega um <strong>cupom de presente</strong> por e-mail.</span></p>
+            <div class="conta-campo conta-campo-inteiro">
+              <span class="form-label d-block" id="perfilCpfRotulo">CPF</span>
+              <div class="conta-fixo-campo" aria-labelledby="perfilCpfRotulo">
+                <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                <span id="perfilCpf">—</span>
+              </div>
+              <span class="conta-dica">Para mudar o CPF, <a href="https://wa.me/5561982749808" target="_blank" rel="noopener noreferrer">fale com a gente pelo WhatsApp</a>.</span>
+            </div>
           </div>
-          <div class="conta-campo">
-            <label class="form-label" for="perfilNascimento">Data de nascimento <span class="conta-opcional">(opcional)</span></label>
-            <input type="date" class="form-control" id="perfilNascimento" autocomplete="bday">
-            <span class="conta-dica"><i class="bi bi-gift me-1" aria-hidden="true"></i>No seu aniversário chega um cupom de presente por e-mail.</span>
+
+          <div class="conta-rodape">
+            <p class="conta-msg d-none" id="perfilMsg" role="status"></p>
+            <button type="submit" class="btn-blush" id="perfilSalvar" disabled>Salvar alterações</button>
           </div>
-          <div class="conta-campo">
-            <span class="form-label d-block">CPF</span>
-            <p class="conta-fixo" id="perfilCpf">—</p>
-            <span class="conta-dica">Para mudar o CPF, fale com a gente pelo WhatsApp.</span>
-          </div>
-          <p class="small conta-msg d-none" id="perfilMsg" role="status"></p>
-          <button type="submit" class="btn-blush" id="perfilSalvar">Salvar dados</button>
         </form>
 
-        <form class="account-card conta-form" id="emailForm" novalidate>
-          <h2 class="conta-form-titulo"><i class="bi bi-envelope" aria-hidden="true"></i> E-mail de acesso</h2>
-          <p class="conta-dica mb-3">Atual: <strong id="emailAtual">—</strong></p>
-          <div class="conta-campo">
-            <label class="form-label" for="emailNovo">Novo e-mail</label>
-            <input type="email" class="form-control" id="emailNovo" autocomplete="email" required>
+        <div class="account-card conta-form">
+          <div class="conta-form-cabeca">
+            <span class="conta-form-icone" aria-hidden="true"><i class="bi bi-envelope"></i></span>
+            <div>
+              <h2 class="conta-form-titulo">E-mail de acesso</h2>
+              <p class="conta-form-sub">É com ele que você entra e recebe os avisos.</p>
+            </div>
           </div>
-          <div class="conta-campo">
-            <label class="form-label" for="emailSenha">Sua senha atual</label>
-            <input type="password" class="form-control" id="emailSenha" autocomplete="current-password" required>
+          <div class="conta-email-linha">
+            <span class="conta-email-atual" id="emailAtual">—</span>
+            <button type="button" class="btn-outline-blush btn-sm-blush" id="emailAbrir" aria-expanded="false" aria-controls="emailForm"><i class="bi bi-pencil me-1" aria-hidden="true"></i>Alterar</button>
           </div>
-          <p class="small conta-msg d-none" id="emailMsg" role="status"></p>
-          <button type="submit" class="btn-outline-blush" id="emailSalvar">Trocar e-mail</button>
-        </form>
+          <p class="conta-msg d-none" id="emailMsgFora" role="status"></p>
+          <form class="conta-email-form" id="emailForm" novalidate hidden>
+            <div class="conta-grade">
+              <div class="conta-campo">
+                <label class="form-label" for="emailNovo">Novo e-mail</label>
+                <div class="conta-input-icone">
+                  <i class="bi bi-envelope" aria-hidden="true"></i>
+                  <input type="email" class="form-control" id="emailNovo" autocomplete="email" required>
+                </div>
+              </div>
+              <div class="conta-campo">
+                <label class="form-label" for="emailSenha">Sua senha atual</label>
+                <div class="conta-input-icone conta-senha">
+                  <i class="bi bi-key" aria-hidden="true"></i>
+                  <input type="password" class="form-control" id="emailSenha" autocomplete="current-password" required>
+                  <button type="button" class="conta-senha-olho" aria-label="Mostrar senha" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+                </div>
+              </div>
+            </div>
+            <div class="conta-rodape">
+              <p class="conta-msg d-none" id="emailMsg" role="status"></p>
+              <button type="button" class="btn-outline-blush" id="emailCancelar">Cancelar</button>
+              <button type="submit" class="btn-blush" id="emailSalvar">Trocar e-mail</button>
+            </div>
+          </form>
+        </div>
       </div>
 
       <div id="painelSeguranca" role="tabpanel" aria-labelledby="abaSeguranca" hidden>
         <form class="account-card conta-form" id="senhaForm" novalidate>
-          <h2 class="conta-form-titulo"><i class="bi bi-key" aria-hidden="true"></i> Trocar senha</h2>
-          <div class="conta-campo">
-            <label class="form-label" for="senhaAtual">Senha atual</label>
-            <input type="password" class="form-control" id="senhaAtual" autocomplete="current-password" required>
+          <div class="conta-form-cabeca">
+            <span class="conta-form-icone" aria-hidden="true"><i class="bi bi-key"></i></span>
+            <div>
+              <h2 class="conta-form-titulo">Trocar senha</h2>
+              <p class="conta-form-sub">Ao trocar, saímos da sua conta nos outros aparelhos.</p>
+            </div>
           </div>
-          <div class="conta-campo">
-            <label class="form-label" for="senhaNova">Nova senha</label>
-            <input type="password" class="form-control" id="senhaNova" autocomplete="new-password" minlength="8" maxlength="72" required>
-            <span class="conta-dica">Pelo menos 8 caracteres.</span>
+          <div class="conta-grade">
+            <div class="conta-campo conta-campo-inteiro">
+              <label class="form-label" for="senhaAtual">Senha atual</label>
+              <div class="conta-input-icone conta-senha">
+                <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                <input type="password" class="form-control" id="senhaAtual" autocomplete="current-password" required>
+                <button type="button" class="conta-senha-olho" aria-label="Mostrar senha" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
+            <div class="conta-campo">
+              <label class="form-label" for="senhaNova">Nova senha</label>
+              <div class="conta-input-icone conta-senha">
+                <i class="bi bi-key" aria-hidden="true"></i>
+                <input type="password" class="form-control" id="senhaNova" autocomplete="new-password" minlength="8" maxlength="72" required aria-describedby="senhaNovaDica">
+                <button type="button" class="conta-senha-olho" aria-label="Mostrar senha" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </div>
+              <span class="conta-dica" id="senhaNovaDica">Pelo menos 8 caracteres.</span>
+            </div>
+            <div class="conta-campo">
+              <label class="form-label" for="senhaConfirma">Repita a nova senha</label>
+              <div class="conta-input-icone conta-senha">
+                <i class="bi bi-key" aria-hidden="true"></i>
+                <input type="password" class="form-control" id="senhaConfirma" autocomplete="new-password" required>
+                <button type="button" class="conta-senha-olho" aria-label="Mostrar senha" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
           </div>
-          <div class="conta-campo">
-            <label class="form-label" for="senhaConfirma">Repita a nova senha</label>
-            <input type="password" class="form-control" id="senhaConfirma" autocomplete="new-password" required>
+          <div class="conta-rodape">
+            <p class="conta-msg d-none" id="senhaMsg" role="status"></p>
+            <button type="submit" class="btn-blush" id="senhaSalvar">Trocar senha</button>
           </div>
-          <p class="small conta-msg d-none" id="senhaMsg" role="status"></p>
-          <button type="submit" class="btn-blush" id="senhaSalvar">Trocar senha</button>
         </form>
 
         <div class="account-card conta-form">
-          <h2 class="conta-form-titulo"><i class="bi bi-shield-check" aria-hidden="true"></i> Aparelhos conectados</h2>
-          <p class="conta-dica mb-3">Entrou num computador emprestado e esqueceu de sair? Encerre o acesso em todos os outros aparelhos. Este continua conectado.</p>
-          <p class="small conta-msg d-none" id="sairOutrosMsg" role="status"></p>
-          <button type="button" class="btn-outline-blush" id="sairOutrosBtn"><i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Sair dos outros aparelhos</button>
+          <div class="conta-form-cabeca">
+            <span class="conta-form-icone" aria-hidden="true"><i class="bi bi-shield-check"></i></span>
+            <div>
+              <h2 class="conta-form-titulo">Aparelhos conectados</h2>
+              <p class="conta-form-sub">Entrou num computador emprestado e esqueceu de sair? Encerre o acesso nos outros aparelhos — este continua conectado.</p>
+            </div>
+          </div>
+          <div class="conta-rodape">
+            <p class="conta-msg d-none" id="sairOutrosMsg" role="status"></p>
+            <button type="button" class="btn-outline-blush" id="sairOutrosBtn">Sair dos outros aparelhos</button>
+          </div>
         </div>
 
-      <div id="accountDanger" class="account-danger mt-4 pt-4">
-        <h2 class="section-title" style="font-size:1.1rem">Privacidade e dados</h2>
-        <p class="section-sub mb-3" style="font-size:.88rem">
-          Você pode excluir sua conta a qualquer momento. Seus dados pessoais (login, endereço e
-          telefone) são apagados. O histórico de compras é mantido de forma anonimizada, apenas
-          pelo tempo que a lei exige guardar registros fiscais. Esta ação é permanente.
-        </p>
-        <button type="button" class="btn-outline-danger" id="deleteAccountBtn">
-          <i class="bi bi-trash3 me-1"></i>Excluir minha conta
-        </button>
-      </div>
+        <div id="accountDanger" class="account-card conta-form conta-perigo">
+          <div class="conta-form-cabeca">
+            <span class="conta-form-icone" aria-hidden="true"><i class="bi bi-trash3"></i></span>
+            <div>
+              <h2 class="conta-form-titulo">Excluir minha conta</h2>
+              <p class="conta-form-sub">Seus dados pessoais (login, endereço e telefone) são apagados. O histórico de compras fica anonimizado, só pelo tempo que a lei exige. Não dá para desfazer.</p>
+            </div>
+          </div>
+          <div class="conta-rodape">
+            <button type="button" class="btn-outline-danger" id="deleteAccountBtn"><i class="bi bi-trash3 me-1"></i>Excluir minha conta</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
