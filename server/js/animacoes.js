@@ -31,143 +31,6 @@
     else setTimeout(uma, 1200);
   }
 
-  function fontesProntas() {
-    if (!document.fonts || !document.fonts.ready) return Promise.resolve();
-    return Promise.race([
-      document.fonts.ready,
-      new Promise((r) => setTimeout(r, 600)),
-    ]);
-  }
-
-  function criarBlocoDeMarcador(titulo) {
-    const bloco = document.createElement("span");
-    bloco.className = "hero-bloco";
-    bloco.setAttribute("aria-hidden", "true");
-    titulo.insertBefore(bloco, titulo.firstChild);
-    return bloco;
-  }
-
-  function entradaDoTitulo(titulo, split) {
-    const palavras = split.words;
-    const destaque = titulo.querySelector("em");
-    const linha = gsap.timeline();
-
-    gsap.set(titulo, { opacity: 1 });
-
-    const podeMarcarTexto = destaque && destaque.getClientRects().length === 1;
-    let bloco = null;
-    let larguraFinal = 0;
-
-    if (podeMarcarTexto) {
-      const CORPO = parseFloat(getComputedStyle(titulo).fontSize) || 16;
-      const recuo = 0.2 * CORPO + 0.04 * CORPO;
-      const a = destaque.getBoundingClientRect();
-      const t = titulo.getBoundingClientRect();
-      larguraFinal = a.width;
-      bloco = criarBlocoDeMarcador(titulo);
-      titulo.classList.add("esta-digitando");
-      gsap.set(bloco, {
-        left: a.left - t.left, top: a.top - t.top + recuo,
-        width: 0, height: a.height - recuo,
-        backgroundColor: "var(--blush-150)", opacity: 1,
-      });
-    }
-
-    gsap.set(palavras, { opacity: 0, y: 14 });
-
-    const duracaoPalavras = 0.5;
-    const staggerPalavras = 0.055;
-    linha.to(palavras, {
-      opacity: 1, y: 0, duration: duracaoPalavras, stagger: staggerPalavras, ease: "power3.out",
-    }, 0);
-
-    if (bloco) {
-      const inicioDoTraco = duracaoPalavras + staggerPalavras * (palavras.length - 1) - 0.25;
-      linha.to(bloco, { width: larguraFinal, duration: 0.4, ease: "power2.inOut" }, Math.max(inicioDoTraco, 0));
-      linha.call(() => {
-        titulo.classList.remove("esta-digitando");
-        bloco.remove();
-        split.revert();
-      });
-    } else {
-      linha.call(() => split.revert());
-    }
-
-    return linha;
-  }
-
-  function entradaDoHero() {
-    const hero = document.querySelector(".hero");
-    if (!hero) return;
-
-    const titulo = hero.querySelector(".hero-title");
-    const arte = hero.querySelector(".hero-art");
-    const lacos = Array.from(hero.querySelectorAll(".hero-art .floaty"));
-    const texto = [
-      hero.querySelector(".hero-lead"),
-      ...hero.querySelectorAll(".hero .d-flex.flex-wrap > *"),
-      ...hero.querySelectorAll(".hero-stats > div"),
-    ].filter(Boolean);
-
-    const icones = Array.from(hero.querySelectorAll(".hero-stat-icone"));
-    const contadores = Array.from(hero.querySelectorAll(".hero-stats [data-contar]"));
-    const formatar = (el, valor) => {
-      const casas = Number(el.dataset.casas) || 0;
-      const texto = valor.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
-      el.textContent = `${el.dataset.prefixo || ""}${texto}${el.dataset.sufixo || ""}`;
-    };
-    const finais = contadores.map((el) => el.textContent);
-
-    if (titulo) gsap.set(titulo, { opacity: 0 });
-    if (icones.length) gsap.set(icones, { scale: 0.4, opacity: 0 });
-    contadores.forEach((el) => formatar(el, 0));
-    if (texto.length) gsap.set(texto, { opacity: 0, y: 18 });
-    if (arte) gsap.set(arte, { opacity: 0, scale: 0.96 });
-    if (lacos.length) gsap.set(lacos, { opacity: 0 });
-
-    fontesProntas().then(() => {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-
-      let split = null;
-      if (window.SplitText && titulo) {
-        gsap.registerPlugin(SplitText);
-        try {
-          split = new SplitText(titulo, { type: "words" });
-        } catch (e) {
-          split = null;
-        }
-      }
-
-      if (split && split.words.length) {
-        tl.add(entradaDoTitulo(titulo, split), 0);
-      } else if (titulo) {
-        tl.to(titulo, { opacity: 1, duration: 0.8 });
-      }
-
-      if (arte) tl.to(arte, { opacity: 1, scale: 1, duration: 1.1 }, 0.15);
-      if (texto.length) {
-        tl.to(texto, { opacity: 1, y: 0, duration: 0.7, stagger: 0.07 }, 0.35);
-      }
-      if (icones.length) {
-        tl.to(icones, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(2.2)", stagger: 0.12 }, 0.75);
-      }
-      contadores.forEach((el, i) => {
-        const alvo = Number(el.dataset.contar) || 0;
-        const estado = { v: 0 };
-        tl.to(estado, {
-          v: alvo,
-          duration: 1.4,
-          ease: "power2.out",
-          onUpdate: () => formatar(el, Number(el.dataset.casas) ? estado.v : Math.round(estado.v)),
-          onComplete: () => { el.textContent = finais[i]; },
-        }, 0.8 + i * 0.1);
-      });
-      if (lacos.length) {
-        tl.to(lacos, { opacity: 1, duration: 0.6, stagger: 0.06 }, 0.5);
-      }
-    });
-  }
-
   /* ⚠️ fromTo, NUNCA from. Com ScrollTrigger, o from() guarda o valor atual
      como destino e o refresh o relê depois de já ter zerado o elemento — o
      tween passa a animar de zero para zero. */
@@ -235,12 +98,8 @@
     });
   }
 
-  /* ⚠️ Cada alvo aqui foi escolhido por NÃO ter transform próprio no CSS —
-     dois donos do mesmo transform se cancelam. Não use .hero-photo-wrap: ela
-     tem translate(-50%,-50%) fixo. */
   function camadasComParallax() {
     const camadas = [
-      [".hero-flutuantes", 90],
       ["#historia .instagram-feed-card", -46],
     ];
 
@@ -568,33 +427,6 @@
       );
     }
   }
-
-  function entradaDoHeroSemMovimento() {
-    const hero = document.querySelector(".hero");
-    if (!hero) return;
-    const titulo = hero.querySelector(".hero-title");
-    const arte = hero.querySelector(".hero-art");
-    const lacos = hero.querySelectorAll(".hero-art .floaty");
-    const texto = [
-      hero.querySelector(".hero-lead"),
-      ...hero.querySelectorAll(".hero .d-flex.flex-wrap > *"),
-      ...hero.querySelectorAll(".hero-stats > div"),
-    ].filter(Boolean);
-    const icones = hero.querySelectorAll(".hero-stat-icone");
-    gsap.set([titulo, arte, ...lacos, ...texto, ...icones].filter(Boolean), { clearProps: "opacity,transform" });
-    hero.querySelectorAll(".hero-stats [data-contar]").forEach((el) => {
-      const casas = Number(el.dataset.casas) || 0;
-      const valor = Number(el.dataset.contar) || 0;
-      el.textContent = `${el.dataset.prefixo || ""}${valor.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}${el.dataset.sufixo || ""}`;
-    });
-  }
-
-  mm.add("(prefers-reduced-motion: no-preference)", () => {
-    entradaDoHero();
-  });
-  mm.add("(prefers-reduced-motion: reduce)", () => {
-    entradaDoHeroSemMovimento();
-  });
 
   function fitaDasGarantias({ animar }) {
     const grade = document.querySelector(".garantias");
