@@ -412,8 +412,9 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   color:var(--ink-soft);
 }
 .hero-title{
-  font-weight:600; font-size:clamp(2.35rem, 4.6vw, 3.55rem); line-height:1.04; letter-spacing:-.025em;
-  color:var(--ink); margin:0; max-width:13ch;
+  font-weight:600; font-size:clamp(2.2rem, 3.4vw, 3.05rem); line-height:1.06; letter-spacing:-.025em;
+  text-wrap:balance;
+  color:var(--ink); margin:0; max-width:16ch;
 }
 .hero-title em{
   font-style:italic; font-weight:500; color:var(--blush-700);
@@ -508,7 +509,7 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .floaty.f10{ top:40%;  right:0;   width:28px; color:var(--blush-300); animation-delay:3.6s; }
 @keyframes floaty{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-16px) rotate(6deg);} }
 
-.hero-carrossel{ position:relative; z-index:1; width:min(100%, 420px); margin-left:auto; }
+.hero-carrossel{ position:relative; z-index:1; width:min(100%, 420px); margin:0 auto; }
 .hero-quadro{
   position:relative; z-index:1;
   background:var(--white); padding:12px 12px 14px;
@@ -571,12 +572,14 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   .hero-acoes{ order:6; }
   .hero-stats{ order:7; max-width:none; }
   .hero-carrossel{ margin:0 auto; }
-  .floaty.f3, .floaty.f5, .floaty.f8, .floaty.f9, .floaty.f10{ display:none; }
-  .floaty.f1{ top:4%;    left:1%;  width:34px; }
-  .floaty.f2{ top:2%;    left:42%; width:24px; }
-  .floaty.f4{ bottom:6%; left:2%;  width:28px; }
-  .floaty.f6{ top:5%;    right:1%; width:30px; }
-  .floaty.f7{ bottom:3%; right:2%; width:26px; }
+  .floaty.f3, .floaty.f8, .floaty.f9{ display:none; }
+  .floaty.f1{ top:5%;    left:2%;   width:38px; }
+  .floaty.f2{ top:3%;    left:46%;  width:26px; }
+  .floaty.f4{ bottom:8%; left:3%;   width:30px; }
+  .floaty.f5{ top:34%;   right:3%;  left:auto; bottom:auto; width:34px; }
+  .floaty.f6{ top:6%;    right:2%;  width:32px; }
+  .floaty.f7{ bottom:4%; right:3%;  width:28px; }
+  .floaty.f10{ bottom:12%; left:28%; top:auto; right:auto; width:24px; }
 }
 @media (min-width: 576px) and (max-width: 991.98px){
   .hero-lead{ max-width:560px; }
@@ -596,10 +599,14 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   .hero-quadro-badge{ font-size:.95rem; right:-8px; bottom:8px; padding:.3rem .6rem .34rem; }
   .hero-quadro-badge i{ font-size:.7rem; }
   .hero-controles{ margin-top:1rem; }
-  .floaty.f2, .floaty.f4{ display:none; }
-  .floaty.f1{ top:1%; left:0; width:26px; }
-  .floaty.f6{ top:3%; right:0; width:22px; }
-  .floaty.f7{ bottom:1%; right:0; width:22px; }
+  .floaty.f3, .floaty.f8, .floaty.f9{ display:none; }
+  .floaty.f1{ top:7%;    left:3%;   width:34px; }
+  .floaty.f2{ top:4%;    right:5%;  left:auto; width:26px; }
+  .floaty.f4{ top:32%;   left:2%;   bottom:auto; width:28px; }
+  .floaty.f5{ top:30%;   right:3%;  left:auto; bottom:auto; width:32px; }
+  .floaty.f6{ bottom:26%; right:2%; top:auto;  width:30px; }
+  .floaty.f7{ bottom:8%; right:4%;  width:26px; }
+  .floaty.f10{ bottom:10%; left:3%; top:auto; right:auto; width:24px; }
   .hero-stats{ margin-top:1.9rem; padding:.85rem .15rem; max-width:none; }
   .hero-stat{ padding:0 .4rem; }
   .hero-stat + .hero-stat::after{ display:none; }
