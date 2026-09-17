@@ -342,25 +342,6 @@
     return tl;
   }
 
-  /* ⚠️ Inclina os GRUPOS de dentro, não a faixa nem o track: o track já é dono
-     do transform pelo keyframe scrollx, e inclinar o fundo abre um vão
-     triangular nos cantos. */
-  function marqueeReativo() {
-    const grupos = gsap.utils.toArray(".plc-marquee-group");
-    if (!grupos.length) return;
-
-    const inclinar = gsap.quickTo(grupos, "skewY", { duration: 0.5, ease: "power3" });
-    let parada;
-
-    return ScrollTrigger.create({
-      onUpdate(self) {
-        inclinar(gsap.utils.clamp(-2.5, 2.5, self.getVelocity() / 900));
-        clearTimeout(parada);
-        parada = setTimeout(() => inclinar(0), 140);
-      },
-    });
-  }
-
   let gatilhosDaVitrine = [];
 
   const DOBRA = 0.88;
@@ -978,13 +959,11 @@
       entradaDoRodape();
       entradaDosTitulos();
       camadasComParallax();
-      const gatilhoDaFaixa = marqueeReativo();
       const gatilhoDaFita = fitaGuia();
       animarVitrine();
       document.addEventListener("vitrine:render", animarVitrine);
       return () => {
         document.removeEventListener("vitrine:render", animarVitrine);
-        if (gatilhoDaFaixa) gatilhoDaFaixa.kill();
         if (gatilhoDaFita) gatilhoDaFita.kill();
       };
     });
