@@ -32,7 +32,10 @@
  *     fila). Só entram pedidos postados nos últimos 45 dias / entregues nos
  *     últimos 30 — trava para o primeiro deploy não disparar e-mail para
  *     cliente de meses atrás.
- *  4. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
+ *  4. Enfileira o cupom de aniversário para quem cadastrou a data em "Minha
+ *     conta" e faz aniversário hoje (horário de Brasília, a partir das 9h),
+ *     um por ano — a chave da fila é "aniversario:<id>:<ano>".
+ *  5. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
  *     1 hora — é o único sinal de que o agendamento no hPanel sumiu.
  *
  *  A ordem importa: fechar entregas ANTES de escolher quem recebe "seu
@@ -167,10 +170,50 @@ function enfileirarPedidosDeAvaliacao(agora = Date.now()){
   return novos;
 }
 
+function hojeEmBrasilia(agora){
+  const partes = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(agora)).map(p => [p.type, p.value]));
+  return { ano: partes.year, mesDia: `${partes.month}-${partes.day}`, hora: Number(partes.hour) };
+}
+
+// Sem cupom (a lojista apagou o ANIVERSARIO10 no painel) não manda nada: o
+// e-mail prometeria um desconto que o carrinho recusaria.
+function enfileirarCuponsDeAniversario(agora = Date.now()){
+  const cupom = db.getCoupon(db.CUPOM_ANIVERSARIO);
+  const { ano, mesDia, hora } = hojeEmBrasilia(agora);
+  if(!cupom || hora < 9){
+    console.log(`Aniversários: ${cupom ? "antes das 9h, fica para a próxima rodada" : "cupom de aniversário apagado no painel, nada a enviar"}.`);
+    return 0;
+  }
+  let novos = 0;
+  for(const cliente of db.aniversariantesDoDia(mesDia)){
+    const conteudo = email.formatAniversarioEmail({
+      nome: String(cliente.name || "").trim().split(" ")[0],
+      couponCode: cupom.code,
+      percentOff: cupom.percent_off,
+      shopUrl: `${CLIENT_ORIGIN}/index.html#colecoes`,
+      contaUrl: `${CLIENT_ORIGIN}/pedidos.html#dados`,
+    });
+    const id = db.enqueueEmail({
+      kind: "aniversario",
+      toEmail: cliente.email,
+      orderReference: `aniversario:${cliente.id}:${ano}`,
+      subject: conteudo.subject,
+      textBody: conteudo.text,
+      htmlBody: conteudo.html,
+    });
+    if(id) novos++;
+  }
+  console.log(`Aniversários: ${novos} cupom(ns) novo(s) na fila.`);
+  return novos;
+}
+
 async function main(){
   await fecharEntregasConfirmadas();
   enfileirarConfirmacoesDeRecebimento();
   enfileirarPedidosDeAvaliacao();
+  enfileirarCuponsDeAniversario();
   await reenviarFilaDeEmail();
   db.gravarEstado("tarefas_periodicas_em", new Date().toISOString());
 }
@@ -182,4 +225,4 @@ if(require.main === module){
   });
 }
 
-module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao };
+module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao, enfileirarCuponsDeAniversario };

@@ -47,7 +47,7 @@
         ? `<a href="admin.html" class="account-pill${secondaryOnlyDesktop}" aria-label="Painel administrativo">${pill("admin", "Admin")}</a>` : "";
       navAccount.innerHTML = `
         ${adminPill}
-        <a href="pedidos.html" class="account-pill account-pill-primary" aria-label="Meus pedidos">${pill("user", "Olá, " + firstName)}</a>
+        <a href="pedidos.html" class="account-pill account-pill-primary" aria-label="Minha conta">${pill("user", "Olá, " + firstName)}</a>
         <button type="button" class="account-pill${secondaryOnlyDesktop}" id="logoutBtn" aria-label="Sair da conta">${pill("exit", "Sair")}</button>
       `;
       document.getElementById("logoutBtn")?.addEventListener("click", logout);
@@ -55,7 +55,7 @@
     if(navAccountMobile){
       navAccountMobile.innerHTML = `
         ${adminLinkMobile}
-        <a href="pedidos.html" class="plc-nav-link"><i class="bi bi-bag-check me-1"></i>Meus pedidos</a>
+        <a href="pedidos.html" class="plc-nav-link"><i class="bi bi-bag-check me-1"></i>Minha conta</a>
         <button type="button" class="plc-nav-link text-start p-0 border-0 bg-transparent" id="logoutBtnMobile">Sair (${firstName})</button>
       `;
       document.getElementById("logoutBtnMobile")?.addEventListener("click", logout);

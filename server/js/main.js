@@ -1251,7 +1251,7 @@
           </span>
           <span class="so-price">${formatMoney(opt.price)}</span>
         </label>
-      `).join("");
+      `).join("") + `<p class="so-nota"><i class="bi bi-truck me-1" aria-hidden="true"></i>Prazo da transportadora, contado a partir da postagem.</p>`;
 
       shippingOptionsEl.querySelectorAll(".shipping-option").forEach(label => {
         label.addEventListener("click", () => {

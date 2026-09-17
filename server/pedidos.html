@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meus pedidos — Adriana Melo Acessórios</title>
-<meta name="description" content="Acompanhe o histórico dos seus pedidos na Adriana Melo Acessórios.">
+<title>Minha conta — Adriana Melo Acessórios</title>
+<meta name="description" content="Seus pedidos, dados e segurança da conta na Adriana Melo Acessórios.">
 
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; script-src 'self' https://sdk.mercadopago.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data:; connect-src 'self' https://api.mercadopago.com https://viacep.com.br; frame-src https://www.mercadopago.com https://www.mercadopago.com.br; object-src 'none'; form-action 'self'">
 <link rel="icon" href="favicon.ico" sizes="32x32">
@@ -31,11 +31,18 @@
   <div class="container">
     <div class="orders-wrap mx-auto">
       <a href="index.html" class="policy-back"><i class="bi bi-arrow-left"></i> Voltar à loja</a>
-      <div class="mb-4">
+      <div class="mb-3">
         <span class="section-eyebrow"><i class="bi bi-bag-heart"></i> sua conta</span>
-        <h1 class="section-title" style="font-size:1.8rem">Meus pedidos</h1>
+        <h1 class="section-title" style="font-size:1.8rem" id="contaTitulo">Minha conta</h1>
       </div>
 
+      <div class="conta-abas d-none" id="contaAbas" role="tablist" aria-label="Minha conta">
+        <button type="button" class="conta-aba is-ativa" role="tab" id="abaPedidos" aria-controls="painelPedidos" aria-selected="true" data-aba="pedidos"><i class="bi bi-bag-heart" aria-hidden="true"></i><span>Meus pedidos</span></button>
+        <button type="button" class="conta-aba" role="tab" id="abaDados" aria-controls="painelDados" aria-selected="false" tabindex="-1" data-aba="dados"><i class="bi bi-person" aria-hidden="true"></i><span>Meus dados</span></button>
+        <button type="button" class="conta-aba" role="tab" id="abaSeguranca" aria-controls="painelSeguranca" aria-selected="false" tabindex="-1" data-aba="seguranca"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Segurança</span></button>
+      </div>
+
+      <div id="painelPedidos" role="tabpanel" aria-labelledby="abaPedidos">
       <div id="ordersLoading" class="text-center py-5">
         <div class="spinner-border" role="status" style="color:var(--blush-600)">
           <span class="visually-hidden">Carregando pedidos...</span>
@@ -63,7 +70,78 @@
 
       <div id="ordersList" class="orders-list d-none"></div>
 
-      <div id="accountDanger" class="account-danger d-none mt-5 pt-4">
+      </div>
+
+      <div id="painelDados" role="tabpanel" aria-labelledby="abaDados" hidden>
+        <form class="account-card conta-form" id="perfilForm" novalidate>
+          <h2 class="conta-form-titulo"><i class="bi bi-person" aria-hidden="true"></i> Dados pessoais</h2>
+          <div class="conta-campo">
+            <label class="form-label" for="perfilNome">Nome</label>
+            <input type="text" class="form-control" id="perfilNome" autocomplete="name" maxlength="80" required>
+          </div>
+          <div class="conta-campo">
+            <label class="form-label" for="perfilTelefone">WhatsApp</label>
+            <input type="tel" class="form-control" id="perfilTelefone" autocomplete="tel-national" inputmode="numeric" placeholder="(61) 99999-9999" maxlength="15">
+            <span class="conta-dica">Para avisos do seu pedido. A gente não manda propaganda por aqui.</span>
+          </div>
+          <div class="conta-campo">
+            <label class="form-label" for="perfilNascimento">Data de nascimento <span class="conta-opcional">(opcional)</span></label>
+            <input type="date" class="form-control" id="perfilNascimento" autocomplete="bday">
+            <span class="conta-dica"><i class="bi bi-gift me-1" aria-hidden="true"></i>No seu aniversário chega um cupom de presente por e-mail.</span>
+          </div>
+          <div class="conta-campo">
+            <span class="form-label d-block">CPF</span>
+            <p class="conta-fixo" id="perfilCpf">—</p>
+            <span class="conta-dica">Para mudar o CPF, fale com a gente pelo WhatsApp.</span>
+          </div>
+          <p class="small conta-msg d-none" id="perfilMsg" role="status"></p>
+          <button type="submit" class="btn-blush" id="perfilSalvar">Salvar dados</button>
+        </form>
+
+        <form class="account-card conta-form" id="emailForm" novalidate>
+          <h2 class="conta-form-titulo"><i class="bi bi-envelope" aria-hidden="true"></i> E-mail de acesso</h2>
+          <p class="conta-dica mb-3">Atual: <strong id="emailAtual">—</strong></p>
+          <div class="conta-campo">
+            <label class="form-label" for="emailNovo">Novo e-mail</label>
+            <input type="email" class="form-control" id="emailNovo" autocomplete="email" required>
+          </div>
+          <div class="conta-campo">
+            <label class="form-label" for="emailSenha">Sua senha atual</label>
+            <input type="password" class="form-control" id="emailSenha" autocomplete="current-password" required>
+          </div>
+          <p class="small conta-msg d-none" id="emailMsg" role="status"></p>
+          <button type="submit" class="btn-outline-blush" id="emailSalvar">Trocar e-mail</button>
+        </form>
+      </div>
+
+      <div id="painelSeguranca" role="tabpanel" aria-labelledby="abaSeguranca" hidden>
+        <form class="account-card conta-form" id="senhaForm" novalidate>
+          <h2 class="conta-form-titulo"><i class="bi bi-key" aria-hidden="true"></i> Trocar senha</h2>
+          <div class="conta-campo">
+            <label class="form-label" for="senhaAtual">Senha atual</label>
+            <input type="password" class="form-control" id="senhaAtual" autocomplete="current-password" required>
+          </div>
+          <div class="conta-campo">
+            <label class="form-label" for="senhaNova">Nova senha</label>
+            <input type="password" class="form-control" id="senhaNova" autocomplete="new-password" minlength="8" maxlength="72" required>
+            <span class="conta-dica">Pelo menos 8 caracteres.</span>
+          </div>
+          <div class="conta-campo">
+            <label class="form-label" for="senhaConfirma">Repita a nova senha</label>
+            <input type="password" class="form-control" id="senhaConfirma" autocomplete="new-password" required>
+          </div>
+          <p class="small conta-msg d-none" id="senhaMsg" role="status"></p>
+          <button type="submit" class="btn-blush" id="senhaSalvar">Trocar senha</button>
+        </form>
+
+        <div class="account-card conta-form">
+          <h2 class="conta-form-titulo"><i class="bi bi-shield-check" aria-hidden="true"></i> Aparelhos conectados</h2>
+          <p class="conta-dica mb-3">Entrou num computador emprestado e esqueceu de sair? Encerre o acesso em todos os outros aparelhos. Este continua conectado.</p>
+          <p class="small conta-msg d-none" id="sairOutrosMsg" role="status"></p>
+          <button type="button" class="btn-outline-blush" id="sairOutrosBtn"><i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Sair dos outros aparelhos</button>
+        </div>
+
+      <div id="accountDanger" class="account-danger mt-4 pt-4">
         <h2 class="section-title" style="font-size:1.1rem">Privacidade e dados</h2>
         <p class="section-sub mb-3" style="font-size:.88rem">
           Você pode excluir sua conta a qualquer momento. Seus dados pessoais (login, endereço e
@@ -73,6 +151,7 @@
         <button type="button" class="btn-outline-danger" id="deleteAccountBtn">
           <i class="bi bi-trash3 me-1"></i>Excluir minha conta
         </button>
+      </div>
       </div>
     </div>
   </div>
@@ -109,6 +188,7 @@
 <script src="js/auth.js" defer></script>
 <script src="js/pricing.js" defer></script>
 <script src="js/pedidos.js" defer></script>
+<script src="js/minha-conta.js" defer></script>
 <script src="js/cookie-consent.js" defer></script>
 </body>
 </html>

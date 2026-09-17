@@ -13,6 +13,7 @@
 const { DatabaseSync } = require("node:sqlite");
 const path = require("path");
 const crypto = require("crypto");
+const { diasDoFrete } = require("./prazoFrete.js");
 
 // ".." porque este arquivo mora em server/lib/ e o banco fica na raiz da
 // aplicação (server/), ao lado do server.js — é lá que o data.db já existe
@@ -411,6 +412,10 @@ ensureColumn("users", "totp_enabled_at", "INTEGER");
 // são a única saída se a lojista perder o celular, então valem tanto quanto
 // a senha e recebem o mesmo tratamento.
 ensureColumn("users", "totp_recovery_json", "TEXT");
+// Perfil editável em "Minha conta". phone só com dígitos; birth_date em
+// YYYY-MM-DD (opcional — usado só para o cupom de aniversário).
+ensureColumn("users", "phone", "TEXT");
+ensureColumn("users", "birth_date", "TEXT");
 
 // Auditoria de login: toda tentativa entra aqui, com sucesso ou sem. Serve
 // para duas coisas distintas — o bloqueio por força bruta (contar falhas
@@ -557,6 +562,22 @@ function seedDefaultCoupon() {
 }
 seedDefaultCoupon();
 
+/* Cupom de aniversário: semeado UMA vez (marca em app_state). Se a lojista
+   apagar pelo painel, não volta sozinho — e o cron para de mandar o e-mail.
+   once_per_customer fica 0 porque a regra dele é por ANO, não para sempre:
+   quem trava é regraDoCupomDeAniversario (server.js) + hasUsedCouponSince. */
+const CUPOM_ANIVERSARIO = "ANIVERSARIO10";
+function seedBirthdayCoupon() {
+  const marca = db.prepare(`SELECT 1 FROM app_state WHERE chave = 'cupom_aniversario_semeado'`).get();
+  if (marca) return;
+  db.prepare(
+    `INSERT OR IGNORE INTO coupons (code, percent_off, description, created_at, once_per_customer)
+     VALUES (?, ?, ?, ?, 0)`
+  ).run(CUPOM_ANIVERSARIO, 10, "Aniversário — só a aniversariante logada, até 30 dias após a data", Date.now());
+  db.prepare(`INSERT OR REPLACE INTO app_state (chave, valor, updated_at) VALUES ('cupom_aniversario_semeado', '1', ?)`).run(Date.now());
+}
+seedBirthdayCoupon();
+
 /* ---------------------------- USERS ---------------------------- */
 const stmtInsertUser = db.prepare(
   `INSERT INTO users (name, email, password_hash, cpf, created_at) VALUES (?, ?, ?, ?, ?)`
@@ -589,6 +610,24 @@ function saveAddress(userId, address) {
   stmtSaveAddress.run(JSON.stringify(address), userId);
 }
 
+const stmtUpdatePerfil = db.prepare(`UPDATE users SET name = ?, phone = ?, birth_date = ? WHERE id = ?`);
+function updatePerfil(userId, { name, phone, birthDate }) {
+  stmtUpdatePerfil.run(name, phone || null, birthDate || null, userId);
+}
+const stmtUpdateUserEmail = db.prepare(`UPDATE users SET email = ? WHERE id = ?`);
+function updateUserEmail(userId, email) {
+  stmtUpdateUserEmail.run(email, userId);
+}
+
+// Aniversariantes do dia (mês-dia), com e-mail. O ano entra na chave de
+// deduplicação da fila, não aqui.
+const stmtAniversariantes = db.prepare(
+  `SELECT id, name, email FROM users WHERE birth_date IS NOT NULL AND substr(birth_date, 6, 5) = ?`
+);
+function aniversariantesDoDia(mesDia) {
+  return stmtAniversariantes.all(mesDia);
+}
+
 // Usuários para a exportação em planilha (painel admin). Traz SÓ colunas
 // não sensíveis — nunca password_hash, totp_secret nem totp_recovery_json —
 // e expõe apenas se o 2FA está ligado (booleano), não o segredo em si.
@@ -610,9 +649,15 @@ function listUsersForExport() {
    Nada de password_hash, totp_secret nem totp_recovery_json — mesma regra do
    stmtListUsersForExport acima. */
 const stmtListAccountsForAdmin = db.prepare(
-  `SELECT id, name, email, created_at, saved_address_json
+  `SELECT id, name, email, created_at, saved_address_json, phone, birth_date
      FROM users ORDER BY created_at DESC`
 );
+// "15/03" — o painel mostra só dia/mês: o ano (idade) não serve para nada
+// ali e é dado a mais exposto.
+function aniversarioCurto(birthDate) {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(String(birthDate || ""));
+  return m ? `${m[2]}/${m[1]}` : null;
+}
 function listAccountsForAdmin() {
   return stmtListAccountsForAdmin.all().map((u) => {
     let telefone = null;
@@ -621,7 +666,11 @@ function listAccountsForAdmin() {
     } catch {
       telefone = null;
     }
-    return { id: u.id, name: u.name, email: u.email, createdAt: u.created_at, telefone };
+    return {
+      id: u.id, name: u.name, email: u.email, createdAt: u.created_at,
+      telefone: u.phone || telefone,
+      aniversario: aniversarioCurto(u.birth_date),
+    };
   });
 }
 
@@ -646,6 +695,10 @@ function deleteSession(tokenHash) {
 }
 function deleteAllSessionsForUser(userId) {
   stmtDeleteUserSessions.run(userId);
+}
+const stmtDeleteOtherSessions = db.prepare(`DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?`);
+function deleteOtherSessions(userId, tokenHashAtual) {
+  return stmtDeleteOtherSessions.run(userId, tokenHashAtual).changes;
 }
 
 /* --------------------- REDEFINIÇÃO DE SENHA --------------------- */
@@ -690,6 +743,9 @@ const stmtDeleteNewsletterByEmail = db.prepare(`DELETE FROM newsletter_subscribe
 const stmtDeleteLoginAttemptsByEmail = db.prepare(`DELETE FROM login_attempts WHERE email = ?`);
 const stmtDeleteUserById = db.prepare(`DELETE FROM users WHERE id = ?`);
 
+const stmtDeleteAniversarioPendente = db.prepare(
+  `DELETE FROM email_outbox WHERE kind = 'aniversario' AND sent_at IS NULL AND order_reference LIKE ?`
+);
 function deleteUserAccount(userId) {
   const user = getUserById(userId);
   if (!user) return false;
@@ -703,6 +759,8 @@ function deleteUserAccount(userId) {
     deletePasswordResetsForUser(userId);
     stmtDeleteNewsletterByEmail.run(user.email);
     stmtDeleteLoginAttemptsByEmail.run(user.email);
+    // Cupom de aniversário ainda na fila não pode sair para quem apagou a conta.
+    stmtDeleteAniversarioPendente.run(`aniversario:${userId}:%`);
     // 3) Apaga o usuário. orders.user_id vira NULL (ON DELETE SET NULL) e
     //    two_factor_challenges some (ON DELETE CASCADE).
     stmtDeleteUserById.run(userId);
@@ -920,6 +978,17 @@ const stmtCouponPendingByUser = db.prepare(
 const stmtCouponPendingByPhone = db.prepare(
   `SELECT 1 FROM orders WHERE coupon_code = ? AND status = 'pendente' AND customer_phone = ? AND created_at > ? LIMIT 1`
 );
+
+// Uso do cupom pela conta desde uma data (cupom de aniversário: um por ano).
+// Pendente recente também conta, pelo mesmo motivo do hasUsedCoupon.
+const stmtCouponUsedByUserSince = db.prepare(
+  `SELECT 1 FROM orders WHERE coupon_code = ? AND user_id = ? AND created_at >= ?
+     AND (status = 'pago' OR (status = 'pendente' AND created_at > ?)) LIMIT 1`
+);
+function hasUsedCouponSince({ code, userId, since }) {
+  if (!code || !userId) return false;
+  return Boolean(stmtCouponUsedByUserSince.get(code, userId, since, Date.now() - COUPON_PENDING_WINDOW_MS));
+}
 
 function hasUsedCoupon({ code, userId, phone }) {
   if (!code) return false;
@@ -1597,8 +1666,8 @@ function pedidosParaConfirmarRecebimento(agora = Date.now(), folgaDias = 3){
   return stmtPostadosAntigos.all(agora - 45 * DIA_MS).filter(p => {
     let prazo = 7;
     try{
-      const dias = Number(JSON.parse(p.shipping_json)?.delivery_time);
-      if(Number.isFinite(dias) && dias > 0) prazo = dias;
+      const dias = diasDoFrete(JSON.parse(p.shipping_json));
+      if(dias) prazo = dias;
     }catch{}
     return p.shipped_at + (prazo + folgaDias) * DIA_MS <= agora;
   });
@@ -1787,6 +1856,12 @@ module.exports = {
   deletePasswordReset,
   deletePasswordResetsForUser,
   updateUserPassword,
+  updatePerfil,
+  hasUsedCouponSince,
+  CUPOM_ANIVERSARIO,
+  updateUserEmail,
+  aniversariantesDoDia,
+  deleteOtherSessions,
   deleteUserAccount,
   recordLoginAttempt,
   getLoginLockout,

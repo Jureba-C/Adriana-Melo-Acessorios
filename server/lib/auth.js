@@ -148,6 +148,13 @@ function issueSession(res, userId) {
   res.cookie(SESSION_COOKIE_NAME, token, cookieOptions());
 }
 
+// Hash da sessão desta requisição — "sair dos outros aparelhos" apaga todas
+// as sessões da conta MENOS esta.
+function sessionTokenHash(req) {
+  const token = parseCookies(req)[SESSION_COOKIE_NAME];
+  return token ? hashToken(token) : null;
+}
+
 function clearSession(req, res) {
   const cookies = parseCookies(req);
   const token = cookies[SESSION_COOKIE_NAME];
@@ -549,6 +556,7 @@ module.exports = {
   isValidAddress,
   issueSession,
   clearSession,
+  sessionTokenHash,
   issuePasswordReset,
   consumePasswordReset,
   PASSWORD_RESET_TTL_MS,

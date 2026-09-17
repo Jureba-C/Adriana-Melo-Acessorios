@@ -49,6 +49,7 @@ const instagram = require("./lib/instagram");
 const email = require("./lib/email");
 const emailPhotos = require("./lib/emailPhotos.js");
 const rastreio = require("./lib/rastreio.js");
+const { prazoDaCotacao } = require("./lib/prazoFrete.js");
 const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // Mesmo arquivo que a vitrine e o carrinho carregam no navegador (js/pricing.js,
 // em formato UMD) — é o que garante que o "5% no Pix" e o "3x sem juros"
@@ -370,6 +371,33 @@ function findCoupon(rawCode){
     description: row.description,
     oncePerCustomer: Boolean(row.once_per_customer),
   };
+}
+
+/* Cupom de aniversário: vale só para a dona da conta, do dia do aniversário
+   até 30 dias depois, uma vez por aniversário. Sem isso, um código que
+   chega por e-mail e é fácil de adivinhar ("ANIVERSARIO10") virava 10% para
+   qualquer um, o ano todo. Devolve a mensagem de recusa, ou null se vale.
+   Datas em horário de Brasília (aniversário é dia de calendário local). */
+const JANELA_ANIVERSARIO_DIAS = 30;
+function inicioDoAniversario(birthDate, ano){
+  const [, mes, dia] = String(birthDate).split("-").map(Number);
+  const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  return Date.UTC(ano, mes - 1, Math.min(dia, ultimoDia), 3);
+}
+function regraDoCupomDeAniversario(coupon, userId, agora = Date.now()){
+  if(coupon?.code !== db.CUPOM_ANIVERSARIO) return null;
+  const recusa = "Esse cupom é de aniversário: vale só na conta da aniversariante, até 30 dias depois da data cadastrada em Minha conta.";
+  const user = userId ? db.getUserById(userId) : null;
+  if(!user?.birth_date) return recusa;
+  const ano = new Date(agora).getUTCFullYear();
+  const inicio = [ano, ano - 1]
+    .map(a => inicioDoAniversario(user.birth_date, a))
+    .find(t => agora >= t && agora < t + JANELA_ANIVERSARIO_DIAS * 86400000);
+  if(!inicio) return recusa;
+  if(db.hasUsedCouponSince({ code: coupon.code, userId: user.id, since: inicio })){
+    return "Você já usou o cupom deste aniversário. 💗";
+  }
+  return null;
 }
 
 // Mesma normalização usada na gravação do pedido e na consulta de uso: sem
@@ -1109,9 +1137,12 @@ function estrelasHtml(nota){
   return `<span class="avaliacao-estrelas" role="img" aria-label="${nota} de 5 estrelas">${html}</span>`;
 }
 
+/* Sem nenhuma avaliação publicada, o terceiro número vira uma informação
+   verdadeira da loja (envio nacional) em vez de sumir — e NUNCA uma nota
+   inventada: o teste de avaliações tranca a volta do 4,9 fixo. */
 function blocoNotaMedia(){
   const { total, media } = db.notaMedia();
-  if(!total) return "";
+  if(!total) return `<div><span class="num"><i class="bi bi-truck" aria-hidden="true"></i></span><span class="lbl">envio para todo o Brasil</span></div>`;
   const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const rotulo = total === 1 ? "de 1 avaliação" : `de ${total} avaliações`;
   return `<div><span class="num">${nota}<i class="bi bi-star-fill" style="font-size:.9rem"></i></span><span class="lbl">${rotulo}</span></div>`;
@@ -1496,6 +1527,15 @@ function isOfferedCarrier(companyName, serviceName){
    serviços que vieram com erro (ex.: transportadora indisponível para
    aquela rota) e os de transportadora que a loja não usa
    (isOfferedCarrier), e ordena do mais barato para o mais caro. */
+// Um aviso por serviço por processo: a cotação roda a cada CEP digitado e
+// repetir a mesma linha encheria o log.
+const servicosComDiasExtras = new Set();
+function avisarDiasExtrasDoPainel(q, extra){
+  if(!extra || servicosComDiasExtras.has(q.id)) return;
+  servicosComDiasExtras.add(q.id);
+  console.warn(`Prazo de frete: o painel do Melhor Envio está somando ${extra} dia(s) ao prazo de ${q.company?.name || ""} ${q.name}. Se a entrega parece demorada para a cliente, confira os dias adicionais nas configurações de frete da conta do Melhor Envio.`);
+}
+
 async function quoteShipping(cepDestino, validatedItems){
   const pkg = buildPackage(validatedItems);
 
@@ -1536,14 +1576,17 @@ async function quoteShipping(cepDestino, validatedItems){
   return quotes
     .filter(q => !q.error && (q.custom_price || q.price))
     .filter(q => isOfferedCarrier(q.company?.name, q.name))
-    .map(q => ({
-      service_id: q.id,
-      name: `${q.company?.name ? q.company.name + " · " : ""}${q.name}`,
-      price: Number(q.custom_price ?? q.price),
-      delivery_time: q.custom_delivery_time
-        ? `${q.custom_delivery_time} dia(s) útil(eis)`
-        : (q.delivery_time ? `${q.delivery_time} dia(s) útil(eis)` : "prazo a confirmar"),
-    }))
+    .map(q => {
+      const prazo = prazoDaCotacao(q);
+      avisarDiasExtrasDoPainel(q, prazo.extra);
+      return {
+        service_id: q.id,
+        name: `${q.company?.name ? q.company.name + " · " : ""}${q.name}`,
+        price: Number(q.custom_price ?? q.price),
+        delivery_time: prazo.texto,
+        delivery_days: prazo.dias,
+      };
+    })
     .sort((a, b) => a.price - b.price);
 }
 
@@ -1619,6 +1662,8 @@ app.post("/api/validate-coupon", strictLimiter, (req, res) => {
     if(coupon.oncePerCustomer && req.user && db.hasUsedCoupon({ code: coupon.code, userId: req.user.id })){
       return res.status(409).json({ error: COUPON_ALREADY_USED_MESSAGE });
     }
+    const recusaAniversario = regraDoCupomDeAniversario(coupon, req.user?.id);
+    if(recusaAniversario) return res.status(409).json({ error: recusaAniversario });
     const validatedItems = buildValidatedItems(req.body?.items);
     const subtotal = validatedItems.reduce((sum, { qty, product }) => sum + product.price * qty, 0);
     const discount = Math.round(subtotal * (coupon.percentOff / 100) * 100) / 100;
@@ -1718,6 +1763,9 @@ async function buildCheckoutDraft(req){
       throw { status: 409, message: COUPON_ALREADY_USED_MESSAGE };
     }
   }
+
+  const recusaAniversario = regraDoCupomDeAniversario(coupon, req.user?.id);
+  if(recusaAniversario) throw { status: 409, message: recusaAniversario };
 
   const couponFactor = coupon ? (1 - coupon.percentOff / 100) : 1;
 
@@ -3355,6 +3403,124 @@ app.get("/api/auth/me", (req, res) => {
 });
 
 /* =========================================================================
+   "MINHA CONTA" — perfil, e-mail, senha e sessões da própria cliente
+   -------------------------------------------------------------------------
+   Trocar e-mail e senha exige a senha atual e usa o authLimiter (mesmo
+   orçamento do login): sem isso, uma sessão esquecida aberta num
+   computador emprestado viraria tomada da conta, e a rota seria um oráculo
+   de tentativa de senha. As duas trocas avisam o e-mail ANTIGO.
+========================================================================= */
+function mascararCpf(cpf){
+  const d = String(cpf || "").replace(/\D/g, "");
+  return d.length === 11 ? `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**` : null;
+}
+
+function perfilDaConta(userId){
+  const user = db.getUserById(userId);
+  if(!user) return null;
+  const endereco = db.getSavedAddress(userId);
+  return {
+    name: user.name,
+    email: user.email,
+    telefone: user.phone || phoneDigits(endereco?.telefone) || "",
+    nascimento: user.birth_date || "",
+    cpfMascarado: mascararCpf(user.cpf),
+    criadoEm: user.created_at,
+  };
+}
+
+// Data real (não 31/02), idade entre 13 e 110 anos. Vazio = sem data.
+function nascimentoValido(valor){
+  if(!valor) return true;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [a, m, d] = valor.split("-").map(Number);
+  const data = new Date(Date.UTC(a, m - 1, d));
+  if(data.getUTCFullYear() !== a || data.getUTCMonth() !== m - 1 || data.getUTCDate() !== d) return false;
+  const idade = (Date.now() - data.getTime()) / (365.25 * 86400000);
+  return idade >= 13 && idade <= 110;
+}
+
+function avisarContaEmSegundoPlano(dados){
+  email.sendAvisoDeSegurancaDaConta(dados).catch(err => {
+    console.error("Não foi possível mandar o aviso de alteração da conta:", err.message || err);
+  });
+}
+
+app.get("/api/auth/perfil", auth.requireAuth, (req, res) => {
+  const perfil = perfilDaConta(req.user.id);
+  if(!perfil) return res.status(404).json({ error: "Conta não encontrada." });
+  res.json(perfil);
+});
+
+app.put("/api/auth/perfil", strictLimiter, auth.requireAuth, (req, res) => {
+  const name = String(req.body?.name || "").trim().replace(/\s+/g, " ");
+  const telefone = phoneDigits(req.body?.telefone);
+  const nascimento = String(req.body?.nascimento || "").trim();
+  if(!auth.isValidName(name) || name.length > 80){
+    return res.status(400).json({ error: "Digite seu nome (de 2 a 80 letras)." });
+  }
+  if(telefone && (telefone.length < 10 || telefone.length > 11)){
+    return res.status(400).json({ error: "Confira o WhatsApp: DDD + número, 10 ou 11 dígitos." });
+  }
+  if(!nascimentoValido(nascimento)){
+    return res.status(400).json({ error: "Confira a data de nascimento." });
+  }
+  db.updatePerfil(req.user.id, { name, phone: telefone, birthDate: nascimento || null });
+  res.json(perfilDaConta(req.user.id));
+});
+
+app.put("/api/auth/email", authLimiter, auth.requireAuth, async (req, res) => {
+  try{
+    const novo = auth.normalizeEmail(req.body?.email);
+    const senha = req.body?.senhaAtual;
+    if(!auth.isValidEmail(novo)) return res.status(400).json({ error: "Digite um e-mail válido." });
+    if(typeof senha !== "string" || !senha) return res.status(400).json({ error: "Confirme com sua senha atual." });
+    const user = db.getUserById(req.user.id);
+    if(!user || !(await auth.verifyPassword(senha, user.password_hash))){
+      return res.status(401).json({ error: "Senha atual incorreta." });
+    }
+    if(novo === user.email) return res.json(perfilDaConta(user.id));
+    // Conta de administradora não troca e-mail por aqui (o acesso ao painel
+    // depende do hash do e-mail), e ninguém troca PARA um e-mail de admin.
+    if(auth.isAdminEmail(user.email) || auth.isAdminEmail(novo) || db.getUserByEmail(novo)){
+      return res.status(409).json({ error: "Este e-mail não pode ser usado. Se ele já tem conta, entre por ela." });
+    }
+    const antigo = user.email;
+    db.updateUserEmail(user.id, novo);
+    avisarContaEmSegundoPlano({ to: antigo, nome: String(user.name || "").split(" ")[0], oQue: "email", novoEmail: novo });
+    res.json(perfilDaConta(user.id));
+  }catch(err){
+    console.error("Erro ao trocar e-mail:", err);
+    res.status(500).json({ error: "Não foi possível trocar o e-mail agora." });
+  }
+});
+
+app.put("/api/auth/senha", authLimiter, auth.requireAuth, async (req, res) => {
+  try{
+    const atual = req.body?.senhaAtual;
+    const nova = String(req.body?.novaSenha || "");
+    if(typeof atual !== "string" || !atual) return res.status(400).json({ error: "Digite sua senha atual." });
+    if(!auth.isValidPassword(nova)) return res.status(400).json({ error: "A nova senha precisa ter entre 8 e 72 caracteres." });
+    const user = db.getUserById(req.user.id);
+    if(!user || !(await auth.verifyPassword(atual, user.password_hash))){
+      return res.status(401).json({ error: "Senha atual incorreta." });
+    }
+    db.updateUserPassword(user.id, await auth.hashPassword(nova));
+    const saiu = db.deleteOtherSessions(user.id, auth.sessionTokenHash(req));
+    avisarContaEmSegundoPlano({ to: user.email, nome: String(user.name || "").split(" ")[0], oQue: "senha" });
+    res.json({ ok: true, sessoesEncerradas: saiu });
+  }catch(err){
+    console.error("Erro ao trocar senha:", err);
+    res.status(500).json({ error: "Não foi possível trocar a senha agora." });
+  }
+});
+
+app.post("/api/auth/sair-outros", strictLimiter, auth.requireAuth, (req, res) => {
+  const saiu = db.deleteOtherSessions(req.user.id, auth.sessionTokenHash(req));
+  res.json({ ok: true, sessoesEncerradas: saiu });
+});
+
+/* =========================================================================
    GET/PUT /api/auth/address — endereço de entrega padrão da conta
    -------------------------------------------------------------------------
    Sempre escopado a req.user.id (sessão), nunca a um id vindo do corpo/URL —
@@ -3736,7 +3902,8 @@ app.get("/api/admin/customers", auth.requireAdmin, auth.requireAdminTwoFactor, (
           identity,
           nome: address?.nome || account?.name || "—",
           email: account?.email || null,
-          telefone: address?.telefone || null,
+          telefone: address?.telefone || account?.phone || null,
+          aniversario: account?.birth_date ? account.birth_date.slice(8, 10) + "/" + account.birth_date.slice(5, 7) : null,
           hasAccount: Boolean(row.user_id),
           totalOrders: 0,
           paidOrders: 0,

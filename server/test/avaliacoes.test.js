@@ -69,14 +69,14 @@ after(() => {
 });
 
 let contador = 0;
-function criarPedido({ entregue = false, postado = true, email = "cliente@exemplo.com", items } = {}){
+function criarPedido({ entregue = false, postado = true, email = "cliente@exemplo.com", items, shipping } = {}){
   const ref = `AVAL-${Date.now()}-${++contador}`;
   const cliente = db.createUser({ name: "Maria", email: `maria${contador}-${Date.now()}@t.com`, passwordHash: "x", cpf: null });
   db.createOrder({
     externalReference: ref, userId: cliente.id, status: "pago",
     items: items || [{ id: 1, qty: 1, price: 30, color: "#F4B4CC" }, { id: 2, qty: 2, price: 25, color: "#FFFFFF" }],
     address: { nome: "Maria Clara Souza", cidade: "Brasília", uf: "df", cpf: "11144477735", rua: "Rua X" },
-    shipping: { service_id: "1", name: "SEDEX", price: 20, delivery_time: 3 },
+    shipping: shipping || { service_id: "1", name: "SEDEX", price: 20, delivery_time: 3 },
     subtotal: 80, shippingPrice: 20, total: 100, customerPhone: "61999999999", customerEmail: email,
   });
   if(postado) db.updateOrderTracking(ref, "ME123456789BR");
@@ -114,6 +114,7 @@ test("sem nenhuma avaliação publicada, a home não mostra nota nem seção —
   const home = await (await fetch(ORIGIN + "/")).text();
   assert.ok(!home.includes("O que dizem as clientes"));
   assert.ok(!home.includes("avaliação média"), "o 4,9 fixo antigo não pode voltar");
+  assert.ok(home.includes("envio para todo o Brasil"), "sem avaliações, o terceiro número é uma informação real, não some");
   assert.ok(!/de \d+ avaliaç/.test(home));
   assert.ok(!home.includes("<!--#NOTA-MEDIA#-->") && !home.includes("<!--#AVALIACOES#-->"), "marcador não pode vazar cru");
 });
@@ -332,6 +333,14 @@ test("cron: \"seu pedido chegou?\" só depois do prazo, uma vez só, e nunca par
   const muitoDepois = agora + 60 * DIA;
   assert.ok(!db.pedidosParaConfirmarRecebimento(muitoDepois).some(p => p.external_reference === ref),
     "pedido postado há mais de 45 dias não recebe e-mail do nada");
+});
+
+test("cron: prazo gravado como texto (pedidos reais) é respeitado, não cai nos 7 dias padrão", () => {
+  const agora = Date.now();
+  const { ref } = criarPedido({ shipping: { service_id: "2", name: "Correios · SEDEX", price: 20, delivery_time: "2 dia(s) útil(eis)" } });
+  const pergunta = (dias) => db.pedidosParaConfirmarRecebimento(agora + dias * DIA).some(p => p.external_reference === ref);
+  assert.equal(pergunta(4.9), false, "prazo 2 + folga 3: ainda não");
+  assert.equal(pergunta(5.1), true, "passou de 2 + 3 dias: pergunta — antes esperava 10");
 });
 
 test("cron: pedido de avaliação 2 dias após a entrega, só para quem não avaliou, janela de 30 dias", () => {

@@ -1031,7 +1031,108 @@ function formatPedirAvaliacaoEmail({ externalReference, address, items, avaliarU
   return { subject, text, html };
 }
 
+/* Cupom de aniversário. Vai para a fila (email_outbox) pelo cron — a
+   cliente pediu ao cadastrar a data em "Minha conta", então é consentido;
+   o texto lembra que dá para tirar a data a qualquer momento. */
+function formatAniversarioEmail({ nome, couponCode, percentOff, shopUrl, contaUrl }){
+  const subject = `🎂 Feliz aniversário${nome ? `, ${nome}` : ""}! Um presente da Adriana Melo`;
+  const text = [
+    nome ? `Feliz aniversário, ${nome}! 🎀` : "Feliz aniversário! 🎀",
+    "",
+    `Para comemorar, um presente: ${percentOff}% de desconto em qualquer laço da coleção.`,
+    `Cupom: ${couponCode}`,
+    "",
+    "Vale na sua conta até 30 dias depois do seu aniversário, uma vez.",
+    "",
+    `Ver a coleção: ${shopUrl}`,
+    "",
+    `Não quer mais este e-mail? Tire a data de nascimento em Minha conta: ${contaUrl}`,
+    "",
+    "Adriana Melo Acessórios — ateliê artesanal de laços, Brasília/DF",
+  ].join("\n");
+
+  const html = emailShell({
+    titulo: subject,
+    preheader: `Um presente de aniversário: ${percentOff}% de desconto, só para você.`,
+    eyebrow: "feliz aniversário",
+    tituloCartao: nome ? `Feliz aniversário, ${escapeHTML(nome)}! 🎂` : "Feliz aniversário! 🎂",
+    corpoHtml: `
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:15px; line-height:1.6; padding-bottom:26px;">
+          Para comemorar, um presente: <strong class="e-texto" style="color:${CORES.texto};">${escapeHTML(String(percentOff))}% de desconto</strong> em qualquer laço da coleção.
+        </td>
+      </tr>
+      <tr>
+        <td align="center" style="padding-bottom:26px;">
+          <table role="presentation" cellpadding="0" cellspacing="0">
+            <tr>
+              <td class="e-caixa e-destaqueBorda" align="center" style="background:${CORES.caixaSuave}; border:2px dashed ${CORES.destaqueClaro}; border-radius:16px; padding:16px 36px;">
+                <span class="e-destaque" style="font-family:${FONT_CORPO}; font-size:24px; font-weight:bold; letter-spacing:3px; color:${CORES.destaque};">
+                  ${escapeHTML(couponCode)}
+                </span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:14px; line-height:1.6; padding-bottom:26px;">
+          Vale na sua conta até 30 dias depois do seu aniversário, uma vez.
+        </td>
+      </tr>
+      ${botaoEmail(shopUrl, "Escolher meu presente")}
+      <tr>
+        <td class="e-tenue" align="center" style="font-family:${FONT_CORPO}; color:${CORES.tenue}; font-size:11px; line-height:1.6; padding-top:18px;">
+          Não quer mais este e-mail? <a class="e-tenue" href="${escapeHTML(contaUrl)}" style="color:${CORES.tenue}; text-decoration:underline;">Tire a data de nascimento em Minha conta</a>.
+        </td>
+      </tr>
+    `,
+  });
+  return { subject, text, html };
+}
+
+/* Aviso de segurança para o e-mail ANTIGO quando a cliente troca o e-mail
+   ou a senha em "Minha conta". Se não foi ela, é a única pista que chega. */
+async function sendAvisoDeSegurancaDaConta({ to, nome, oQue, novoEmail }){
+  const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const descricao = oQue === "email"
+    ? `o e-mail de acesso da sua conta foi trocado para ${novoEmail}`
+    : "a senha da sua conta foi alterada";
+  const subject = oQue === "email" ? "Seu e-mail de acesso foi alterado" : "Sua senha foi alterada";
+  const text = [
+    nome ? `Oi, ${nome}!` : "Oi!",
+    "",
+    `Só avisando: ${descricao} (${quando}).`,
+    "",
+    "Se foi você, pode ignorar este e-mail.",
+    "Se NÃO foi você, responda este e-mail ou fale com a gente pelo WhatsApp agora.",
+    "",
+    "Adriana Melo Acessórios — ateliê artesanal de laços, Brasília/DF",
+  ].join("\n");
+  const html = emailShell({
+    titulo: subject,
+    preheader: `Aviso de segurança: ${descricao}.`,
+    eyebrow: "aviso de segurança",
+    tituloCartao: subject,
+    corpoHtml: `
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:15px; line-height:1.6; padding-bottom:18px;">
+          ${nome ? `Oi, ${escapeHTML(nome)}! ` : ""}Só avisando: ${escapeHTML(descricao)} (${escapeHTML(quando)}).
+        </td>
+      </tr>
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:14px; line-height:1.6;">
+          Se foi você, pode ignorar este e-mail. Se <strong>não</strong> foi você, responda este e-mail ou fale com a gente pelo WhatsApp agora.
+        </td>
+      </tr>
+    `,
+  });
+  return sendEmail({ to, subject, text, html });
+}
+
 module.exports = {
+  formatAniversarioEmail,
+  sendAvisoDeSegurancaDaConta,
   formatConfirmarRecebimentoEmail,
   formatPedirAvaliacaoEmail,
   formatOrderEmail,

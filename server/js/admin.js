@@ -2151,7 +2151,7 @@
         emailsJaListados.add(String(a.email || "").toLowerCase());
         return {
           identity: `conta:${a.id}`, nome: a.name || "—", email: a.email,
-          telefone: a.telefone, hasAccount: true, origem: "conta criada",
+          telefone: a.telefone, aniversario: a.aniversario, hasAccount: true, origem: "conta criada",
           totalOrders: 0, paidOrders: 0, totalSpent: 0,
           lastOrderAt: a.createdAt, orders: [],
         };
@@ -2243,6 +2243,7 @@
           <strong>${escapeHTML(c.nome)}</strong>
           ${c.hasAccount ? '<span class="admin-badge-pill ms-1">tem conta</span>' : ""}
           ${c.origem ? `<span class="admin-badge-pill ms-1">${escapeHTML(c.origem)}</span>` : ""}
+          ${c.aniversario ? `<span class="admin-badge-pill ms-1" title="Aniversário"><i class="bi bi-gift"></i> ${escapeHTML(c.aniversario)}</span>` : ""}
         </td>
         <td class="small">
           ${c.email ? escapeHTML(c.email) + "<br>" : ""}
