@@ -1137,15 +1137,20 @@ function estrelasHtml(nota){
   return `<span class="avaliacao-estrelas" role="img" aria-label="${nota} de 5 estrelas">${html}</span>`;
 }
 
-/* Sem nenhuma avaliação publicada, o terceiro número vira uma informação
-   verdadeira da loja (envio nacional) em vez de sumir — e NUNCA uma nota
-   inventada: o teste de avaliações tranca a volta do 4,9 fixo. */
+/* Item do meio da "etiqueta" do hero. Sem nenhuma avaliação publicada vira
+   uma informação verdadeira da loja (envio nacional) em vez de sumir — e
+   NUNCA uma nota inventada: o teste de avaliações tranca a volta do 4,9
+   fixo. Mesma estrutura dos itens fixos do index.html (ícone + num + lbl);
+   data-contar alimenta a contagem animada de js/animacoes.js, e o texto já
+   sai com o valor final para quem não tem JS ou pediu menos movimento. */
 function blocoNotaMedia(){
   const { total, media } = db.notaMedia();
-  if(!total) return `<div><span class="num"><i class="bi bi-truck" aria-hidden="true"></i></span><span class="lbl">envio para todo o Brasil</span></div>`;
+  if(!total){
+    return `<div class="hero-stat"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-truck"></i></span><span class="num is-texto">Todo o Brasil</span><span class="lbl">envio com rastreio</span></div>`;
+  }
   const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const rotulo = total === 1 ? "de 1 avaliação" : `de ${total} avaliações`;
-  return `<div><span class="num">${nota}<i class="bi bi-star-fill" style="font-size:.9rem"></i></span><span class="lbl">${rotulo}</span></div>`;
+  return `<div class="hero-stat"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-star-fill"></i></span><span class="num"><span class="num-valor" data-contar="${media.toFixed(1)}" data-casas="1">${nota}</span><i class="bi bi-star-fill num-estrela" aria-hidden="true"></i></span><span class="lbl">${rotulo}</span></div>`;
 }
 
 /* Lacinhos e brilhos de fundo da seção de avaliações. Posições fixas (não

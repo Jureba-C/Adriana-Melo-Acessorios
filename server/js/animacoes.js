@@ -109,7 +109,18 @@
       ...hero.querySelectorAll(".hero-stats > div"),
     ].filter(Boolean);
 
+    const icones = Array.from(hero.querySelectorAll(".hero-stat-icone"));
+    const contadores = Array.from(hero.querySelectorAll(".hero-stats [data-contar]"));
+    const formatar = (el, valor) => {
+      const casas = Number(el.dataset.casas) || 0;
+      const texto = valor.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+      el.textContent = `${el.dataset.prefixo || ""}${texto}${el.dataset.sufixo || ""}`;
+    };
+    const finais = contadores.map((el) => el.textContent);
+
     if (titulo) gsap.set(titulo, { opacity: 0 });
+    if (icones.length) gsap.set(icones, { scale: 0.4, opacity: 0 });
+    contadores.forEach((el) => formatar(el, 0));
     if (texto.length) gsap.set(texto, { opacity: 0, y: 18 });
     if (arte) gsap.set(arte, { opacity: 0, scale: 0.96 });
     if (lacos.length) gsap.set(lacos, { opacity: 0 });
@@ -137,6 +148,20 @@
       if (texto.length) {
         tl.to(texto, { opacity: 1, y: 0, duration: 0.7, stagger: 0.07 }, 0.35);
       }
+      if (icones.length) {
+        tl.to(icones, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(2.2)", stagger: 0.12 }, 0.75);
+      }
+      contadores.forEach((el, i) => {
+        const alvo = Number(el.dataset.contar) || 0;
+        const estado = { v: 0 };
+        tl.to(estado, {
+          v: alvo,
+          duration: 1.4,
+          ease: "power2.out",
+          onUpdate: () => formatar(el, Number(el.dataset.casas) ? estado.v : Math.round(estado.v)),
+          onComplete: () => { el.textContent = finais[i]; },
+        }, 0.8 + i * 0.1);
+      });
       if (lacos.length) {
         tl.to(lacos, { opacity: 1, duration: 0.6, stagger: 0.06 }, 0.5);
       }
@@ -555,7 +580,13 @@
       ...hero.querySelectorAll(".hero .d-flex.flex-wrap > *"),
       ...hero.querySelectorAll(".hero-stats > div"),
     ].filter(Boolean);
-    gsap.set([titulo, arte, ...lacos, ...texto].filter(Boolean), { clearProps: "opacity,transform" });
+    const icones = hero.querySelectorAll(".hero-stat-icone");
+    gsap.set([titulo, arte, ...lacos, ...texto, ...icones].filter(Boolean), { clearProps: "opacity,transform" });
+    hero.querySelectorAll(".hero-stats [data-contar]").forEach((el) => {
+      const casas = Number(el.dataset.casas) || 0;
+      const valor = Number(el.dataset.contar) || 0;
+      el.textContent = `${el.dataset.prefixo || ""}${valor.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}${el.dataset.sufixo || ""}`;
+    });
   }
 
   mm.add("(prefers-reduced-motion: no-preference)", () => {
