@@ -54,6 +54,11 @@ const { formatCurrency, formatOrderDateTime, deliveryLineFor } = require("./orde
  * Monta o texto da notificação a partir de um pedido já resolvido (itens
  * com nome/quantidade, endereço, total, data do pagamento). Função pura —
  * sem chamada de rede — para ser fácil de testar/ajustar isoladamente.
+ *
+ * Sem CPF de propósito: a mensagem passa pelos servidores da Meta e a
+ * lojista não precisa do CPF para separar o pedido (ele vai na etiqueta do
+ * Melhor Envio e está no painel). A política de privacidade descreve
+ * exatamente o que vai por aqui — incluir campo novo exige atualizar lá.
  */
 function formatOrderMessage({ externalReference, items, address, total, paidAt }) {
   const itemLines = items
@@ -74,7 +79,6 @@ function formatOrderMessage({ externalReference, items, address, total, paidAt }
     "",
     `Cliente: ${address?.nome || "-"}`,
     `Telefone: ${address?.telefone || "-"}`,
-    `CPF: ${address?.cpf || "-"}`,
     `Entrega: ${deliveryLine || "-"}`,
   ].join("\n");
 }
