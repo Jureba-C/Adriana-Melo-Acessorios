@@ -2326,6 +2326,7 @@ section[id], header[id]{ scroll-margin-top:calc(90px + var(--promo-h, 0px)); }
 }
 
 .orders-wrap{ max-width:640px; }
+.orders-wrap:not(.admin-wrap) .account-card{ max-width:none; }
 .conta-abas{
   display:flex; gap:.35rem; margin-bottom:1.25rem; padding:.3rem;
   background:var(--white); border:1px solid var(--blush-100); border-radius:999px;
