@@ -18,19 +18,33 @@ if (!PASTA || !fs.existsSync(PASTA)) {
   process.exit(1);
 }
 
-// recorte em pixels do original: left, top, width, height
+// Recorte em pixels do original (4000x6000): a peça fica sempre no
+// centro-baixo do quadro, com flores desfocadas em cima e mesa branca no pé —
+// por isso cada corte tira as duas pontas, nunca só o topo. Todos 4:5.
 const FOTOS = [
-  { arquivo: "CAIO9686.jpg", saida: "hero-atelie-principal", recorte: { left: 0, top: 500, width: 4000, height: 5000 }, larguras: [480, 960] },
-  { arquivo: "CAIO9643.jpg", saida: "hero-atelie-bailarina", recorte: { left: 0, top: 1500, width: 4000, height: 4000 }, larguras: [320, 640] },
-  { arquivo: "CAIO9670.jpg", saida: "hero-atelie-tiara", recorte: { left: 0, top: 700, width: 4000, height: 4000 }, larguras: [320, 640] },
+  { arquivo: "CAIO9691.jpg", saida: "hero-laco-pink",      recorte: { left: 0, top: 750, width: 4000, height: 5000 } },
+  { arquivo: "CAIO9686.jpg", saida: "hero-laco-bailarina", recorte: { left: 0, top: 600, width: 4000, height: 5000 } },
+  { arquivo: "CAIO9503.jpg", saida: "hero-bolsa-glitter",  recorte: { left: 200, top: 450, width: 3600, height: 4500 } },
+  { arquivo: "CAIO9509.jpg", saida: "hero-kit-unicornio",  recorte: { left: 0, top: 800, width: 4000, height: 5000 } },
+  { arquivo: "CAIO9465.jpg", saida: "hero-lacos-perola",   recorte: { left: 400, top: 1600, width: 3400, height: 4250 } },
 ];
+const LARGURAS = [480, 960];
+
+// Recorte errado falha alto aqui, em vez de virar foto torta no site.
+for (const { arquivo, recorte } of FOTOS) {
+  const { left, top, width, height } = recorte;
+  if (left + width > 4000 || top + height > 6000 || Math.abs(width / height - 0.8) > 0.001) {
+    console.error(`Recorte inválido em ${arquivo}: precisa ser 4:5 e caber em 4000x6000.`);
+    process.exit(1);
+  }
+}
 
 (async () => {
   const destino = path.join(__dirname, "..", "img");
   for (const foto of FOTOS) {
     const base = sharp(path.join(PASTA, foto.arquivo)).rotate().extract(foto.recorte);
     const buffer = await base.toBuffer();
-    for (const largura of foto.larguras) {
+    for (const largura of LARGURAS) {
       const redimensionada = sharp(buffer).resize({ width: largura });
       const webp = path.join(destino, `${foto.saida}-${largura}.webp`);
       const jpg = path.join(destino, `${foto.saida}-${largura}.jpg`);

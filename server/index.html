@@ -321,33 +321,79 @@
       <div class="col-lg-5 hero-texto">
         <p class="hero-selo">Ateliê Adriana Melo · Brasília/DF</p>
         <h1 class="hero-title">Cada laço, feito à mão <em>pela Adriana.</em></h1>
-        <p class="hero-lead">Você escolhe o modelo e a cor da fita, eu costuro um por um aqui no ateliê e envio para todo o Brasil.</p>
+        <p class="hero-lead">Você escolhe o modelo e a cor da fita, eu costuro um por um aqui no ateliê.</p>
         <p class="hero-assinatura" aria-hidden="true">— Adriana</p>
         <div class="hero-acoes">
           <a href="#colecoes" class="btn-blush hero-cta">Escolher meu laço <i class="bi bi-arrow-down-short" aria-hidden="true"></i></a>
           <a href="https://wa.me/5561982749808" target="_blank" rel="noopener" class="hero-link-whats"><i class="bi bi-whatsapp" aria-hidden="true"></i> ou fale comigo no WhatsApp</a>
         </div>
-        <p class="hero-provas"><!--#NOTA-MEDIA#--><span>+3.200 laços entregues</span><span>envio para todo o Brasil</span><span>100% feito à mão</span></p>
+        <div class="hero-stats">
+          <div class="hero-stat"><span class="hero-stat-icone" aria-hidden="true"><svg class="bow-icon" viewBox="0 0 100 70"><use href="#bow-shape"/></svg></span><span class="num"><span class="num-valor" data-contar="3200" data-prefixo="+">+3.200</span></span><span class="lbl">laços entregues</span></div>
+          <!--#NOTA-MEDIA#-->
+          <div class="hero-stat"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-scissors"></i></span><span class="num"><span class="num-valor" data-contar="100" data-sufixo="%">100%</span></span><span class="lbl">feito à mão</span></div>
+        </div>
       </div>
       <div class="col-lg-7">
-        <div class="hero-colagem">
-          <picture class="hero-colagem-principal">
-            <source type="image/webp" sizes="(max-width: 991.98px) 62vw, 400px" srcset="img/hero-atelie-principal-480.webp 480w, img/hero-atelie-principal-960.webp 960w">
-            <img src="img/hero-atelie-principal-960.jpg" srcset="img/hero-atelie-principal-480.jpg 480w, img/hero-atelie-principal-960.jpg 960w" sizes="(max-width: 991.98px) 62vw, 400px"
-                 alt="Laço rosa com pingente de bailarina ao lado de uma bolsinha preta com alça de pérolas, sobre tábua de madeira"
-                 width="960" height="1200" fetchpriority="high" decoding="async">
-          </picture>
-          <picture class="hero-colagem-lado">
-            <source type="image/webp" sizes="(max-width: 991.98px) 36vw, 240px" srcset="img/hero-atelie-bailarina-320.webp 320w, img/hero-atelie-bailarina-640.webp 640w">
-            <img src="img/hero-atelie-bailarina-640.jpg" srcset="img/hero-atelie-bailarina-320.jpg 320w, img/hero-atelie-bailarina-640.jpg 640w" sizes="(max-width: 991.98px) 36vw, 240px"
-                 alt="Laço lilás com brilho e pingente de bailarina" width="640" height="640" decoding="async">
-          </picture>
-          <picture class="hero-colagem-lado">
-            <source type="image/webp" sizes="(max-width: 991.98px) 36vw, 240px" srcset="img/hero-atelie-tiara-320.webp 320w, img/hero-atelie-tiara-640.webp 640w">
-            <img src="img/hero-atelie-tiara-640.jpg" srcset="img/hero-atelie-tiara-320.jpg 320w, img/hero-atelie-tiara-640.jpg 640w" sizes="(max-width: 991.98px) 36vw, 240px"
-                 alt="Tiara de orelhinhas vermelhas com laço de cetim e a etiqueta da Adriana Melo Acessórios" width="640" height="640" loading="lazy" decoding="async">
-          </picture>
-          <p class="hero-colagem-legenda" aria-hidden="true">fotos das peças do ateliê</p>
+        <div class="hero-art">
+          <div class="hero-flutuantes" aria-hidden="true">
+            <svg class="bow-icon floaty f1"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f2"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f3"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f4"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f5"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f6"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f7"><use href="#bow-shape"/></svg>
+            <svg class="bow-icon floaty f8"><use href="#bow-shape"/></svg>
+          </div>
+          <div class="hero-carrossel" id="heroCarrossel" role="group" aria-label="Fotos das peças do ateliê">
+            <div class="hero-quadro">
+              <div class="hero-slides" id="heroSlides">
+                <div class="hero-slide is-ativa" data-legenda="Laço rosa de bailarina com bolsinha preta">
+                  <picture>
+                    <source type="image/webp" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px" srcset="img/hero-laco-bailarina-480.webp 480w, img/hero-laco-bailarina-960.webp 960w">
+                    <img src="img/hero-laco-bailarina-960.jpg" srcset="img/hero-laco-bailarina-480.jpg 480w, img/hero-laco-bailarina-960.jpg 960w" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px"
+                         alt="Laço rosa com pingente de bailarina ao lado de uma bolsinha preta com alça de pérolas" width="960" height="1200" decoding="async" fetchpriority="high">
+                  </picture>
+                </div>
+              </div>
+              <span class="hero-quadro-badge" aria-hidden="true">feito à mão <i class="bi bi-heart-fill"></i></span>
+            </div>
+            <template id="heroSlidesExtras">
+              <div class="hero-slide" data-legenda="Laço de cetim pink com bolsinha de glitter">
+                  <picture>
+                    <source type="image/webp" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px" srcset="img/hero-laco-pink-480.webp 480w, img/hero-laco-pink-960.webp 960w">
+                    <img src="img/hero-laco-pink-960.jpg" srcset="img/hero-laco-pink-480.jpg 480w, img/hero-laco-pink-960.jpg 960w" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px"
+                         alt="Laço de cetim pink ao lado de uma bolsinha de glitter pink com alça de pérolas" width="960" height="1200" decoding="async">
+                  </picture>
+                </div>
+              <div class="hero-slide" data-legenda="Bolsinha rosa de glitter com corrente">
+                  <picture>
+                    <source type="image/webp" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px" srcset="img/hero-bolsa-glitter-480.webp 480w, img/hero-bolsa-glitter-960.webp 960w">
+                    <img src="img/hero-bolsa-glitter-960.jpg" srcset="img/hero-bolsa-glitter-480.jpg 480w, img/hero-bolsa-glitter-960.jpg 960w" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px"
+                         alt="Bolsinha rosa de glitter com alça de pérolas e corrente dourada" width="960" height="1200" decoding="async">
+                  </picture>
+                </div>
+              <div class="hero-slide" data-legenda="Kit de unicórnio com fitas rosê">
+                  <picture>
+                    <source type="image/webp" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px" srcset="img/hero-kit-unicornio-480.webp 480w, img/hero-kit-unicornio-960.webp 960w">
+                    <img src="img/hero-kit-unicornio-960.jpg" srcset="img/hero-kit-unicornio-480.jpg 480w, img/hero-kit-unicornio-960.jpg 960w" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px"
+                         alt="Kit com tiara de unicórnio e faixas de fita rosê com lacinhos" width="960" height="1200" decoding="async">
+                  </picture>
+                </div>
+              <div class="hero-slide" data-legenda="Laços rosê com miolo de pérolas">
+                  <picture>
+                    <source type="image/webp" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px" srcset="img/hero-lacos-perola-480.webp 480w, img/hero-lacos-perola-960.webp 960w">
+                    <img src="img/hero-lacos-perola-960.jpg" srcset="img/hero-lacos-perola-480.jpg 480w, img/hero-lacos-perola-960.jpg 960w" sizes="(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px"
+                         alt="Par de laços rosê de cetim com miolo de pérolas" width="960" height="1200" decoding="async">
+                  </picture>
+                </div>
+            </template>
+            <p class="visually-hidden hero-vivo" aria-live="polite" aria-atomic="true"></p>
+            <div class="hero-controles">
+              <div class="hero-pontos" role="group" aria-label="Escolher a foto"></div>
+              <button type="button" class="hero-pausa" aria-pressed="false" aria-label="Pausar a troca das fotos" hidden><span class="hero-pausa-icone" aria-hidden="true"></span></button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -915,6 +961,7 @@
 <script src="js/auth.js" defer></script>
 <script src="js/pricing.js" defer></script>
 <script src="js/main.js" defer></script>
+<script src="js/hero-carrossel.js" defer></script>
 <script src="js/animacoes.js" defer fetchpriority="low"></script>
 <script src="js/instagram-feed.js" defer></script>
 <script src="js/cupom-toast.js" defer></script>

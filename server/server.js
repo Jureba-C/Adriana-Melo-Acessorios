@@ -1137,15 +1137,19 @@ function estrelasHtml(nota){
   return `<span class="avaliacao-estrelas" role="img" aria-label="${nota} de 5 estrelas">${html}</span>`;
 }
 
-/* Nota real na linha de provas do topo da home. Sem nenhuma avaliação
-   publicada não aparece nada — a linha já tem os fatos fixos da loja — e
-   NUNCA uma nota inventada: o teste de avaliações tranca a volta do 4,9. */
+/* Célula do meio da etiqueta do topo da home. Sem nenhuma avaliação
+   publicada mostra um fato real da loja (envio nacional) em vez de sumir —
+   e NUNCA uma nota inventada: o teste de avaliações tranca a volta do 4,9.
+   data-contar alimenta a contagem de js/hero-carrossel.js, e o texto já sai
+   pronto para quem está sem JS ou pediu menos movimento. */
 function blocoNotaMedia(){
   const { total, media } = db.notaMedia();
-  if(!total) return "";
+  if(!total){
+    return `<div class="hero-stat"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-truck"></i></span><span class="num is-texto">Todo o Brasil</span><span class="lbl">envio com rastreio</span></div>`;
+  }
   const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  const rotulo = total === 1 ? "1 avaliação" : `${total} avaliações`;
-  return `<span class="hero-provas-nota"><i class="bi bi-star-fill" aria-hidden="true"></i> ${nota} (${rotulo})</span>`;
+  const rotulo = total === 1 ? "de 1 avaliação" : `de ${total} avaliações`;
+  return `<div class="hero-stat hero-stat-nota"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-star-fill"></i></span><span class="num"><span class="num-valor" data-contar="${media.toFixed(1)}" data-casas="1">${nota}</span><i class="bi bi-star-fill num-estrela" aria-hidden="true"></i></span><span class="lbl">${rotulo}</span></div>`;
 }
 
 /* Lacinhos e brilhos de fundo da seção de avaliações. Posições fixas (não
