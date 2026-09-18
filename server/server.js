@@ -26,6 +26,7 @@ process.on("warning", (warning) => {
 
 const fs = require("fs");
 const path = require("path");
+const zlib = require("node:zlib");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -555,12 +556,25 @@ app.use((req, res, next) => {
   res.set("Cache-Control", "no-store");
   return res.redirect(301, CLIENT_ORIGIN + req.originalUrl);
 });
-// Comprime HTML/CSS/JS/JSON com gzip antes de enviar — sem isso, o
-// style.css (~21KB) e o main.js (~37KB) saíam do jeito que estão no disco,
-// mesmo o navegador sempre anunciando que aceita gzip. Não comprime
-// imagens/binários (já vêm comprimidos, gastar CPU tentando de novo
-// não ajuda).
-app.use(compression());
+// Comprime HTML/CSS/JS/JSON antes de enviar — sem isso, o style.css e o
+// main.js saíam do jeito que estão no disco, mesmo o navegador sempre
+// anunciando que aceita compressão. Não comprime imagens/binários (já vêm
+// comprimidos, gastar CPU tentando de novo não ajuda).
+//
+// A qualidade do brotli é subida de 4 (o padrão do compression, fixo no
+// código dele) para 6. Medido nos arquivos reais da home:
+//
+//   css/style.css  183.543 B → q4: 37.176 B / 2 ms   → q6: 32.253 B / 2 ms
+//   js/main.js      67.964 B → q4: 17.594 B / 0 ms   → q6: 16.356 B / 1 ms
+//   index.html      53.525 B → q4: 11.478 B / 0 ms   → q6: 10.694 B / 0 ms
+//
+// São ~12 KB a menos por visita da home inteira, por 1–2 ms de CPU. A
+// escala só fica cara de q10 em diante (style.css: 46 ms em q10, 127 ms em
+// q11), por isso 6 e não mais — e por isso os arquivos estáticos, que dá
+// para comprimir uma vez e guardar, têm cache próprio em lib/precompress.js.
+app.use(compression({
+  brotli: { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } },
+}));
 
 /* =========================================================================
    MODO MANUTENÇÃO — MAINTENANCE_MODE=true no .env
