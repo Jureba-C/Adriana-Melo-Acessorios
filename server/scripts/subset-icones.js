@@ -15,13 +15,30 @@
  */
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 
 const RAIZ = path.join(__dirname, "..");
 const CSS_COMPLETO = path.join(RAIZ, "css/vendor/bootstrap-icons.min.css");
 const FONTE_COMPLETA = path.join(RAIZ, "css/vendor/fonts/bootstrap-icons.woff2");
 const CSS_RECORTADO = path.join(RAIZ, "css/vendor/bootstrap-icons.subset.css");
-const FONTE_RECORTADA = path.join(RAIZ, "css/vendor/fonts/bootstrap-icons.subset.woff2");
+const PASTA_FONTES = path.join(RAIZ, "css/vendor/fonts");
+// O nome da fonte recortada carrega um hash do conteúdo. Não é enfeite: este
+// arquivo é servido com "immutable" por um ano, e só é referenciado de dentro
+// do CSS — o versionador de assets do server.js (?v=) reescreve HTML, não CSS,
+// então nunca alcançaria daqui. Sem o hash, trocar um ícone continuaria
+// invisível por um ano para quem já visitou o site. É o mesmo arranjo das
+// fontes de texto (fraunces-400-latin-39ce20.woff2, e assim por diante).
+const PREFIXO_FONTE = "bootstrap-icons.subset-";
+function nomeDaFonteRecortada(){
+  const achados = fs.readdirSync(PASTA_FONTES)
+    .filter((f) => f.startsWith(PREFIXO_FONTE) && f.endsWith(".woff2"));
+  return achados.length === 1 ? achados[0] : null;
+}
+function caminhoDaFonteRecortada(){
+  const nome = nomeDaFonteRecortada();
+  return nome ? path.join(PASTA_FONTES, nome) : null;
+}
 
 // Inclui o JS: metade dos ícones nasce em template string e nunca está no HTML.
 const PASTAS = ["", "js"];
@@ -78,12 +95,16 @@ function main() {
 
   const unicodes = usados.map((nome) => "U+" + mapa.get(nome)).join(",");
 
+  // Escreve num nome provisório: o nome definitivo depende do hash do
+  // conteúdo, que só existe depois do pyftsubset rodar.
+  const provisoria = path.join(PASTA_FONTES, "bootstrap-icons.subset.tmp.woff2");
+
   try {
     execFileSync("pyftsubset", [
       FONTE_COMPLETA,
       `--unicodes=${unicodes}`,
       "--flavor=woff2",
-      `--output-file=${FONTE_RECORTADA}`,
+      `--output-file=${provisoria}`,
       // Sem layout-features: ícone não tem ligadura, kerning nem contexto.
       "--layout-features=",
       "--no-hinting",
@@ -100,8 +121,22 @@ function main() {
         '  python3 -m venv .venv && .venv/bin/pip install "fonttools[woff]"\n' +
         "e rode com o venv ativo (ou PATH apontando para ele)."
       : "pyftsubset falhou:\n" + String(err.stderr || err.message));
+    try { fs.unlinkSync(provisoria); } catch {}
     process.exit(1);
   }
+
+  const hash = crypto.createHash("sha256")
+    .update(fs.readFileSync(provisoria)).digest("hex").slice(0, 8);
+  const nomeFinal = `${PREFIXO_FONTE}${hash}.woff2`;
+  // Apaga o recorte anterior: dois arquivos com o prefixo deixariam
+  // nomeDaFonteRecortada() sem saber qual é o bom, e o antigo não serve mais
+  // para nada (o CSS novo aponta para o novo, e o nome dele nunca é reusado).
+  for(const antigo of fs.readdirSync(PASTA_FONTES)){
+    if(antigo.startsWith(PREFIXO_FONTE) && antigo !== nomeFinal){
+      fs.unlinkSync(path.join(PASTA_FONTES, antigo));
+    }
+  }
+  fs.renameSync(provisoria, path.join(PASTA_FONTES, nomeFinal));
 
   /* O CSS recortado é escrito à mão (e não filtrado do original) porque são
      três regras fixas mais uma linha por ícone — gerar é mais previsível do
@@ -110,7 +145,7 @@ function main() {
   const css = `/* GERADO por scripts/subset-icones.js — não editar à mão.
    ${usados.length} de ${mapa.size} ícones do Bootstrap Icons v1.11.3 (MIT).
    Para adicionar um ícone: use a classe no HTML/JS e rode o script de novo. */
-@font-face{font-display:block;font-family:bootstrap-icons;src:url("fonts/${path.basename(FONTE_RECORTADA)}") format("woff2")}
+@font-face{font-display:block;font-family:bootstrap-icons;src:url("fonts/${nomeFinal}") format("woff2")}
 .bi::before,[class*=" bi-"]::before,[class^=bi-]::before{display:inline-block;font-family:bootstrap-icons!important;font-style:normal;font-weight:400!important;font-variant:normal;text-transform:none;line-height:1;vertical-align:-.125em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 ${regras}
 `;
@@ -118,10 +153,10 @@ ${regras}
 
   const kb = (p) => (fs.statSync(p).size / 1024).toFixed(1) + " KB";
   console.log(`${usados.length} ícones de ${mapa.size}`);
-  console.log(`fonte  ${kb(FONTE_COMPLETA)} -> ${kb(FONTE_RECORTADA)}`);
+  console.log(`fonte  ${kb(FONTE_COMPLETA)} -> ${kb(path.join(PASTA_FONTES, nomeFinal))}  (${nomeFinal})`);
   console.log(`css    ${kb(CSS_COMPLETO)} -> ${kb(CSS_RECORTADO)}`);
 }
 
-module.exports = { iconesUsados, mapaDeCodepoints, CSS_RECORTADO, FONTE_RECORTADA };
+module.exports = { iconesUsados, mapaDeCodepoints, CSS_RECORTADO, PASTA_FONTES, caminhoDaFonteRecortada };
 
 if (require.main === module) main();

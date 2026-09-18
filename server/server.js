@@ -4293,6 +4293,10 @@ app.patch("/api/admin/orders/:reference/delivered", auth.requireAdmin, auth.requ
    lib/instagram.js já cacheia e nunca deixa vazar o token de acesso.
 ========================================================================= */
 app.get("/api/instagram/feed", async (req, res) => {
+  // 5 minutos: o feed já é cacheado do lado do servidor (lib/instagram.js), e
+  // uma foto nova no Instagram aparecer com alguns minutos de atraso não muda
+  // nada para ninguém. Evita uma ida ao servidor a cada visita.
+  res.setHeader("Cache-Control", "public, max-age=300");
   try {
     const feed = await instagram.getInstagramFeed();
     res.json(feed);
@@ -4327,6 +4331,14 @@ app.post("/api/admin/instagram/reconnect", auth.requireAdmin, auth.requireAdminT
    depois de uma edição — ver loadProductOverrides() em js/main.js.
 ========================================================================= */
 app.get("/api/products", (req, res) => {
+  // no-cache, e nunca um max-age positivo: o painel edita preço e a vitrine
+  // tem de refletir na visita seguinte. Um catálogo velho guardado no
+  // navegador contra o JSON-LD fresco da página é exatamente o descasamento
+  // de preço que o Google penaliza (ver blocoDadosEstruturados, acima).
+  // "no-cache" não proíbe guardar — obriga a revalidar, e o ETag que o
+  // Express já gera devolve 304 quando nada mudou. O custo é uma ida ao
+  // servidor, não o corpo inteiro.
+  res.setHeader("Cache-Control", "no-cache");
   const overridesMap = getProductOverridesMap();
   const products = getAllProductIds()
     .map(id => ({ id, p: effectiveProduct(id, overridesMap) }))

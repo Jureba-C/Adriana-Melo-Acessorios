@@ -8,7 +8,10 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const { iconesUsados, mapaDeCodepoints, CSS_RECORTADO } = require("../scripts/subset-icones.js");
+const crypto = require("node:crypto");
+const path = require("node:path");
+const { iconesUsados, mapaDeCodepoints, CSS_RECORTADO, PASTA_FONTES, caminhoDaFonteRecortada } =
+  require("../scripts/subset-icones.js");
 
 function iconesNoRecorte() {
   const css = fs.readFileSync(CSS_RECORTADO, "utf8");
@@ -26,6 +29,29 @@ test("todo ícone usado no site existe no recorte da fonte", () => {
   const faltando = usados.filter((nome) => !recorte.has(nome)).sort();
   assert.deepEqual(faltando, [],
     "ícone usado no HTML/JS e ausente do recorte — rode: node scripts/subset-icones.js");
+});
+
+/* O filtro `mapa.has(nome)` dos dois testes acima existe para não cobrar da
+   fonte uma classe `bi-*` que não seja do Bootstrap. O efeito colateral é que
+   um nome de ícone ERRADO passa batido: não está no mapa, então é descartado
+   antes de qualquer verificação, e no site vira um vazio de largura zero —
+   sem erro, sem 404, sem teste vermelho.
+
+   Este teste fecha esse buraco. A lista abaixo não é uma permissão: é uma
+   dívida registrada, e corrigi-la MUDA a aparência da página (um ícone passa a
+   aparecer onde hoje não há nada), então depende da dona da loja decidir. */
+const NOMES_QUE_O_BOOTSTRAP_NAO_TEM = [
+  // index.html, seção "nossa promessa pra você". Não existe no Bootstrap Icons
+  // v1.11.3 — hoje renderiza nada. Trocar por bi-shield-check ou bi-heart faria
+  // um ícone aparecer ali pela primeira vez.
+  "bi-shield-heart",
+];
+
+test("nenhum ícone novo com nome que o Bootstrap Icons não define", () => {
+  const mapa = mapaDeCodepoints();
+  const inexistentes = [...iconesUsados()].filter((nome) => !mapa.has(nome)).sort();
+  assert.deepEqual(inexistentes, [...NOMES_QUE_O_BOOTSTRAP_NAO_TEM].sort(),
+    "classe bi-* que o Bootstrap Icons não define — vira vazio de largura zero no site");
 });
 
 test("o recorte não carrega ícone que ninguém usa", () => {
@@ -47,8 +73,40 @@ test("nenhuma página ainda aponta para o CSS completo do Bootstrap Icons", () =
 });
 
 test("a fonte recortada existe e é uma fração da original", () => {
-  const recortada = fs.statSync(__dirname + "/../css/vendor/fonts/bootstrap-icons.subset.woff2").size;
-  const completa = fs.statSync(__dirname + "/../css/vendor/fonts/bootstrap-icons.woff2").size;
+  const caminho = caminhoDaFonteRecortada();
+  assert.ok(caminho, "nenhuma (ou mais de uma) fonte recortada em css/vendor/fonts");
+  const recortada = fs.statSync(caminho).size;
+  const completa = fs.statSync(path.join(PASTA_FONTES, "bootstrap-icons.woff2")).size;
   assert.ok(recortada < completa / 5,
     `recorte com ${recortada} bytes contra ${completa} da fonte cheia — recorte não surtiu efeito`);
+});
+
+/* O arquivo da fonte é servido com "immutable" por um ano e só é citado de
+   dentro do CSS — o versionador do server.js (?v=) reescreve HTML, não CSS, e
+   por isso nunca alcança este url(). Sem um hash no NOME, trocar um ícone
+   ficaria invisível por um ano para quem já visitou o site. */
+test("o url() da fonte aponta para um arquivo que existe e tem hash no nome", () => {
+  const css = fs.readFileSync(CSS_RECORTADO, "utf8");
+  const m = css.match(/url\("fonts\/([^"]+)"\)/);
+  assert.ok(m, "o @font-face do recorte perdeu o url()");
+  const nome = m[1];
+
+  assert.match(nome, /^bootstrap-icons\.subset-[0-9a-f]{8}\.woff2$/,
+    `"${nome}" sem hash de conteúdo no nome — trocar um ícone não chegaria a quem já visitou`);
+  assert.ok(fs.existsSync(path.join(PASTA_FONTES, nome)),
+    `o CSS aponta para fonts/${nome}, que não existe em disco`);
+
+  const hashReal = crypto.createHash("sha256")
+    .update(fs.readFileSync(path.join(PASTA_FONTES, nome))).digest("hex").slice(0, 8);
+  assert.equal(nome, `bootstrap-icons.subset-${hashReal}.woff2`,
+    "o hash no nome não bate com o conteúdo — rode: node scripts/subset-icones.js");
+});
+
+test("nenhuma página ou CSS ainda cita a fonte recortada sem hash", () => {
+  const raiz = path.join(__dirname, "..");
+  const suspeitos = ["css/vendor/bootstrap-icons.subset.css",
+    ...fs.readdirSync(raiz).filter((f) => f.endsWith(".html"))];
+  const erradas = suspeitos.filter((f) =>
+    fs.readFileSync(path.join(raiz, f), "utf8").includes("bootstrap-icons.subset.woff2"));
+  assert.deepEqual(erradas, [], "referência ao nome antigo, sem hash");
 });
