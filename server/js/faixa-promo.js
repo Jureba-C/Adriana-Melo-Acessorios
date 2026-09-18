@@ -1,7 +1,7 @@
 (function(){
   "use strict";
 
-  const INTERVALO = 3000;
+  const INTERVALO = 5000;
   const SAIDA = 600;
 
   const faixa = document.getElementById("faixaPromo");
