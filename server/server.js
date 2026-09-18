@@ -762,8 +762,14 @@ const PUBLIC_TOP_LEVEL = new Set([
 // página (GET/HEAD aceitando HTML) recebe a 404 com a identidade do site;
 // o resto (chamada de API, asset que faltou, etc.) recebe uma resposta
 // simples do jeito que já era antes.
+// ⚠️ req.originalUrl, e não req.path: as duas funções abaixo são passadas
+// como handler para middlewares montados com app.use("/api", ...), e ali o
+// Express corta o prefixo do mount — req.path vira "/products". Com req.path
+// o teste nunca dava certo e um cliente de API estourando o limite recebia a
+// PÁGINA 429.html no lugar do JSON. (O skip do próprio limitador, logo
+// abaixo, já testava "/orders/" sem o /api justamente por causa disso.)
 function sendNotFound(req, res){
-  if (req.path.startsWith("/api/")) {
+  if (req.originalUrl.startsWith("/api/")) {
     return res.status(404).json({ error: "Rota não encontrada." });
   }
   if ((req.method === "GET" || req.method === "HEAD") && req.accepts("html")) {
@@ -777,7 +783,7 @@ function sendNotFound(req, res){
 // ("Too many requests, please try again later."), sem estilo nenhum — a
 // única resposta do site sem a identidade visual da loja.
 function sendTooManyRequests(req, res){
-  if (req.path.startsWith("/api/")) {
+  if (req.originalUrl.startsWith("/api/")) {
     return res.status(429).json({ error: "Muitas requisições. Aguarde um instante e tente novamente." });
   }
   if ((req.method === "GET" || req.method === "HEAD") && req.accepts("html")) {
@@ -4276,7 +4282,7 @@ app.get("/api/instagram/feed", async (req, res) => {
    Graph API (ex.: "Cannot parse access token") em vez de exigir acesso ao
    log do servidor para descobrir o motivo.
 ========================================================================= */
-app.post("/api/admin/instagram/reconnect", auth.requireAdmin, async (req, res) => {
+app.post("/api/admin/instagram/reconnect", auth.requireAdmin, auth.requireAdminTwoFactor, async (req, res) => {
   instagram.resetToken();
   const resultado = await instagram.testConnection();
   res.json(resultado);
