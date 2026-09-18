@@ -43,6 +43,7 @@ const rateLimit = require("express-rate-limit");
 const qrcode = require("qrcode");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const db = require("./lib/db");
+const precompress = require("./lib/precompress");
 const spreadsheetExport = require("./lib/export-spreadsheet");
 const auth = require("./lib/auth");
 const whatsapp = require("./lib/whatsapp");
@@ -1514,6 +1515,12 @@ app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-cache");
   return res.send(html);
 });
+
+/* Antes do express.static: entrega CSS/JS já comprimidos em brotli 11 quando
+   houver cópia em cache, e deixa passar (para o static + compression normais)
+   quando não houver. Ver lib/precompress.js para o porquê do preenchimento ser
+   assíncrono. */
+app.use(precompress.criarPrecompressor(SITE_ROOT, { revalidarSempre: REVALIDATE_ALWAYS }));
 
 app.use(express.static(SITE_ROOT, {
   extensions: ["html"],
