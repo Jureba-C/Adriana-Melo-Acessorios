@@ -267,3 +267,42 @@ test("id inventado responde 404, sem revelar se existe", async () => {
   assert.equal(inexistente.status, 404);
   assert.equal(invalido.status, 404);
 });
+
+/* O preload adianta a foto do topo (o LCP da home) para antes de o parser
+   chegar no <body>. Ele SÓ ajuda se apontar exatamente para a mesma imagem que
+   o <picture> vai escolher: um srcset ou um sizes fora de sincronia faz o
+   navegador baixar DUAS fotos diferentes — o dobro do peso para adiantar nada.
+   Por isso os dois saem da mesma função (fontesDaFoto). */
+test("o preload do topo aponta para exatamente a mesma imagem do <picture>", async () => {
+  await apagarTodas();
+  const home = await (await fetch(ORIGIN + "/")).text();
+
+  const preload = home.match(/<link rel="preload" as="image"[^>]*>/);
+  assert.ok(preload, "o preload da foto do topo sumiu");
+  const source = home.match(/<source type="image\/webp"[^>]*>/);
+  assert.ok(source, "o <source> webp do primeiro slide sumiu");
+
+  const pegar = (tag, attr) => (tag.match(new RegExp(`${attr}="([^"]*)"`)) || [])[1];
+  assert.equal(pegar(preload[0], "imagesrcset"), pegar(source[0], "srcset"),
+    "preload e <source> discordam do srcset — o navegador baixaria duas imagens");
+  assert.equal(pegar(preload[0], "imagesizes"), pegar(source[0], "sizes"),
+    "preload e <source> discordam do sizes — muda qual largura o navegador escolhe");
+  assert.match(preload[0], /type="image\/webp"/,
+    "sem o type, navegador sem suporte a webp baixaria um arquivo que não vai usar");
+});
+
+test("com foto do painel, o preload acompanha e larga o type webp", async () => {
+  await apagarTodas();
+  const { id } = await (await enviarFoto({ legenda: "Capa do painel" })).json();
+  const home = await (await fetch(ORIGIN + "/")).text();
+
+  const preload = home.match(/<link rel="preload" as="image"[^>]*>/);
+  assert.ok(preload, "o preload sumiu quando a foto veio do painel");
+  assert.ok(preload[0].includes(`/api/hero/fotos/${id}?w=960`),
+    "o preload continua apontando para a foto fixa em vez da do painel");
+  // A rota serve webp ou jpeg pela mesma URL, decidindo pelo Accept: declarar
+  // image/webp aqui faria o navegador sem suporte ignorar um preload que
+  // funcionaria para ele.
+  assert.ok(!preload[0].includes("type="), "foto do painel não tem formato fixo para declarar");
+  await apagarTodas();
+});

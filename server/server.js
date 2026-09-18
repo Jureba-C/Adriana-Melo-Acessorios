@@ -1377,6 +1377,7 @@ function secaoAvaliacoes(){
    por ser o LCP da home.
 ========================================================================= */
 const MARCA_HERO = "<!--#HERO-FOTOS#-->";
+const MARCA_HERO_PRELOAD = "<!--#HERO-PRELOAD#-->";
 const HERO_SIZES = "(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px";
 
 const FOTOS_HERO_PADRAO = [
@@ -1392,27 +1393,54 @@ const FOTOS_HERO_PADRAO = [
     alt: "Par de laços rosê de cetim com miolo de pérolas" },
 ];
 
-function slideHero(foto, primeiro){
-  const prioridade = primeiro ? ' fetchpriority="high"' : "";
-  const ativa = primeiro ? " is-ativa" : "";
-  const fontes = foto.slug
+// Uma função só para as URLs, usada pelo <picture> e pelo <link rel=preload>.
+// Se cada um montasse as suas, bastaria um divergir para o navegador baixar
+// DUAS imagens diferentes — o preload viraria peso morto em vez de adiantar
+// a que vai aparecer.
+function fontesDaFoto(foto){
+  return foto.slug
     ? {
         webp480: comVersao(`img/${foto.slug}-480.webp`),
         webp960: comVersao(`img/${foto.slug}-960.webp`),
         jpg480:  comVersao(`img/${foto.slug}-480.jpg`),
         jpg960:  comVersao(`img/${foto.slug}-960.jpg`),
+        temWebpSeparado: true,
       }
     : {
         webp480: `/api/hero/fotos/${foto.id}?w=480`,
         webp960: `/api/hero/fotos/${foto.id}?w=960`,
         jpg480:  `/api/hero/fotos/${foto.id}?w=480`,
         jpg960:  `/api/hero/fotos/${foto.id}?w=960`,
+        temWebpSeparado: false,
       };
+}
+
+/* O preload adianta a imagem do topo (o LCP da home): sem ele o navegador só
+   descobre a foto quando o parser chega no <body>, depois de resolver os 4 CSS
+   que bloqueiam a renderização. O fetchpriority="high" do <img> já ajuda, mas
+   só a partir do momento em que a tag é lida.
+
+   Para as fotos fixas, o preload é do WEBP e leva type="image/webp": navegador
+   sem suporte a webp simplesmente ignora o link e descobre o JPEG do jeito
+   normal — nunca baixa os dois. As fotos do painel são servidas pela mesma URL
+   nos dois formatos (a rota escolhe pelo Accept), então ali não há type. */
+function preloadHero(foto){
+  const f = fontesDaFoto(foto);
+  const tipo = f.temWebpSeparado ? ' type="image/webp"' : "";
+  const p480 = f.temWebpSeparado ? f.webp480 : f.jpg480;
+  const p960 = f.temWebpSeparado ? f.webp960 : f.jpg960;
+  return `<link rel="preload" as="image"${tipo} imagesrcset="${p480} 480w, ${p960} 960w" imagesizes="${HERO_SIZES}" fetchpriority="high">`;
+}
+
+function slideHero(foto, primeiro){
+  const prioridade = primeiro ? ' fetchpriority="high"' : "";
+  const ativa = primeiro ? " is-ativa" : "";
+  const fontes = fontesDaFoto(foto);
   // Uma foto do painel é servida pela MESMA URL em webp e jpeg (a rota
   // decide pelo Accept do navegador), então ali o <source type="image/webp">
   // não teria o que acrescentar e sai fora — deixá-lo faria o navegador
   // pedir o mesmo arquivo com outro nome, sem ganho.
-  const source = foto.slug
+  const source = fontes.temWebpSeparado
     ? `<source type="image/webp" sizes="${HERO_SIZES}" srcset="${fontes.webp480} 480w, ${fontes.webp960} 960w">`
     : "";
   return `<div class="hero-slide${ativa}" data-legenda="${escaparHtml(foto.legenda)}">
@@ -1449,8 +1477,13 @@ function blocoHero(){
               <template id="heroSlidesExtras">
                 ${fotos.slice(1).map(f => slideHero(f, false)).join("\n                ")}
               </template>`;
-  CACHE_HERO = { assinatura, html };
+  CACHE_HERO = { assinatura, html, preload: preloadHero(fotos[0]) };
   return html;
+}
+
+function preloadDoHero(){
+  blocoHero();
+  return CACHE_HERO.preload;
 }
 
 function comAvaliacoes(html){
@@ -1461,6 +1494,7 @@ function comAvaliacoes(html){
   if(saida.includes(MARCA_NOTA_MEDIA)) saida = saida.replace(MARCA_NOTA_MEDIA, () => blocoNotaMedia());
   if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
   if(saida.includes(MARCA_HERO)) saida = saida.replace(MARCA_HERO, () => blocoHero());
+  if(saida.includes(MARCA_HERO_PRELOAD)) saida = saida.replace(MARCA_HERO_PRELOAD, () => preloadDoHero());
   return saida;
 }
 
