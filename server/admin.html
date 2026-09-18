@@ -146,6 +146,7 @@
           <button type="button" class="admin-tab-btn" data-tab="clientes"><i class="bi bi-people"></i> Clientes</button>
           <button type="button" class="admin-tab-btn" data-tab="mensagens"><i class="bi bi-chat-dots"></i> Mensagens</button>
           <button type="button" class="admin-tab-btn" data-tab="avaliacoes"><i class="bi bi-star-fill"></i> Avaliações <span class="admin-tab-contador d-none" id="avaliacoesContador"></span></button>
+          <button type="button" class="admin-tab-btn" data-tab="topo"><i class="bi bi-image"></i> Fotos do topo</button>
         </nav>
 
         <div class="admin-tab-panels">
@@ -406,6 +407,30 @@
             <div id="avaliacoesLista" class="orders-list d-none"></div>
           </section>
 
+          <section class="admin-tab-panel d-none" data-tab-panel="topo">
+            <div class="admin-section-head">
+              <h2 class="admin-section-title">Fotos do topo</h2>
+              <button type="button" class="btn-blush btn-sm-blush" id="heroAddBtn">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar foto
+              </button>
+            </div>
+            <p class="admin-hint">
+              São as fotos que passam sozinhas no quadro da primeira tela do site, a cada 5 segundos.
+              Use as setas <i class="bi bi-chevron-left" aria-hidden="true"></i>
+              <i class="bi bi-chevron-right" aria-hidden="true"></i> para escolher a ordem — a primeira é
+              a que a cliente vê ao abrir a página. Toda foto é recortada em pé (4 por 5); se cortar a
+              parte errada, mude o <i class="bi bi-crop" aria-hidden="true"></i> enquadramento sem precisar
+              enviar de novo.
+            </p>
+            <div class="admin-aviso d-none" id="heroPadraoAviso">
+              <i class="bi bi-info-circle" aria-hidden="true"></i>
+              <span>Nenhuma foto sua no topo ainda — o site está mostrando as cinco fotos que já vieram
+              prontas. Assim que você adicionar a primeira, elas saem e entram as suas.</span>
+            </div>
+            <div class="small mb-2 account-msg" id="heroMsg" role="status" aria-live="polite"></div>
+            <div class="hero-admin-grade" id="heroGrade"></div>
+          </section>
+
         </div>
       </div>
 
@@ -413,6 +438,63 @@
     </div>
   </div>
 </main>
+
+<div class="modal fade" id="heroFotoModal" tabindex="-1" aria-labelledby="heroFotoModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="heroFotoForm" novalidate>
+        <div class="modal-header border-0">
+          <h5 class="modal-title font-display" id="heroFotoModalLabel">Adicionar foto do topo</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="heroFotoId">
+
+          <div class="hero-modal-previa">
+            <div class="hero-modal-quadro">
+              <img id="heroFotoPreview" src="" alt="" class="d-none">
+              <span class="hero-modal-vazio" id="heroFotoVazio" aria-hidden="true"><i class="bi bi-image"></i></span>
+            </div>
+            <p class="hero-modal-nota">É assim, em pé, que ela aparece no site.</p>
+          </div>
+
+          <div class="mb-3" id="heroFotoArquivoBloco">
+            <label class="form-label" for="heroFotoFile">Foto</label>
+            <input type="file" class="form-control" id="heroFotoFile" accept="image/jpeg,image/png,image/webp,image/gif">
+            <div class="form-text">JPEG, PNG ou WEBP, até 8MB. Foto em pé fica melhor.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="heroFotoFocus"><i class="bi bi-crop me-1" aria-hidden="true"></i>Que parte manter no recorte</label>
+            <select class="form-select" id="heroFotoFocus">
+              <option value="center">O meio da foto</option>
+              <option value="top">A parte de cima</option>
+              <option value="bottom">A parte de baixo</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="heroFotoLegenda">Legenda curta</label>
+            <input type="text" class="form-control" id="heroFotoLegenda" maxlength="90" placeholder="Laço rosa de bailarina com bolsinha preta">
+            <div class="form-text">Anunciada para quem navega com leitor de tela quando a foto entra.</div>
+          </div>
+
+          <div class="mb-1">
+            <label class="form-label" for="heroFotoAlt">Descrição da foto</label>
+            <textarea class="form-control" id="heroFotoAlt" rows="2" maxlength="180" placeholder="Laço rosa com pingente de bailarina ao lado de uma bolsinha preta com alça de pérolas"></textarea>
+            <div class="form-text">Descreva o que aparece. É o que o Google lê e o que aparece se a imagem não carregar.</div>
+          </div>
+
+          <div class="small text-danger mt-2" id="heroFotoErro" role="alert"></div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn-outline-blush" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn-blush" id="heroFotoSalvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="editProductModal" tabindex="-1" aria-labelledby="editProductModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">

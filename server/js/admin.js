@@ -2736,8 +2736,245 @@
     }
   });
 
+  const heroGradeEl = document.getElementById("heroGrade");
+  const heroMsgEl = document.getElementById("heroMsg");
+  const heroAvisoPadraoEl = document.getElementById("heroPadraoAviso");
+  const heroModalEl = document.getElementById("heroFotoModal");
+  const heroModal = heroModalEl ? new bootstrap.Modal(heroModalEl) : null;
+  const heroFormEl = document.getElementById("heroFotoForm");
+  const heroFileEl = document.getElementById("heroFotoFile");
+  const heroPreviewEl = document.getElementById("heroFotoPreview");
+  const heroVazioEl = document.getElementById("heroFotoVazio");
+  const heroFocusEl = document.getElementById("heroFotoFocus");
+  const heroLegendaEl = document.getElementById("heroFotoLegenda");
+  const heroAltEl = document.getElementById("heroFotoAlt");
+  const heroErroEl = document.getElementById("heroFotoErro");
+  const heroSalvarEl = document.getElementById("heroFotoSalvar");
+  const heroIdEl = document.getElementById("heroFotoId");
+
+  let heroCache = [];
+  let heroMax = 6;
+  let heroSalvandoOrdem = false;
+
+  function heroAviso(texto, erro){
+    heroMsgEl.textContent = texto || "";
+    heroMsgEl.classList.toggle("text-danger", Boolean(erro));
+  }
+
+  function heroCartao(foto, i){
+    const capa = i === 0 ? '<span class="hero-admin-capa">capa</span>' : "";
+    return `
+      <div class="hero-admin-card" data-hero-id="${escapeHTML(foto.id)}">
+        <div class="hero-admin-foto">
+          <img src="${escapeHTML(foto.url)}" alt="${escapeHTML(foto.alt)}" loading="lazy">
+          <span class="hero-admin-ordem">${i + 1}</span>
+          ${capa}
+        </div>
+        <div class="hero-admin-corpo">
+          <span class="hero-admin-legenda">${escapeHTML(foto.legenda)}</span>
+          <div class="hero-admin-acoes">
+            <button type="button" class="hero-admin-btn" data-hero-mover="-1" ${i === 0 ? "disabled" : ""}
+                    aria-label="Mover para antes"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn" data-hero-mover="1" ${i === heroCache.length - 1 ? "disabled" : ""}
+                    aria-label="Mover para depois"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn" data-hero-editar
+                    aria-label="Editar esta foto"><i class="bi bi-pencil" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn is-apagar" data-hero-apagar
+                    aria-label="Apagar esta foto"><i class="bi bi-trash3" aria-hidden="true"></i></button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function heroCartaoPadrao(foto, i){
+    return `
+      <div class="hero-admin-card is-padrao">
+        <div class="hero-admin-foto">
+          <img src="${escapeHTML(foto.url)}" alt="${escapeHTML(foto.alt)}" loading="lazy">
+          <span class="hero-admin-ordem">${i + 1}</span>
+        </div>
+        <div class="hero-admin-corpo">
+          <span class="hero-admin-legenda">${escapeHTML(foto.legenda)}</span>
+        </div>
+      </div>`;
+  }
+
+  function heroRender(dados){
+    heroCache = dados.fotos;
+    heroMax = dados.max;
+    heroAvisoPadraoEl.classList.toggle("d-none", !dados.usandoPadrao);
+    heroGradeEl.innerHTML = dados.usandoPadrao
+      ? dados.padrao.map(heroCartaoPadrao).join("")
+      : heroCache.map(heroCartao).join("");
+    document.getElementById("heroAddBtn").disabled = heroCache.length >= heroMax;
+  }
+
+  async function heroCarregar(){
+    try{
+      const res = await fetchWithTimeout("/api/admin/hero/fotos");
+      if(!res.ok) throw new Error("Não foi possível carregar as fotos do topo.");
+      heroRender(await res.json());
+    }catch(err){
+      console.error("Erro ao carregar as fotos do topo:", err);
+      heroAviso(err.message || "Não foi possível carregar as fotos do topo.", true);
+    }
+  }
+
+  function heroAbrirModal(foto){
+    heroErroEl.textContent = "";
+    heroFormEl.reset();
+    heroIdEl.value = foto ? foto.id : "";
+    document.getElementById("heroFotoModalLabel").textContent = foto ? "Editar foto do topo" : "Adicionar foto do topo";
+    document.getElementById("heroFotoArquivoBloco").classList.toggle("d-none", Boolean(foto));
+    heroFileEl.required = !foto;
+    if(foto){
+      heroLegendaEl.value = foto.legenda;
+      heroAltEl.value = foto.alt;
+      heroFocusEl.value = foto.focus;
+      heroPreviewEl.src = foto.url;
+      heroPreviewEl.classList.remove("d-none");
+      heroVazioEl.classList.add("d-none");
+    }else{
+      heroPreviewEl.src = "";
+      heroPreviewEl.classList.add("d-none");
+      heroVazioEl.classList.remove("d-none");
+    }
+    heroPreviewFoco();
+    heroModal.show();
+  }
+
+  function heroPreviewFoco(){
+    heroPreviewEl.classList.toggle("is-topo", heroFocusEl.value === "top");
+    heroPreviewEl.classList.toggle("is-baixo", heroFocusEl.value === "bottom");
+  }
+
+  heroFocusEl?.addEventListener("change", heroPreviewFoco);
+
+  heroFileEl?.addEventListener("change", () => {
+    const arquivo = heroFileEl.files?.[0];
+    if(!arquivo){
+      heroPreviewEl.classList.add("d-none");
+      heroVazioEl.classList.remove("d-none");
+      return;
+    }
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      heroPreviewEl.src = leitor.result;
+      heroPreviewEl.classList.remove("d-none");
+      heroVazioEl.classList.add("d-none");
+    };
+    leitor.readAsDataURL(arquivo);
+  });
+
+  document.getElementById("heroAddBtn")?.addEventListener("click", () => heroAbrirModal(null));
+
+  heroFormEl?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = heroIdEl.value;
+    const legenda = heroLegendaEl.value.trim();
+    const alt = heroAltEl.value.trim();
+    if(!legenda) return void (heroErroEl.textContent = "Escreva a legenda curta.");
+    if(!alt) return void (heroErroEl.textContent = "Escreva a descrição da foto.");
+    if(!id && !heroFileEl.files?.[0]) return void (heroErroEl.textContent = "Escolha a foto.");
+
+    heroErroEl.textContent = "";
+    heroSalvarEl.disabled = true;
+    const rotulo = heroSalvarEl.textContent;
+    heroSalvarEl.textContent = "Salvando...";
+    try{
+      let res;
+      if(id){
+        res = await fetchWithTimeout(`/api/admin/hero/fotos/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alt, legenda, focus: heroFocusEl.value }),
+        });
+      }else{
+        const corpo = new FormData();
+        corpo.append("photo", heroFileEl.files[0]);
+        corpo.append("alt", alt);
+        corpo.append("legenda", legenda);
+        corpo.append("focus", heroFocusEl.value);
+        res = await fetchWithTimeout("/api/admin/hero/fotos", { method: "POST", body: corpo }, 30000);
+      }
+      const dados = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(dados.error || "Não foi possível salvar a foto.");
+      heroModal.hide();
+      heroAviso(id ? "Foto atualizada — o site já mostra assim." : "Foto adicionada ao topo do site.");
+      await heroCarregar();
+    }catch(err){
+      console.error("Erro ao salvar a foto do topo:", err);
+      heroErroEl.textContent = err.message || "Não foi possível salvar a foto.";
+    }finally{
+      heroSalvarEl.disabled = false;
+      heroSalvarEl.textContent = rotulo;
+    }
+  });
+
+  async function heroSalvarOrdem(nova){
+    if(heroSalvandoOrdem) return;
+    heroSalvandoOrdem = true;
+    const anterior = heroCache;
+    heroCache = nova;
+    heroGradeEl.innerHTML = heroCache.map(heroCartao).join("");
+    heroAviso("Salvando a ordem...");
+    try{
+      const res = await fetchWithTimeout("/api/admin/hero/fotos/ordem", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: nova.map(f => f.id) }),
+      });
+      const dados = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(dados.error || "Não foi possível salvar a ordem.");
+      heroAviso("Ordem salva — o topo do site já está nesta ordem.");
+    }catch(err){
+      console.error("Erro ao salvar a ordem das fotos do topo:", err);
+      heroCache = anterior;
+      heroGradeEl.innerHTML = heroCache.map(heroCartao).join("");
+      heroAviso(err.message || "Não foi possível salvar a ordem.", true);
+    }finally{
+      heroSalvandoOrdem = false;
+    }
+  }
+
+  heroGradeEl?.addEventListener("click", async (e) => {
+    const card = e.target.closest("[data-hero-id]");
+    if(!card) return;
+    const id = card.dataset.heroId;
+    const i = heroCache.findIndex(f => f.id === id);
+    if(i === -1) return;
+
+    const mover = e.target.closest("[data-hero-mover]");
+    if(mover){
+      const destino = i + Number(mover.dataset.heroMover);
+      if(destino < 0 || destino >= heroCache.length) return;
+      const nova = [...heroCache];
+      [nova[i], nova[destino]] = [nova[destino], nova[i]];
+      return void heroSalvarOrdem(nova);
+    }
+
+    if(e.target.closest("[data-hero-editar]")) return void heroAbrirModal(heroCache[i]);
+
+    if(e.target.closest("[data-hero-apagar]")){
+      const ultima = heroCache.length === 1;
+      const pergunta = ultima
+        ? "Apagar a última foto sua? O topo volta a mostrar as cinco fotos que já vieram prontas."
+        : "Apagar esta foto do topo do site?";
+      if(!confirm(pergunta)) return;
+      try{
+        const res = await fetchWithTimeout(`/api/admin/hero/fotos/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if(!res.ok) throw new Error("Não foi possível apagar a foto.");
+        heroAviso(ultima ? "Foto apagada — o topo voltou para as fotos que já vieram prontas." : "Foto apagada do topo.");
+        await heroCarregar();
+      }catch(err){
+        console.error("Erro ao apagar a foto do topo:", err);
+        heroAviso(err.message || "Não foi possível apagar a foto.", true);
+      }
+    }
+  });
+
   PLCAuth.aoSaberDaSessao(({ user, falhou }) => {
-    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes()) : showOnly(stateForbidden);
+    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes(), heroCarregar()) : showOnly(stateForbidden);
     showOnly(falhou ? stateError : stateLoggedOut);
   });
 })();

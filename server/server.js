@@ -1309,6 +1309,98 @@ function secaoAvaliacoes(){
 </section>`;
 }
 
+/* =========================================================================
+   Carrossel de fotos do topo da home
+   -------------------------------------------------------------------------
+   As fotos saem do painel (tabela hero_photos). Com a tabela vazia, valem
+   as cinco de FOTOS_HERO_PADRAO, que são os arquivos img/hero-* com que o
+   site nasceu — trocar tudo pelo painel e depois apagar não deixa o topo
+   em branco.
+
+   O primeiro slide fica solto dentro de .hero-slides e os demais dentro de
+   um <template> (que mora dentro do quadro só porque ali o marcador fica com
+   as tags equilibradas; <template> não renderiza, a posição é indiferente). Isso não é estilo: slides empilhados em position:absolute
+   contam como visíveis para o navegador, então loading="lazy" NÃO segura o
+   download — só o <template> segura. O primeiro leva fetchpriority="high"
+   por ser o LCP da home.
+========================================================================= */
+const MARCA_HERO = "<!--#HERO-FOTOS#-->";
+const HERO_SIZES = "(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px";
+
+const FOTOS_HERO_PADRAO = [
+  { slug: "hero-laco-bailarina", legenda: "Laço rosa de bailarina com bolsinha preta",
+    alt: "Laço rosa com pingente de bailarina ao lado de uma bolsinha preta com alça de pérolas" },
+  { slug: "hero-laco-pink", legenda: "Laço de cetim pink com bolsinha de glitter",
+    alt: "Laço de cetim pink ao lado de uma bolsinha de glitter pink com alça de pérolas" },
+  { slug: "hero-bolsa-glitter", legenda: "Bolsinha rosa de glitter com corrente",
+    alt: "Bolsinha rosa de glitter com alça de pérolas e corrente dourada" },
+  { slug: "hero-kit-unicornio", legenda: "Kit de unicórnio com fitas rosê",
+    alt: "Kit com tiara de unicórnio e faixas de fita rosê com lacinhos" },
+  { slug: "hero-lacos-perola", legenda: "Laços rosê com miolo de pérolas",
+    alt: "Par de laços rosê de cetim com miolo de pérolas" },
+];
+
+function slideHero(foto, primeiro){
+  const prioridade = primeiro ? ' fetchpriority="high"' : "";
+  const ativa = primeiro ? " is-ativa" : "";
+  const fontes = foto.slug
+    ? {
+        webp480: comVersao(`img/${foto.slug}-480.webp`),
+        webp960: comVersao(`img/${foto.slug}-960.webp`),
+        jpg480:  comVersao(`img/${foto.slug}-480.jpg`),
+        jpg960:  comVersao(`img/${foto.slug}-960.jpg`),
+      }
+    : {
+        webp480: `/api/hero/fotos/${foto.id}?w=480`,
+        webp960: `/api/hero/fotos/${foto.id}?w=960`,
+        jpg480:  `/api/hero/fotos/${foto.id}?w=480`,
+        jpg960:  `/api/hero/fotos/${foto.id}?w=960`,
+      };
+  // Uma foto do painel é servida pela MESMA URL em webp e jpeg (a rota
+  // decide pelo Accept do navegador), então ali o <source type="image/webp">
+  // não teria o que acrescentar e sai fora — deixá-lo faria o navegador
+  // pedir o mesmo arquivo com outro nome, sem ganho.
+  const source = foto.slug
+    ? `<source type="image/webp" sizes="${HERO_SIZES}" srcset="${fontes.webp480} 480w, ${fontes.webp960} 960w">`
+    : "";
+  return `<div class="hero-slide${ativa}" data-legenda="${escaparHtml(foto.legenda)}">
+                  <picture>
+                    ${source}
+                    <img src="${fontes.jpg960}" srcset="${fontes.jpg480} 480w, ${fontes.jpg960} 960w" sizes="${HERO_SIZES}"
+                         alt="${escaparHtml(foto.alt)}" width="960" height="1200" decoding="async"${prioridade}>
+                  </picture>
+                </div>`;
+}
+
+function comVersao(rel){
+  const v = versaoDoAsset(rel);
+  return v ? `${rel}?v=${v}` : rel;
+}
+
+let CACHE_HERO = null;
+
+function blocoHero(){
+  const doPainel = db.listHeroPhotos();
+  const fotos = doPainel.length ? doPainel : FOTOS_HERO_PADRAO;
+  // As fotos do painel são servidas por URL imutável (id + largura), mas as
+  // padrão carregam ?v= do conteúdo do arquivo — por isso a assinatura do
+  // cache junta a versão do banco com a dos arquivos.
+  const assinatura = doPainel.length
+    ? db.heroVersion()
+    : FOTOS_HERO_PADRAO.map(f => versaoDoAsset(`img/${f.slug}-960.jpg`)).join("|");
+  if(CACHE_HERO && CACHE_HERO.assinatura === assinatura) return CACHE_HERO.html;
+
+  const html = `<div class="hero-slides" id="heroSlides">
+                ${slideHero(fotos[0], true)}
+              </div>
+              <span class="hero-quadro-badge" aria-hidden="true">feito à mão <i class="bi bi-heart-fill"></i></span>
+              <template id="heroSlidesExtras">
+                ${fotos.slice(1).map(f => slideHero(f, false)).join("\n                ")}
+              </template>`;
+  CACHE_HERO = { assinatura, html };
+  return html;
+}
+
 function comAvaliacoes(html){
   let saida = html;
   // Substituição por FUNÇÃO, não por string: numa string de troca o JS
@@ -1316,6 +1408,7 @@ function comAvaliacoes(html){
   // reinjetaria o próprio marcador no meio da página.
   if(saida.includes(MARCA_NOTA_MEDIA)) saida = saida.replace(MARCA_NOTA_MEDIA, () => blocoNotaMedia());
   if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
+  if(saida.includes(MARCA_HERO)) saida = saida.replace(MARCA_HERO, () => blocoHero());
   return saida;
 }
 
@@ -4639,6 +4732,199 @@ app.get("/api/products/photos/:id", async (req, res) => {
     console.error(`Falha ao reduzir a foto ${req.params.id} para ${largura}px:`, err.message || err);
     res.setHeader("Content-Type", photo.mime_type);
     res.end(Buffer.from(photo.data));
+  }
+});
+
+/* =========================================================================
+   Fotos do topo da home — painel
+   -------------------------------------------------------------------------
+   Teto de 6 fotos: o carrossel troca sozinho a cada 5s e ninguém fica no
+   topo tempo suficiente para ver mais do que isso; cada foto a mais também
+   é um download a mais na visita que abre o menu de pontinhos.
+
+   Zero fotos é permitido e volta para as fixas de img/hero-* (ver blocoHero).
+========================================================================= */
+const MAX_FOTOS_HERO = 6;
+const ENQUADRAMENTOS = new Set(["top", "center", "bottom"]);
+
+const heroPhotoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter(req, file, cb){
+    cb(null, Boolean(PRODUCT_PHOTO_MIME_EXT[file.mimetype]));
+  },
+});
+
+// O alt descreve a foto para quem usa leitor de tela e para o Google; a
+// legenda é o que o carrossel anuncia ao trocar de foto. Os dois são texto
+// da lojista e vão para dentro do HTML da home — daí o teto de tamanho aqui
+// e o escaparHtml na hora de montar (slideHero).
+function textoDeFoto(valor, maximo){
+  if(typeof valor !== "string") return null;
+  const limpo = valor.trim().replace(/\s+/g, " ");
+  if(!limpo || limpo.length > maximo) return null;
+  return limpo;
+}
+
+app.get("/api/admin/hero/fotos", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  res.json({
+    fotos: db.listHeroPhotos().map(f => ({
+      id: f.id,
+      alt: f.alt,
+      legenda: f.legenda,
+      focus: f.focus,
+      url: `/api/hero/fotos/${f.id}?w=480`,
+    })),
+    max: MAX_FOTOS_HERO,
+    usandoPadrao: db.countHeroPhotos() === 0,
+    padrao: FOTOS_HERO_PADRAO.map(f => ({
+      legenda: f.legenda,
+      alt: f.alt,
+      url: comVersao(`img/${f.slug}-480.jpg`),
+    })),
+  });
+});
+
+app.post("/api/admin/hero/fotos", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  if(db.countHeroPhotos() >= MAX_FOTOS_HERO){
+    return res.status(409).json({ error: `O topo aceita no máximo ${MAX_FOTOS_HERO} fotos. Apague uma antes de enviar outra.` });
+  }
+  heroPhotoUpload.single("photo")(req, res, async (err) => {
+    if(err instanceof multer.MulterError){
+      if(err.code === "LIMIT_FILE_SIZE"){
+        return res.status(413).json({ error: "Imagem muito grande. O limite é 8MB." });
+      }
+      return res.status(400).json({ error: "Não foi possível enviar a imagem." });
+    }
+    if(err){
+      console.error("Erro no upload de foto do topo:", err);
+      return res.status(500).json({ error: "Não foi possível enviar a imagem agora." });
+    }
+    if(!req.file){
+      return res.status(400).json({ error: "Envie um arquivo de imagem (JPEG, PNG, WEBP ou GIF)." });
+    }
+
+    const alt = textoDeFoto(req.body.alt, 180);
+    const legenda = textoDeFoto(req.body.legenda, 90);
+    if(!alt) return res.status(400).json({ error: "Escreva a descrição da foto (até 180 caracteres)." });
+    if(!legenda) return res.status(400).json({ error: "Escreva a legenda curta da foto (até 90 caracteres)." });
+    const focus = ENQUADRAMENTOS.has(req.body.focus) ? req.body.focus : "center";
+
+    try{
+      // Guarda o ORIGINAL (só reorientado pela EXIF e limitado a 1600px),
+      // não o recorte: é ele que permite mudar o enquadramento depois sem
+      // pedir o arquivo de novo. Quem recorta é a rota pública.
+      const original = await sharp(req.file.buffer)
+        .rotate()
+        .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toBuffer();
+      const id = randomUUID();
+      db.insertHeroPhoto(id, alt, legenda, focus, "image/jpeg", original);
+      res.status(201).json({ id, url: `/api/hero/fotos/${id}?w=480` });
+    }catch(procErr){
+      console.error("Erro ao processar foto do topo:", procErr);
+      res.status(500).json({ error: "Não foi possível processar a imagem enviada." });
+    }
+  });
+});
+
+app.patch("/api/admin/hero/fotos/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  if(!UUID_PATTERN.test(req.params.id)) return res.status(404).json({ error: "Foto não encontrada." });
+  const alt = textoDeFoto(req.body.alt, 180);
+  const legenda = textoDeFoto(req.body.legenda, 90);
+  if(!alt) return res.status(400).json({ error: "Escreva a descrição da foto (até 180 caracteres)." });
+  if(!legenda) return res.status(400).json({ error: "Escreva a legenda curta da foto (até 90 caracteres)." });
+  const focus = ENQUADRAMENTOS.has(req.body.focus) ? req.body.focus : "center";
+  if(!db.updateHeroPhoto(req.params.id, alt, legenda, focus)){
+    return res.status(404).json({ error: "Foto não encontrada." });
+  }
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/hero/fotos/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  if(!UUID_PATTERN.test(req.params.id)) return res.status(404).json({ error: "Foto não encontrada." });
+  db.deleteHeroPhoto(req.params.id);
+  res.json({ ok: true, usandoPadrao: db.countHeroPhotos() === 0 });
+});
+
+app.put("/api/admin/hero/fotos/ordem", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const ids = req.body?.ids;
+  if(!Array.isArray(ids) || ids.length > MAX_FOTOS_HERO || !ids.every(i => UUID_PATTERN.test(i))){
+    return res.status(400).json({ error: "Ordem inválida." });
+  }
+  // Exige a lista COMPLETA e sem repetição: aceitar um subconjunto deixaria
+  // as fotas de fora com a posição antiga, embaralhando o carrossel em vez
+  // de reordená-lo.
+  const atuais = db.listHeroPhotos().map(f => f.id);
+  if(ids.length !== atuais.length || new Set(ids).size !== ids.length || !ids.every(i => atuais.includes(i))){
+    return res.status(409).json({ error: "A lista de fotos mudou. Recarregue a página e tente de novo." });
+  }
+  db.setHeroPhotoOrder(ids);
+  res.json({ ok: true });
+});
+
+/* =========================================================================
+   GET /api/hero/fotos/:id — foto do carrossel do topo, já recortada em 4:5
+   -------------------------------------------------------------------------
+   Pública, como as fotos de produto: o topo da home é público. Sem
+   "immutable" aqui, ao contrário da rota de produto — lá cada upload gera um
+   id novo, então a URL nunca muda de conteúdo; aqui a lojista pode mudar o
+   enquadramento da MESMA foto no painel, e uma resposta immutable deixaria
+   a visitante com o corte antigo até limpar o cache. Uma hora com
+   revalidação resolve sem pesar.
+
+   O recorte sai daqui, e não do upload, justamente para o enquadramento ser
+   editável depois — o original fica guardado inteiro.
+========================================================================= */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const LARGURAS_HERO = new Set([480, 960]);
+const ENQUADRAMENTO_SHARP = { top: "top", center: "centre", bottom: "bottom" };
+
+app.get("/api/hero/fotos/:id", async (req, res) => {
+  if(!UUID_PATTERN.test(req.params.id)) return res.status(404).end();
+
+  const pedida = Number(req.query.w);
+  const largura = LARGURAS_HERO.has(pedida) ? pedida : 960;
+  const querWebp = /\bimage\/webp\b/.test(req.headers.accept || "");
+  const formato = querWebp ? "webp" : "jpeg";
+
+  res.setHeader("Cache-Control", "public, max-age=3600, must-revalidate");
+  res.vary("Accept");
+
+  const emCache = db.getHeroPhotoVariant(req.params.id, largura, formato);
+  if(emCache){
+    res.setHeader("Content-Type", emCache.mime_type);
+    return res.end(Buffer.from(emCache.data));
+  }
+
+  const foto = db.getHeroPhoto(req.params.id);
+  if(!foto) return res.status(404).end();
+
+  try{
+    const mime = formato === "webp" ? "image/webp" : "image/jpeg";
+    // fit:"cover" + altura = largura × 1,25 é o que garante o 4:5 que o
+    // carrossel espera: o CSS reserva a caixa por aspect-ratio, e uma foto
+    // fora da proporção deixaria faixa branca dentro do quadro.
+    let pipeline = sharp(Buffer.from(foto.data)).resize({
+      width: largura,
+      height: Math.round(largura * 1.25),
+      fit: "cover",
+      position: ENQUADRAMENTO_SHARP[foto.focus] || "centre",
+    });
+    pipeline = formato === "webp"
+      ? pipeline.webp({ quality: 74 })
+      : pipeline.jpeg({ quality: 80, mozjpeg: true });
+    const recortada = await pipeline.toBuffer();
+
+    db.saveHeroPhotoVariant(req.params.id, largura, formato, mime, recortada);
+    res.setHeader("Content-Type", mime);
+    res.end(recortada);
+  }catch(err){
+    // Aqui o original NÃO serve de reserva: ele não está em 4:5, e entregá-lo
+    // deixaria o quadro do topo torto. Melhor a imagem faltar e o alt aparecer.
+    console.error(`Falha ao recortar a foto do topo ${req.params.id}:`, err.message || err);
+    res.status(500).end();
   }
 });
 

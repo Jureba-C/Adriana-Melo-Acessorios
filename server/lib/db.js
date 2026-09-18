@@ -527,6 +527,46 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reviews_publicadas
     ON reviews(status, published_at DESC);
 
+  -- Fotos do carrossel do topo da home, trocadas pelo painel. A coluna data
+  -- guarda o original recebido (só reorientado e limitado a 1600px); o recorte
+  -- 4:5 que a home usa é feito na variante, para a lojista poder mudar o
+  -- enquadramento sem reenviar o arquivo.
+  --
+  -- Tabela própria, e não product_photos: a rota pública de foto de produto
+  -- serve qualquer id no tamanho do catálogo, e aqui o que sai é sempre
+  -- recortado em 4:5 — misturar os dois faria uma foto de topo aparecer
+  -- esticada como se fosse de produto.
+  --
+  -- Zero linhas é um estado normal, não um erro: a home volta para as fotos
+  -- fixas de img/hero-*, que é como o site nasceu.
+  CREATE TABLE IF NOT EXISTS hero_photos (
+    id          TEXT PRIMARY KEY,
+    position    INTEGER NOT NULL,
+    alt         TEXT NOT NULL,
+    legenda     TEXT NOT NULL,
+    focus       TEXT NOT NULL DEFAULT 'center'
+                CHECK (focus IN ('top', 'center', 'bottom')),
+    mime_type   TEXT NOT NULL,
+    data        BLOB NOT NULL,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_hero_photos_ordem ON hero_photos(position);
+
+  -- Recortes 4:5 (480/960, webp e jpeg) gerados no primeiro acesso. É cache:
+  -- CASCADE porque trocar a foto ou o enquadramento tem de invalidar todos
+  -- os tamanhos — variante velha sobrevivendo seria a foto antiga servida
+  -- para quem pedisse aquela largura.
+  CREATE TABLE IF NOT EXISTS hero_photo_variants (
+    photo_id    TEXT NOT NULL REFERENCES hero_photos(id) ON DELETE CASCADE,
+    width       INTEGER NOT NULL,
+    format      TEXT NOT NULL,
+    mime_type   TEXT NOT NULL,
+    data        BLOB NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (photo_id, width, format)
+  );
+
   -- Uma linha por chave. Hoje só guarda a última rodada do cron
   -- (tarefas_periodicas_em), para o painel denunciar quando o agendamento
   -- no hPanel não existe ou parou.
@@ -1113,6 +1153,95 @@ function getProductPhotoVariant(photoId, width, format) {
 // geram os mesmos bytes, e perder a corrida não pode virar erro 500.
 function saveProductPhotoVariant(photoId, width, format, mimeType, buffer) {
   stmtInsertProductPhotoVariant.run(photoId, width, format, mimeType, buffer, Date.now());
+}
+
+/* --------------------- FOTOS DO TOPO DA HOME ---------------------- */
+// listHeroPhotos NÃO traz a coluna `data`: é chamada a cada visita da home
+// para montar o carrossel, e arrastar ~6 blobs do disco só para descartá-los
+// seria o custo mais caro da página.
+const stmtListHeroPhotos = db.prepare(
+  `SELECT id, position, alt, legenda, focus, created_at
+     FROM hero_photos ORDER BY position, created_at`
+);
+const stmtGetHeroPhoto = db.prepare(`SELECT mime_type, data, focus FROM hero_photos WHERE id = ?`);
+const stmtInsertHeroPhoto = db.prepare(
+  `INSERT INTO hero_photos (id, position, alt, legenda, focus, mime_type, data, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+);
+const stmtUpdateHeroPhoto = db.prepare(
+  `UPDATE hero_photos SET alt = ?, legenda = ?, focus = ? WHERE id = ?`
+);
+const stmtDeleteHeroPhoto = db.prepare(`DELETE FROM hero_photos WHERE id = ?`);
+const stmtPosicaoLivreHero = db.prepare(`SELECT IFNULL(MAX(position), -1) + 1 AS n FROM hero_photos`);
+const stmtContarHeroPhotos = db.prepare(`SELECT COUNT(*) AS n FROM hero_photos`);
+const stmtMoverHeroPhoto = db.prepare(`UPDATE hero_photos SET position = ? WHERE id = ?`);
+const stmtApagarVariantesHero = db.prepare(`DELETE FROM hero_photo_variants WHERE photo_id = ?`);
+
+function listHeroPhotos(){
+  return stmtListHeroPhotos.all();
+}
+function countHeroPhotos(){
+  return stmtContarHeroPhotos.get().n;
+}
+function getHeroPhoto(id){
+  return stmtGetHeroPhoto.get(id) || null;
+}
+function insertHeroPhoto(id, alt, legenda, focus, mimeType, buffer){
+  stmtInsertHeroPhoto.run(
+    id, stmtPosicaoLivreHero.get().n, alt, legenda, focus, mimeType, buffer, Date.now()
+  );
+}
+// Mudar o enquadramento reaproveita o original já gravado, mas os recortes
+// em cache viraram lixo: sem apagá-los a home continuaria servindo o corte
+// antigo até alguém trocar o arquivo.
+function updateHeroPhoto(id, alt, legenda, focus){
+  const antes = stmtGetHeroPhoto.get(id);
+  if(!antes) return false;
+  stmtUpdateHeroPhoto.run(alt, legenda, focus, id);
+  if(antes.focus !== focus) stmtApagarVariantesHero.run(id);
+  return true;
+}
+function deleteHeroPhoto(id){
+  stmtDeleteHeroPhoto.run(id);
+}
+// Renumera de 0 em diante na ordem recebida, numa transação só: a home lê
+// `position` sem desempate estável, então dois pedidos concorrentes deixando
+// posições repetidas no meio do caminho trocariam a ordem do carrossel.
+function setHeroPhotoOrder(ids){
+  db.exec("BEGIN");
+  try{
+    ids.forEach((id, i) => stmtMoverHeroPhoto.run(i, id));
+    db.exec("COMMIT");
+  }catch(err){
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+/* ---- Recortes 4:5 em cache (mesmo racional das variantes de produto) ---- */
+const stmtGetHeroVariant = db.prepare(
+  `SELECT mime_type, data FROM hero_photo_variants
+    WHERE photo_id = ? AND width = ? AND format = ?`
+);
+const stmtInsertHeroVariant = db.prepare(
+  `INSERT OR REPLACE INTO hero_photo_variants
+     (photo_id, width, format, mime_type, data, created_at)
+   VALUES (?, ?, ?, ?, ?, ?)`
+);
+function getHeroPhotoVariant(photoId, width, format){
+  return stmtGetHeroVariant.get(photoId, width, format) || null;
+}
+function saveHeroPhotoVariant(photoId, width, format, mimeType, buffer){
+  stmtInsertHeroVariant.run(photoId, width, format, mimeType, buffer, Date.now());
+}
+
+// Assinatura do carrossel, para o server.js só remontar o HTML do topo
+// quando algo mudou. Cobre id, ordem, textos e enquadramento — tudo que
+// entra no markup.
+function heroVersion(){
+  const linhas = stmtListHeroPhotos.all();
+  if(!linhas.length) return "0";
+  return linhas.map(f => `${f.id}:${f.position}:${f.focus}:${f.alt.length}:${f.legenda.length}`).join("|");
 }
 
 /* ------------------------- PRODUCT OVERRIDES ------------------------- */
@@ -1891,6 +2020,16 @@ module.exports = {
   getProductPhoto,
   deleteProductPhoto,
   getProductPhotoVariant,
+  listHeroPhotos,
+  countHeroPhotos,
+  getHeroPhoto,
+  insertHeroPhoto,
+  updateHeroPhoto,
+  deleteHeroPhoto,
+  setHeroPhotoOrder,
+  getHeroPhotoVariant,
+  saveHeroPhotoVariant,
+  heroVersion,
   saveProductPhotoVariant,
   // getProductOverride não é exportada de propósito: ninguém fora daqui lê
   // um override isolado — quem consome sempre quer o mapa inteiro
