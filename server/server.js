@@ -523,6 +523,16 @@ app.use(helmet({
       frameSrc: ["https://www.mercadopago.com", "https://www.mercadopago.com.br"],
       objectSrc: ["'none'"],
       formAction: ["'self'"],
+      // Estas duas JÁ valiam antes de estarem escritas aqui: o helmet mescla
+      // os padrões dele quando useDefaults não é desligado, e as duas vinham
+      // de lá. O problema é que ninguém lendo este bloco saberia — e trocar
+      // para useDefaults:false algum dia (o objeto já parece completo, é uma
+      // edição plausível) derrubaria de uma vez a proteção contra o site ser
+      // posto dentro de um iframe alheio e a trava dos handlers inline do
+      // tipo onclick="". Escritas aqui, o cabeçalho sai byte a byte igual ao
+      // de antes (tem teste conferindo) e a política passa a se explicar.
+      frameAncestors: ["'self'"],
+      scriptSrcAttr: ["'none'"],
       // `upgrade-insecure-requests` manda o navegador trocar todo http://
       // por https:// nas sub-requisições da página. Em produção (site em
       // HTTPS) isso é o certo, e o helmet o inclui sozinho. Em
@@ -539,6 +549,28 @@ app.use(helmet({
     },
   },
 }));
+
+// O helmet não escreve Permissions-Policy, e sem ela a página (e qualquer
+// coisa embutida nela) pode pedir câmera, microfone e localização. A loja não
+// usa nenhum dos dois; negar tudo é o padrão certo.
+//
+// payment=() vale a pena explicar: é a Payment Request API do navegador, que
+// esta loja não usa — o Checkout Pro do Mercado Pago REDIRECIONA para o
+// domínio deles, onde esta política não alcança. Negar aqui não interfere no
+// pagamento (conferido num checkout de verdade).
+//
+// O preload do HSTS é só a metade barata: o cabeçalho sozinho não inscreve
+// nada. A inscrição de verdade é feita à mão em hstspreload.org, e É ELA que
+// é difícil de desfazer (a remoção leva meses e viaja dentro do binário dos
+// navegadores). Com a flag no ar, a decisão continua sendo do dono do
+// domínio, na hora que ele quiser.
+const POLITICA_DE_PERMISSOES = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";
+app.use((req, res, next) => {
+  res.setHeader("Permissions-Policy", POLITICA_DE_PERMISSOES);
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  next();
+});
+
 // `credentials: true` é necessário para o cookie de sessão trafegar quando o
 // site é aberto de uma origem diferente da API (ex.: durante o desenvolvimento
 // com um live-reload em outra porta). Combinado com `origin` fixo (não "*"),

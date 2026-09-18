@@ -107,3 +107,130 @@ test("estourar o limite numa rota de API responde JSON, não a página 429", asy
   const corpo = await resposta.json();
   assert.match(corpo.error, /Muitas requisições/);
 });
+
+// A CSP que o servidor devolve hoje, diretiva por diretiva. Serve de padrão-
+// ouro: qualquer mudança aqui tem de ser deliberada e aparecer no diff deste
+// arquivo, em vez de acontecer sozinha quando o helmet muda os padrões dele.
+// (upgrade-insecure-requests fica de fora porque só entra quando o
+// CLIENT_ORIGIN é https — em teste é http://localhost.)
+const CSP_ESPERADA = {
+  "default-src": "'self'",
+  "base-uri": "'self'",
+  "font-src": "'self'",
+  "form-action": "'self'",
+  "frame-ancestors": "'self'",
+  "img-src": "'self' https: data: blob:",
+  "object-src": "'none'",
+  "script-src": "'self' https://sdk.mercadopago.com",
+  "script-src-attr": "'none'",
+  "style-src": "'self' 'unsafe-inline'",
+  "connect-src": "'self' https://api.mercadopago.com https://viacep.com.br",
+  "frame-src": "https://www.mercadopago.com https://www.mercadopago.com.br",
+};
+
+function lerCsp(texto){
+  const mapa = {};
+  for(const parte of texto.split(";")){
+    const limpo = parte.trim();
+    if(!limpo) continue;
+    const espaco = limpo.indexOf(" ");
+    if(espaco === -1) mapa[limpo] = "";
+    else mapa[limpo.slice(0, espaco)] = limpo.slice(espaco + 1).trim();
+  }
+  return mapa;
+}
+
+test("a CSP do cabeçalho é exatamente a esperada", async () => {
+  const res = await fetch(ORIGIN + "/");
+  const bruta = res.headers.get("content-security-policy");
+  assert.ok(bruta, "nenhuma CSP no cabeçalho");
+  const atual = lerCsp(bruta);
+  delete atual["upgrade-insecure-requests"];
+  assert.deepEqual(atual, CSP_ESPERADA);
+});
+
+// Cada página HTML repete a CSP num <meta>, e o navegador aplica a INTERSEÇÃO
+// das duas. Manter os dois à mão é um gerador de divergência, e ela já existe:
+// blob: está no cabeçalho e falta no <meta> de todas as páginas menos o
+// painel. Isso deixa as outras páginas MAIS restritas que o cabeçalho, que é o
+// lado seguro de errar (foi o que fez o recorte de foto com object URL não
+// funcionar fora do painel — resolvido lendo o arquivo como data: URI).
+//
+// Os dois testes abaixo separam as duas perguntas que essa duplicação levanta:
+// "alguma página está pedindo mais do que o cabeçalho deixa?" (risco real) e
+// "alguma página começou a divergir das outras sem ninguém registrar?" (deriva).
+
+function fontes(valor){
+  return new Set(String(valor).split(/\s+/).filter(Boolean));
+}
+
+function metaDaPagina(pagina){
+  const html = fs.readFileSync(path.join(RAIZ, pagina), "utf8");
+  const m = html.match(/http-equiv="Content-Security-Policy"\s+content="([^"]*)"/);
+  return m ? lerCsp(m[1]) : null;
+}
+
+function paginasHtml(){
+  const paginas = fs.readdirSync(RAIZ).filter(f => f.endsWith(".html")).sort();
+  assert.ok(paginas.length >= 13, `esperava as páginas do site, achei ${paginas.length}`);
+  return paginas;
+}
+
+test("nenhuma página pede no <meta> mais do que o cabeçalho permite", async () => {
+  const res = await fetch(ORIGIN + "/");
+  const cabecalho = lerCsp(res.headers.get("content-security-policy"));
+  const excesso = [];
+
+  for(const pagina of paginasHtml()){
+    const meta = metaDaPagina(pagina);
+    if(!meta) continue;
+    for(const [diretiva, valor] of Object.entries(meta)){
+      // Sem a diretiva no cabeçalho, o navegador cai no default-src dele.
+      const permitido = fontes(cabecalho[diretiva] ?? cabecalho["default-src"]);
+      for(const fonte of fontes(valor)){
+        if(!permitido.has(fonte)) excesso.push(`${pagina} ${diretiva}: ${fonte}`);
+      }
+    }
+  }
+  // Uma permissão que só existe no <meta> não vale nada — o cabeçalho barra do
+  // mesmo jeito — e dá a impressão de estar liberada. É erro dos dois lados.
+  assert.deepEqual(excesso, [], "o <meta> concede o que o cabeçalho barra");
+});
+
+// A CSP que a maioria das páginas usa. As exceções abaixo são deliberadas;
+// qualquer página nova divergindo derruba o teste, para a decisão ficar escrita
+// aqui em vez de ser descoberta meses depois.
+const AUSENTE = "(diretiva ausente)";
+const DIVERGENCIAS_ACEITAS = {
+  // Única página que faz recorte de foto com object URL (js/admin.js).
+  "admin.html": { "img-src": "'self' https: data: blob:" },
+  // Quem entra veio de um link do e-mail, sem login: não carrega o SDK do
+  // Mercado Pago, não fala com a API deles e não abre iframe nenhum. Menos
+  // permissão que as outras páginas, de propósito.
+  "avaliar.html": { "script-src": "'self'", "connect-src": "'self'", "frame-src": AUSENTE },
+};
+
+// Servida pelo nginx/Apache quando o Node está fora do ar, então não passa por
+// este servidor nem herda o cabeçalho.
+const SEM_META_DE_PROPOSITO = ["manutencao.html"];
+
+test("nenhuma página começou a divergir da CSP padrão sem registro", () => {
+  const base = metaDaPagina("index.html");
+  assert.ok(base, "index.html perdeu o <meta> de CSP");
+
+  const semMeta = [];
+  for(const pagina of paginasHtml()){
+    const meta = metaDaPagina(pagina);
+    if(!meta){ semMeta.push(pagina); continue; }
+
+    const divergentes = {};
+    for(const diretiva of new Set([...Object.keys(base), ...Object.keys(meta)])){
+      if(base[diretiva] !== meta[diretiva]) divergentes[diretiva] = meta[diretiva] ?? AUSENTE;
+    }
+    assert.deepEqual(divergentes, DIVERGENCIAS_ACEITAS[pagina] || {},
+      `${pagina}: CSP do <meta> diverge das demais de um jeito não registrado`);
+  }
+
+  assert.deepEqual(semMeta, SEM_META_DE_PROPOSITO,
+    "página HTML sem <meta> de CSP — ou foi esquecida, ou precisa entrar na lista");
+});
