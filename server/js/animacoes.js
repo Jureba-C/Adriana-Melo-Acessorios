@@ -4,16 +4,23 @@
 
   const mm = gsap.matchMedia();
 
-  function carregarScrollTrigger() {
+  function carregarPlugin(global, idDoAsset, caminhoReserva) {
     return new Promise((resolve) => {
-      if (window.ScrollTrigger) return resolve(true);
-      const asset = document.getElementById("assetScrollTrigger");
+      if (window[global]) return resolve(true);
+      const asset = document.getElementById(idDoAsset);
       const script = document.createElement("script");
-      script.src = asset ? asset.href : "js/vendor/ScrollTrigger.min.js";
-      script.onload = () => resolve(!!window.ScrollTrigger);
+      script.src = asset ? asset.href : caminhoReserva;
+      script.onload = () => resolve(!!window[global]);
       script.onerror = () => resolve(false);
       document.head.appendChild(script);
     });
+  }
+
+  function carregarPluginsDeRolagem() {
+    return Promise.all([
+      carregarPlugin("ScrollTrigger", "assetScrollTrigger", "js/vendor/ScrollTrigger.min.js"),
+      carregarPlugin("SplitText", "assetSplitText", "js/vendor/SplitText.min.js"),
+    ]).then(([temScrollTrigger]) => temScrollTrigger);
   }
 
   function quandoDerFolga(acao) {
@@ -976,7 +983,7 @@
 
   if (window.matchMedia("(prefers-reduced-motion: no-preference)").matches) {
     quandoDerFolga(() => {
-      carregarScrollTrigger().then((ok) => {
+      carregarPluginsDeRolagem().then((ok) => {
         if (ok) animacoesDeRolagem();
       });
     });
