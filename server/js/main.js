@@ -1736,4 +1736,12 @@
       : `Até ${semJuros}x sem juros`;
   }
 
+  const fabEl = document.querySelector("a.fab:not(.fab-top)");
+  const heroAcoesEl = document.querySelector(".hero-acoes");
+  if(fabEl && heroAcoesEl && "IntersectionObserver" in window){
+    new IntersectionObserver(([entrada]) => {
+      fabEl.classList.toggle("is-oculto", entrada.isIntersecting);
+    }, { threshold: 0 }).observe(heroAcoesEl);
+  }
+
 })();
