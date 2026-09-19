@@ -1789,6 +1789,7 @@
               <a class="btn-outline-blush" href="${escapeHTML(whatsappPostagemUrl(order))}" target="_blank" rel="noopener" title="Abre a conversa com a cliente já com o código e o link"><i class="bi bi-whatsapp me-1"></i>Avisar no WhatsApp</a>
               ` : ""}
               <button type="button" class="btn-outline-blush resend-notice-btn" data-ref="${escapeHTML(ref)}" title="Reenvia o e-mail de 'seu pedido foi postado' com o código já salvo"><i class="bi bi-send me-1"></i>Avisar de novo por e-mail</button>
+              <button type="button" class="btn-outline-blush pedir-avaliacao-btn" data-ref="${escapeHTML(ref)}" title="Manda para a cliente o link para ela contar o que achou"><i class="bi bi-star-fill me-1"></i>Pedir avaliação</button>
             </div>
             ${textoDoAviso(order)}
           </div>` : ""}
@@ -1969,6 +1970,29 @@
     }
   }
 
+  async function pedirAvaliacao(ref, feedbackEl, btn){
+    const rotulo = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = "Enviando...";
+    feedbackEl.textContent = "";
+    feedbackEl.classList.remove("is-success", "is-error");
+    try{
+      const res = await fetchWithTimeout(`/api/admin/orders/${encodeURIComponent(ref)}/pedir-avaliacao`, { method: "POST" }, 20000);
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || "Não foi possível pedir a avaliação.");
+      feedbackEl.textContent = data.entregue
+        ? "Convite enviado: a cliente recebeu o link para avaliar."
+        : "Enviado: a cliente vai confirmar o recebimento e já pode avaliar pelo mesmo e-mail.";
+      feedbackEl.classList.add("is-success");
+    }catch(err){
+      feedbackEl.textContent = err.message || "Erro ao pedir a avaliação.";
+      feedbackEl.classList.add("is-error");
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = rotulo;
+    }
+  }
+
   async function reenviarAviso(ref, feedbackEl, btn){
     const rotulo = btn.innerHTML;
     btn.disabled = true;
@@ -2051,6 +2075,7 @@
     const labelBtn = e.target.closest(".generate-label-btn");
     const deliveredBtn = e.target.closest(".mark-delivered-btn");
     const resendBtn = e.target.closest(".resend-notice-btn");
+    const avaliacaoBtn = e.target.closest(".pedir-avaliacao-btn");
     const checkBtn = e.target.closest(".check-delivery-btn");
     const deleteBtn = e.target.closest(".delete-order-btn");
     const copyBtn = e.target.closest(".copy-field-btn");
@@ -2083,6 +2108,13 @@
       const ref = resendBtn.dataset.ref;
       const feedbackEl = listEl.querySelector(`[data-ref-feedback="${ref}"]`);
       if(feedbackEl) reenviarAviso(ref, feedbackEl, resendBtn);
+      return;
+    }
+
+    if(avaliacaoBtn){
+      const ref = avaliacaoBtn.dataset.ref;
+      const feedbackEl = listEl.querySelector(`[data-ref-feedback="${ref}"]`);
+      if(feedbackEl) pedirAvaliacao(ref, feedbackEl, avaliacaoBtn);
       return;
     }
 
@@ -2973,8 +3005,201 @@
     }
   });
 
+  const depGradeEl = document.getElementById("depGrade");
+  const depMsgEl = document.getElementById("depMsg");
+  const depModalEl = document.getElementById("depModal");
+  const depModal = depModalEl ? new bootstrap.Modal(depModalEl) : null;
+  const depFormEl = document.getElementById("depForm");
+  const depIdEl = document.getElementById("depId");
+  const depTextoEl = document.getElementById("depTexto");
+  const depNomeEl = document.getElementById("depNome");
+  const depCidadeEl = document.getElementById("depCidade");
+  const depOrigemEl = document.getElementById("depOrigem");
+  const depFotoEl = document.getElementById("depFoto");
+  const depConsentEl = document.getElementById("depConsentimento");
+  const depErroEl = document.getElementById("depErro");
+  const depSalvarEl = document.getElementById("depSalvar");
+
+  let depCache = [];
+  let depMax = 6;
+  let depSalvandoOrdem = false;
+
+  function depAviso(texto, erro){
+    depMsgEl.textContent = texto || "";
+    depMsgEl.classList.toggle("text-danger", Boolean(erro));
+  }
+
+  function depCartao(d, i){
+    const origem = d.origem === "instagram"
+      ? '<i class="bi bi-instagram" aria-hidden="true"></i> Instagram'
+      : '<i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp';
+    const quem = [d.nome, d.cidade].filter(Boolean).map(escapeHTML).join(" · ");
+    return `
+      <div class="hero-admin-card depoimento-card${d.status === "oculto" ? " is-oculto" : ""}" data-dep-id="${d.id}">
+        ${d.fotoUrl ? `<div class="hero-admin-foto"><img src="${escapeHTML(d.fotoUrl)}" alt="" loading="lazy"><span class="hero-admin-ordem">${i + 1}</span></div>` : `<span class="hero-admin-ordem depoimento-ordem-solta">${i + 1}</span>`}
+        <div class="hero-admin-corpo">
+          <span class="depoimento-origem">${origem}${d.status === "oculto" ? ' · <span class="depoimento-oculto">oculto</span>' : ""}</span>
+          <blockquote class="depoimento-texto">${escapeHTML(d.texto)}</blockquote>
+          <span class="depoimento-quem">${quem}</span>
+          <div class="hero-admin-acoes">
+            <button type="button" class="hero-admin-btn" data-dep-mover="-1" ${i === 0 ? "disabled" : ""}
+                    aria-label="Mover para antes"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn" data-dep-mover="1" ${i === depCache.length - 1 ? "disabled" : ""}
+                    aria-label="Mover para depois"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn" data-dep-editar
+                    aria-label="Editar este depoimento"><i class="bi bi-pencil" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn is-apagar" data-dep-apagar
+                    aria-label="Apagar este depoimento"><i class="bi bi-trash3" aria-hidden="true"></i></button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function depRender(dados){
+    depCache = dados.depoimentos;
+    depMax = dados.max;
+    depGradeEl.innerHTML = depCache.length
+      ? depCache.map(depCartao).join("")
+      : `<p class="admin-hint mb-0">Nenhum depoimento ainda. Enquanto não houver avaliação de cliente que comprou pelo site, a seção mostra um convite.</p>`;
+    document.getElementById("depAddBtn").disabled = depCache.length >= depMax;
+  }
+
+  async function depCarregar(){
+    try{
+      const res = await fetchWithTimeout("/api/admin/depoimentos");
+      if(!res.ok) throw new Error("Não foi possível carregar os depoimentos.");
+      depRender(await res.json());
+    }catch(err){
+      console.error("Erro ao carregar depoimentos:", err);
+      depAviso(err.message || "Não foi possível carregar os depoimentos.", true);
+    }
+  }
+
+  function depAbrirModal(d){
+    depErroEl.textContent = "";
+    depFormEl.reset();
+    depIdEl.value = d ? d.id : "";
+    document.getElementById("depModalLabel").textContent = d ? "Editar depoimento" : "Adicionar depoimento";
+    document.getElementById("depFotoBloco").classList.toggle("d-none", Boolean(d));
+    document.getElementById("depConsentimentoBloco").classList.toggle("d-none", Boolean(d));
+    if(d){
+      depTextoEl.value = d.texto;
+      depNomeEl.value = d.nome;
+      depCidadeEl.value = d.cidade || "";
+      depOrigemEl.value = d.origem;
+    }
+    depModal.show();
+  }
+
+  document.getElementById("depAddBtn")?.addEventListener("click", () => depAbrirModal(null));
+
+  depFormEl?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = depIdEl.value;
+    const texto = depTextoEl.value.trim();
+    const nome = depNomeEl.value.trim();
+    if(!texto) return void (depErroEl.textContent = "Cole a mensagem da cliente.");
+    if(!nome) return void (depErroEl.textContent = "Escreva o primeiro nome da cliente.");
+    if(!id && !depConsentEl.checked){
+      return void (depErroEl.textContent = "Confirme que a cliente autorizou publicar a mensagem.");
+    }
+
+    depErroEl.textContent = "";
+    depSalvarEl.disabled = true;
+    const rotulo = depSalvarEl.textContent;
+    depSalvarEl.textContent = "Salvando...";
+    try{
+      let res;
+      if(id){
+        res = await fetchWithTimeout(`/api/admin/depoimentos/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texto, nome, cidade: depCidadeEl.value.trim(), origem: depOrigemEl.value, status: "publicado" }),
+        });
+      }else{
+        const corpo = new FormData();
+        corpo.append("texto", texto);
+        corpo.append("nome", nome);
+        corpo.append("cidade", depCidadeEl.value.trim());
+        corpo.append("origem", depOrigemEl.value);
+        corpo.append("consentimento", "true");
+        if(depFotoEl.files?.[0]) corpo.append("foto", depFotoEl.files[0]);
+        res = await fetchWithTimeout("/api/admin/depoimentos", { method: "POST", body: corpo }, 30000);
+      }
+      const dados = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(dados.error || "Não foi possível salvar.");
+      depModal.hide();
+      depAviso(id ? "Depoimento atualizado." : "Depoimento publicado no site.");
+      await depCarregar();
+    }catch(err){
+      console.error("Erro ao salvar depoimento:", err);
+      depErroEl.textContent = err.message || "Não foi possível salvar.";
+    }finally{
+      depSalvarEl.disabled = false;
+      depSalvarEl.textContent = rotulo;
+    }
+  });
+
+  async function depSalvarOrdem(nova){
+    if(depSalvandoOrdem) return;
+    depSalvandoOrdem = true;
+    const anterior = depCache;
+    depCache = nova;
+    depGradeEl.innerHTML = depCache.map(depCartao).join("");
+    depAviso("Salvando a ordem...");
+    try{
+      const res = await fetchWithTimeout("/api/admin/depoimentos/ordem", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: nova.map(d => d.id) }),
+      });
+      const dados = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(dados.error || "Não foi possível salvar a ordem.");
+      depAviso("Ordem salva.");
+    }catch(err){
+      console.error("Erro ao salvar a ordem dos depoimentos:", err);
+      depCache = anterior;
+      depGradeEl.innerHTML = depCache.map(depCartao).join("");
+      depAviso(err.message || "Não foi possível salvar a ordem.", true);
+    }finally{
+      depSalvandoOrdem = false;
+    }
+  }
+
+  depGradeEl?.addEventListener("click", async (e) => {
+    const card = e.target.closest("[data-dep-id]");
+    if(!card) return;
+    const id = Number(card.dataset.depId);
+    const i = depCache.findIndex(d => d.id === id);
+    if(i === -1) return;
+
+    const mover = e.target.closest("[data-dep-mover]");
+    if(mover){
+      const destino = i + Number(mover.dataset.depMover);
+      if(destino < 0 || destino >= depCache.length) return;
+      const nova = [...depCache];
+      [nova[i], nova[destino]] = [nova[destino], nova[i]];
+      return void depSalvarOrdem(nova);
+    }
+
+    if(e.target.closest("[data-dep-editar]")) return void depAbrirModal(depCache[i]);
+
+    if(e.target.closest("[data-dep-apagar]")){
+      if(!confirm("Apagar este depoimento do site?")) return;
+      try{
+        const res = await fetchWithTimeout(`/api/admin/depoimentos/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if(!res.ok) throw new Error("Não foi possível apagar.");
+        depAviso("Depoimento apagado.");
+        await depCarregar();
+      }catch(err){
+        console.error("Erro ao apagar depoimento:", err);
+        depAviso(err.message || "Não foi possível apagar.", true);
+      }
+    }
+  });
+
   PLCAuth.aoSaberDaSessao(({ user, falhou }) => {
-    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes(), heroCarregar()) : showOnly(stateForbidden);
+    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes(), heroCarregar(), depCarregar()) : showOnly(stateForbidden);
     showOnly(falhou ? stateError : stateLoggedOut);
   });
 })();

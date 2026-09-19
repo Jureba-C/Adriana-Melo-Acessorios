@@ -567,6 +567,36 @@ db.exec(`
     PRIMARY KEY (photo_id, width, format)
   );
 
+  -- Elogios que a cliente mandou POR FORA do site (WhatsApp, Instagram) e
+  -- autorizou publicar. Tabela separada de reviews de propósito, e o motivo
+  -- não é o formato: é que toda linha de reviews hoje é compra verificada, e
+  -- o site afirma isso em cada card ("Compra verificada"). Guardar aqui o que
+  -- não passou por pedido mantém aquela afirmação verdadeira por construção,
+  -- e mantém notaMedia() contando só o que pode virar nota.
+  --
+  -- Não tem coluna de nota, e isso é deliberado: mensagem de WhatsApp não vem
+  -- com estrela. Atribuir uma seria inventar exatamente o dado que separar as
+  -- duas tabelas existe para não inventar. No lugar das estrelas o card mostra
+  -- de onde a mensagem veio.
+  --
+  -- consentimento_em é obrigatório: sem a lojista confirmar que a cliente
+  -- autorizou, a rota recusa. É a linha entre publicar elogio real e inventar.
+  CREATE TABLE IF NOT EXISTS depoimentos (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    texto            TEXT NOT NULL,
+    cliente_nome     TEXT NOT NULL,
+    cliente_cidade   TEXT,
+    origem           TEXT NOT NULL CHECK (origem IN ('whatsapp', 'instagram')),
+    photo_id         TEXT REFERENCES review_photos(id) ON DELETE SET NULL,
+    consentimento_em INTEGER NOT NULL,
+    posicao          INTEGER NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'publicado'
+                     CHECK (status IN ('publicado', 'oculto')),
+    created_at       INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_depoimentos_ordem ON depoimentos(status, posicao);
+
   -- Uma linha por chave. Hoje só guarda a última rodada do cron
   -- (tarefas_periodicas_em), para o painel denunciar quando o agendamento
   -- no hPanel não existe ou parou.
@@ -1244,6 +1274,88 @@ function heroVersion(){
   return linhas.map(f => `${f.id}:${f.position}:${f.focus}:${f.alt.length}:${f.legenda.length}`).join("|");
 }
 
+/* ------------------------- DEPOIMENTOS ---------------------------- */
+// Elogios recebidos por fora do site. Ver o comentário da tabela, acima, para
+// o porquê de não morarem em `reviews` e de não terem nota.
+const stmtListDepoimentos = db.prepare(
+  `SELECT id, texto, cliente_nome, cliente_cidade, origem, photo_id,
+          consentimento_em, posicao, status, created_at
+     FROM depoimentos ORDER BY posicao, created_at`
+);
+const stmtDepoimentosPublicados = db.prepare(
+  `SELECT id, texto, cliente_nome, cliente_cidade, origem, photo_id
+     FROM depoimentos WHERE status = 'publicado' ORDER BY posicao, created_at LIMIT ?`
+);
+const stmtGetDepoimento = db.prepare(`SELECT * FROM depoimentos WHERE id = ?`);
+const stmtInsertDepoimento = db.prepare(
+  `INSERT INTO depoimentos
+     (texto, cliente_nome, cliente_cidade, origem, photo_id, consentimento_em, posicao, status, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, 'publicado', ?)`
+);
+const stmtUpdateDepoimento = db.prepare(
+  `UPDATE depoimentos SET texto = ?, cliente_nome = ?, cliente_cidade = ?, origem = ?, status = ?
+    WHERE id = ?`
+);
+const stmtDeleteDepoimento = db.prepare(`DELETE FROM depoimentos WHERE id = ?`);
+const stmtPosicaoLivreDepoimento = db.prepare(`SELECT IFNULL(MAX(posicao), -1) + 1 AS n FROM depoimentos`);
+const stmtContarDepoimentos = db.prepare(`SELECT COUNT(*) AS n FROM depoimentos WHERE status = 'publicado'`);
+const stmtMoverDepoimento = db.prepare(`UPDATE depoimentos SET posicao = ? WHERE id = ?`);
+const stmtFotoDeDepoimentoPublicado = db.prepare(
+  `SELECT p.mime_type, p.data FROM review_photos p
+     JOIN depoimentos d ON d.photo_id = p.id AND d.status = 'publicado'
+    WHERE p.id = ?`
+);
+
+function listarDepoimentos(){
+  return stmtListDepoimentos.all();
+}
+function depoimentosPublicados(limite){
+  return stmtDepoimentosPublicados.all(limite);
+}
+function contarDepoimentosPublicados(){
+  return stmtContarDepoimentos.get().n;
+}
+function getDepoimento(id){
+  return stmtGetDepoimento.get(id) || null;
+}
+function criarDepoimento({ texto, nome, cidade, origem, photoId, consentimentoEm }){
+  const agora = Date.now();
+  const r = stmtInsertDepoimento.run(
+    texto, nome, cidade || null, origem, photoId || null,
+    consentimentoEm, stmtPosicaoLivreDepoimento.get().n, agora
+  );
+  return Number(r.lastInsertRowid);
+}
+function atualizarDepoimento(id, { texto, nome, cidade, origem, status }){
+  if(!stmtGetDepoimento.get(id)) return false;
+  stmtUpdateDepoimento.run(texto, nome, cidade || null, origem, status, id);
+  return true;
+}
+// A foto só é apagada se mais ninguém apontar para ela — mesmo cuidado de
+// apagarFotoOrfaDeAvaliacao, já que review_photos é compartilhada.
+function removerDepoimento(id){
+  const antes = stmtGetDepoimento.get(id);
+  if(!antes) return false;
+  stmtDeleteDepoimento.run(id);
+  if(antes.photo_id) apagarFotoOrfaDeAvaliacao(antes.photo_id);
+  return true;
+}
+function setOrdemDepoimentos(ids){
+  db.exec("BEGIN");
+  try{
+    ids.forEach((id, i) => stmtMoverDepoimento.run(i, id));
+    db.exec("COMMIT");
+  }catch(err){
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+// Serve a foto só enquanto o depoimento estiver publicado, igual à regra da
+// foto de avaliação: ocultar no painel tem de tirar a imagem do ar também.
+function getFotoDeDepoimentoPublicado(photoId){
+  return stmtFotoDeDepoimentoPublicado.get(photoId) || null;
+}
+
 /* ------------------------- PRODUCT OVERRIDES ------------------------- */
 const stmtGetProductOverride = db.prepare(`SELECT * FROM product_overrides WHERE product_id = ?`);
 const stmtListProductOverrides = db.prepare(`SELECT * FROM product_overrides`);
@@ -1728,9 +1840,14 @@ function mudarStatusAvaliacao(id, status){
 
 const stmtTiraFotoDaAvaliacao = db.prepare(`UPDATE reviews SET photo_id = NULL WHERE id = ?`);
 const stmtFotoDaAvaliacao = db.prepare(`SELECT photo_id FROM reviews WHERE id = ?`);
+/* ⚠️ Checa as DUAS tabelas que apontam para review_photos. Desde que os
+   depoimentos passaram a reusar esta tabela, olhar só reviews apagaria a foto
+   de um depoimento quando a lojista excluísse uma avaliação que por acaso
+   apontasse para o mesmo id — e vice-versa. */
 const stmtApagaFotoOrfa = db.prepare(`
-  DELETE FROM review_photos WHERE id = ?
-     AND NOT EXISTS (SELECT 1 FROM reviews WHERE photo_id = ?)
+  DELETE FROM review_photos WHERE id = ?1
+     AND NOT EXISTS (SELECT 1 FROM reviews WHERE photo_id = ?1)
+     AND NOT EXISTS (SELECT 1 FROM depoimentos WHERE photo_id = ?1)
 `);
 /* "Publicar sem a foto" e "Excluir" apagam os bytes de verdade, não só o
    vínculo: foto de criança recusada pela lojista não fica guardada no banco
@@ -1738,14 +1855,14 @@ const stmtApagaFotoOrfa = db.prepare(`
 function tirarFotoDaAvaliacao(id){
   const photoId = stmtFotoDaAvaliacao.get(id)?.photo_id;
   stmtTiraFotoDaAvaliacao.run(id);
-  if(photoId) stmtApagaFotoOrfa.run(photoId, photoId);
+  if(photoId) stmtApagaFotoOrfa.run(photoId);
 }
-function apagarFotoOrfaDeAvaliacao(photoId){ stmtApagaFotoOrfa.run(photoId, photoId); }
+function apagarFotoOrfaDeAvaliacao(photoId){ stmtApagaFotoOrfa.run(photoId); }
 const stmtApagaAvaliacao = db.prepare(`DELETE FROM reviews WHERE id = ?`);
 function excluirAvaliacao(id){
   const photoId = stmtFotoDaAvaliacao.get(id)?.photo_id;
   const apagou = stmtApagaAvaliacao.run(id).changes > 0;
-  if(photoId) stmtApagaFotoOrfa.run(photoId, photoId);
+  if(photoId) stmtApagaFotoOrfa.run(photoId);
   return apagou;
 }
 
@@ -2030,6 +2147,15 @@ module.exports = {
   getHeroPhotoVariant,
   saveHeroPhotoVariant,
   heroVersion,
+  listarDepoimentos,
+  depoimentosPublicados,
+  contarDepoimentosPublicados,
+  getDepoimento,
+  criarDepoimento,
+  atualizarDepoimento,
+  removerDepoimento,
+  setOrdemDepoimentos,
+  getFotoDeDepoimentoPublicado,
   saveProductPhotoVariant,
   // getProductOverride não é exportada de propósito: ninguém fora daqui lê
   // um override isolado — quem consome sempre quer o mapa inteiro

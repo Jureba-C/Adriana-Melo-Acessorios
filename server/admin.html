@@ -147,6 +147,7 @@
           <button type="button" class="admin-tab-btn" data-tab="mensagens"><i class="bi bi-chat-dots"></i> Mensagens</button>
           <button type="button" class="admin-tab-btn" data-tab="avaliacoes"><i class="bi bi-star-fill"></i> Avaliações <span class="admin-tab-contador d-none" id="avaliacoesContador"></span></button>
           <button type="button" class="admin-tab-btn" data-tab="topo"><i class="bi bi-image"></i> Fotos do topo</button>
+          <button type="button" class="admin-tab-btn" data-tab="depoimentos"><i class="bi bi-chat-heart"></i> Depoimentos</button>
         </nav>
 
         <div class="admin-tab-panels">
@@ -431,6 +432,30 @@
             <div class="hero-admin-grade" id="heroGrade"></div>
           </section>
 
+          <section class="admin-tab-panel d-none" data-tab-panel="depoimentos">
+            <div class="admin-section-head">
+              <h2 class="admin-section-title">Depoimentos</h2>
+              <button type="button" class="btn-blush btn-sm-blush" id="depAddBtn">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar depoimento
+              </button>
+            </div>
+            <p class="admin-hint">
+              Elogios que a cliente te mandou por WhatsApp ou Instagram e deixou você publicar.
+              Eles aparecem na mesma seção das avaliações, mas <strong>sem estrelas e sem o selo
+              &ldquo;Compra verificada&rdquo;</strong> — quem escreveu não passou por um pedido aqui no
+              site, e dizer que passou seria mentira. Conforme chegam avaliações de clientes que
+              compraram pelo site, elas entram na frente e os depoimentos saem sozinhos.
+            </p>
+            <div class="admin-aviso">
+              <i class="bi bi-shield-check" aria-hidden="true"></i>
+              <span>Cole a mensagem <strong>como a cliente escreveu</strong>. Não invente elogio:
+              além de enganar quem está comprando, afirmação falsa sobre produto é crime pelo
+              Código de Defesa do Consumidor (art. 66).</span>
+            </div>
+            <div class="small mb-2 account-msg" id="depMsg" role="status" aria-live="polite"></div>
+            <div class="hero-admin-grade" id="depGrade"></div>
+          </section>
+
         </div>
       </div>
 
@@ -438,6 +463,67 @@
     </div>
   </div>
 </main>
+
+<div class="modal fade" id="depModal" tabindex="-1" aria-labelledby="depModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="depForm" novalidate>
+        <div class="modal-header border-0">
+          <h5 class="modal-title font-display" id="depModalLabel">Adicionar depoimento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="depId">
+
+          <div class="mb-3">
+            <label class="form-label" for="depTexto">Mensagem da cliente</label>
+            <textarea class="form-control" id="depTexto" rows="4" maxlength="600"
+                      placeholder="Cole aqui exatamente o que ela escreveu"></textarea>
+            <div class="form-text">Do jeito que ela mandou. Não reescreva nem melhore o texto.</div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-sm-6">
+              <label class="form-label" for="depNome">Primeiro nome</label>
+              <input type="text" class="form-control" id="depNome" maxlength="40" placeholder="Maria">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label" for="depCidade">Cidade <span class="text-muted">(opcional)</span></label>
+              <input type="text" class="form-control" id="depCidade" maxlength="60" placeholder="Brasília/DF">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="depOrigem">Veio por</label>
+            <select class="form-select" id="depOrigem">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="instagram">Instagram</option>
+            </select>
+          </div>
+
+          <div class="mb-3" id="depFotoBloco">
+            <label class="form-label" for="depFoto">Foto que ela mandou <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control" id="depFoto" accept="image/jpeg,image/png,image/webp">
+            <div class="form-text">Só se ela também autorizou a foto. Até 4MB.</div>
+          </div>
+
+          <div class="form-check depoimento-consentimento" id="depConsentimentoBloco">
+            <input class="form-check-input" type="checkbox" id="depConsentimento">
+            <label class="form-check-label" for="depConsentimento">
+              Confirmo que esta mensagem é real e que a cliente autorizou publicá-la no site.
+            </label>
+          </div>
+
+          <div class="small text-danger mt-2" id="depErro" role="alert"></div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn-outline-blush" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn-blush" id="depSalvar">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="heroFotoModal" tabindex="-1" aria-labelledby="heroFotoModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">

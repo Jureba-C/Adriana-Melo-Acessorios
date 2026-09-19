@@ -1231,13 +1231,49 @@ const ENFEITES_AVALIACOES = [
   return `<span class="avaliacoes-enfeite enfeite-${tipo} enfeite-${cor}" data-profundidade="${p}" style="--x:${x};--y:${y};--t:${t};--r:${r};--atraso:-${(i * 0.9).toFixed(1)}s">${desenho}</span>`;
 }).join("");
 
+/* Sem nenhuma avaliação E sem nenhum depoimento, a seção não some mais: um
+   convite curto, com a linguagem visual do resto (cartão blush, laço), que não
+   afirma nada que não seja verdade.
+
+   ⚠️ O título é DIFERENTE de "O que dizem as clientes" de propósito. O teste
+   test/avaliacoes.test.js:113 usa aquela string para garantir que a home vazia
+   não mostra nota nem seção de avaliação — é a trava que impede a volta do
+   "4,9" inventado. Reusar o título aqui derrubaria essa proteção. */
+function secaoAvaliacoesVazia(){
+  return `
+<section class="py-5 avaliacoes-section avaliacoes-convite" id="avaliacoes" aria-labelledby="avaliacoesConviteTitulo">
+  <div class="container">
+    <div class="avaliacoes-convite-cartao">
+      <svg class="avaliacao-laco" viewBox="0 0 100 70" aria-hidden="true" focusable="false"><use href="#bow-shape"/></svg>
+      <span class="section-eyebrow avaliacoes-eyebrow">ainda sem avaliações</span>
+      <h2 class="section-title avaliacoes-convite-titulo" id="avaliacoesConviteTitulo">Seja a primeira a contar</h2>
+      <p class="avaliacoes-convite-texto">
+        Nenhuma cliente avaliou por aqui ainda. Quando o seu laço chegar, a gente
+        manda um link para você contar o que achou — e o que você escrever aparece
+        nesta página, do seu jeito.
+      </p>
+      <a href="#colecoes" class="btn-blush avaliacoes-convite-cta">Ver os laços <i class="bi bi-arrow-down-short" aria-hidden="true"></i></a>
+    </div>
+  </div>
+</section>`;
+}
+
+const CARDS_NA_SECAO = 6;
+
+/* Avaliação verificada SEMPRE na frente; depoimento só completa o que sobrar
+   dos 6 lugares. É isto que faz o conteúdo "trocar pelas novas" sozinho:
+   conforme chegam avaliações de verdade, os depoimentos são empurrados para
+   fora sem a lojista precisar apagar nada. */
 function secaoAvaliacoes(){
-  const avaliacoes = db.avaliacoesPublicadas(6);
-  if(!avaliacoes.length) return "";
+  const avaliacoes = db.avaliacoesPublicadas(CARDS_NA_SECAO);
+  const sobrando = CARDS_NA_SECAO - avaliacoes.length;
+  const depoimentos = sobrando > 0 ? db.depoimentosPublicados(sobrando) : [];
+  if(!avaliacoes.length && !depoimentos.length) return secaoAvaliacoesVazia();
   const overridesMap = getProductOverridesMap();
   const { total, media } = db.notaMedia();
-  const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nota = total ? media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "";
   const dois = (n) => String(n).padStart(2, "0");
+  const cartoes = avaliacoes.length + depoimentos.length;
 
   /* Este HTML é a versão SEM animação — tag de presente com o laço já
      amarrado, e as avaliações em grade (computador) ou carrossel (celular).
@@ -1283,8 +1319,35 @@ function secaoAvaliacoes(){
       </li>`;
   }).join("");
 
-  const pontos = avaliacoes.length > 1
-    ? `<div class="avaliacoes-pontos" aria-hidden="true">${avaliacoes.map((_, i) => `<span class="avaliacoes-ponto${i === 0 ? " is-ativo" : ""}"></span>`).join("")}</div>`
+  /* Depoimento NÃO leva estrela nem "Compra verificada": não passou por pedido
+     no site, e nenhuma das duas coisas seria verdade. No lugar das estrelas vai
+     de onde a mensagem veio — a mesma posição, a mesma linguagem visual, uma
+     afirmação que se sustenta. */
+  const cardsDepoimento = depoimentos.map(d => {
+    const quem = [d.cliente_nome, d.cliente_cidade].filter(Boolean).map(escaparHtml).join(" · ");
+    const primeiroNome = escaparHtml(d.cliente_nome || "cliente");
+    const foto = d.photo_id ? `/api/depoimentos/fotos/${escaparHtml(d.photo_id)}` : "";
+    const origem = d.origem === "instagram"
+      ? '<i class="bi bi-instagram" aria-hidden="true"></i> Enviado por Instagram'
+      : '<i class="bi bi-whatsapp" aria-hidden="true"></i> Enviado por WhatsApp';
+    return `
+      <li class="avaliacao-card is-depoimento">
+        <svg class="avaliacao-laco" viewBox="0 0 100 70" aria-hidden="true" focusable="false"><use href="#bow-shape"/></svg>
+        <div class="avaliacao-topo">
+          <span class="avaliacao-selo avaliacao-selo-origem">${origem}</span>
+        </div>
+        <blockquote class="avaliacao-texto"><p>“${escaparHtml(d.texto)}”</p></blockquote>
+        <footer class="avaliacao-rodape">
+          ${foto ? `<button type="button" class="avaliacao-foto-botao" data-foto="${foto}?w=640" data-legenda="Foto enviada por ${quem || primeiroNome}" aria-label="Ampliar foto enviada por ${primeiroNome}"><img class="avaliacao-foto" src="${foto}?w=160" alt="" loading="lazy" decoding="async" width="56" height="56"><span class="avaliacao-foto-zoom" aria-hidden="true"><i class="bi bi-zoom-in"></i></span></button>` : ""}
+          <span class="avaliacao-autor">
+            ${quem ? `<span class="avaliacao-quem">${quem}</span>` : ""}
+          </span>
+        </footer>
+      </li>`;
+  }).join("");
+
+  const pontos = cartoes > 1
+    ? `<div class="avaliacoes-pontos" aria-hidden="true">${Array.from({ length: cartoes }, (_, i) => `<span class="avaliacoes-ponto${i === 0 ? " is-ativo" : ""}"></span>`).join("")}</div>`
     : "";
 
   return `
@@ -1339,22 +1402,22 @@ function secaoAvaliacoes(){
         </svg>
         <span class="section-eyebrow avaliacoes-eyebrow">quem já recebeu</span>
         <h2 class="section-title avaliacoes-titulo" id="avaliacoesTitulo">O que dizem as clientes</h2>
-        <p class="avaliacoes-resumo">
+        ${total ? `<p class="avaliacoes-resumo">
           <strong class="avaliacoes-nota">${nota}</strong>
           <span class="avaliacoes-resumo-lado">
             <span aria-hidden="true">${estrelasHtml(Math.round(media))}</span>
             <span>${total === 1 ? "1 avaliação verificada" : `${total} avaliações verificadas`}</span>
           </span>
-        </p>
+        </p>` : ""}
         <div class="avaliacoes-controles" hidden>
           <button type="button" class="avaliacoes-seta" data-ir="-1" aria-label="Avaliação anterior"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-          <span class="avaliacoes-contador" aria-live="polite"><span class="avaliacoes-contador-atual">01</span><span class="visually-hidden"> de </span><span class="avaliacoes-trilho" aria-hidden="true"><span class="avaliacoes-trilho-fita"></span></span><span class="avaliacoes-contador-total">${dois(avaliacoes.length)}</span></span>
+          <span class="avaliacoes-contador" aria-live="polite"><span class="avaliacoes-contador-atual">01</span><span class="visually-hidden"> de </span><span class="avaliacoes-trilho" aria-hidden="true"><span class="avaliacoes-trilho-fita"></span></span><span class="avaliacoes-contador-total">${dois(cartoes)}</span></span>
           <button type="button" class="avaliacoes-seta" data-ir="1" aria-label="Próxima avaliação"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
         </div>
       </div>
     </div>
     <div class="avaliacoes-palco">
-      <ul class="avaliacoes-grade" aria-label="Avaliações das clientes" tabindex="0">${cards}
+      <ul class="avaliacoes-grade" aria-label="Avaliações das clientes" tabindex="0">${cards}${cardsDepoimento}
       </ul>
       ${pontos}
     </div>
@@ -2680,6 +2743,47 @@ app.get("/api/avaliacoes/fotos/:id", async (req, res) => {
     res.end(Buffer.from(foto.data));
   }
 });
+/* Mesma rota da foto de avaliação, para os depoimentos. Precisa ser separada
+   porque a de avaliação exige `reviews.status='publicada'` no JOIN — um
+   depoimento nunca passaria por lá. A regra de fundo é idêntica: ocultar no
+   painel tira a imagem do ar, e o cache de 1h (não "immutable") garante que
+   isso acontece logo. As variantes reaproveitam review_photo_variants, que é
+   cache por id de foto e não sabe de qual tabela o id veio. */
+app.get("/api/depoimentos/fotos/:id", async (req, res) => {
+  if(!ROTA_FOTO_AVALIACAO.test(req.params.id)) return res.status(404).end();
+  const foto = db.getFotoDeDepoimentoPublicado(req.params.id);
+  if(!foto) return res.status(404).end();
+  res.setHeader("Cache-Control", "public, max-age=3600");
+
+  const pedida = Number(req.query.w);
+  const largura = LARGURAS_FOTO_AVALIACAO.has(pedida) ? pedida : null;
+  if(!largura){
+    res.setHeader("Content-Type", foto.mime_type);
+    return res.end(Buffer.from(foto.data));
+  }
+
+  const formato = /\bimage\/webp\b/.test(req.headers.accept || "") ? "webp" : "jpeg";
+  res.vary("Accept");
+  const emCache = db.getReviewPhotoVariant(req.params.id, largura, formato);
+  if(emCache){
+    res.setHeader("Content-Type", emCache.mime_type);
+    return res.end(Buffer.from(emCache.data));
+  }
+  try{
+    const mime = formato === "webp" ? "image/webp" : "image/jpeg";
+    let pipeline = sharp(Buffer.from(foto.data)).resize({ width: largura, withoutEnlargement: true });
+    pipeline = formato === "webp" ? pipeline.webp({ quality: 74 }) : pipeline.jpeg({ quality: 80, mozjpeg: true });
+    const reduzida = await pipeline.toBuffer();
+    db.saveReviewPhotoVariant(req.params.id, largura, formato, mime, reduzida);
+    res.setHeader("Content-Type", mime);
+    res.end(reduzida);
+  }catch(err){
+    console.error("Não foi possível reduzir a foto do depoimento:", err.message || err);
+    res.setHeader("Content-Type", foto.mime_type);
+    res.end(Buffer.from(foto.data));
+  }
+});
+
 
 /* =========================================================================
    Compra da etiqueta de envio no Melhor Envio (opcional, best-effort)
@@ -4279,6 +4383,83 @@ app.post("/api/admin/orders/:reference/conferir-entrega", auth.requireAdmin, aut
   }
 });
 
+/* =========================================================================
+   POST /api/admin/orders/:reference/pedir-avaliacao
+   -------------------------------------------------------------------------
+   O convite de avaliação só sai automaticamente para quem recebeu o pedido
+   entre 2 e 30 dias atrás (lib/db.js, pedidosParaPedirAvaliacao). Quem passou
+   dessa janela — por atraso dos Correios, por a loja ter começado a pedir
+   avaliação depois, por qualquer motivo — nunca era convidado, e não havia
+   como a lojista pedir na mão. É o que esta rota resolve.
+
+   Manda o e-mail certo para o estado do pedido: quem ainda está "postado"
+   recebe o "seu pedido chegou?" (que já leva o link de avaliação junto), e
+   quem já está "entregue" recebe o "como ficaram os laços?".
+
+   ⚠️ O índice único (kind, order_reference) da email_outbox barra reenfileirar
+   para sempre, mesmo depois de enviado. Por isso o deleteOutboxEntry antes —
+   mesmo caminho que o reenvio do aviso de postagem já usa.
+
+   ⚠️ Carência de 7 dias: sem ela o botão vira ferramenta de insistir com quem
+   não quer responder. A lojista pode pedir de novo, só não no mesmo dia.
+========================================================================= */
+const CARENCIA_PEDIR_AVALIACAO_MS = 7 * 24 * 60 * 60 * 1000;
+
+function linkDeAvaliacaoDoPedido(reference){
+  const token = db.garantirTokenDeAvaliacao(reference);
+  return `${CLIENT_ORIGIN}/avaliar.html?pedido=${encodeURIComponent(reference)}#t=${token}`;
+}
+
+app.post("/api/admin/orders/:reference/pedir-avaliacao", auth.requireAdmin, auth.requireAdminTwoFactor, async (req, res) => {
+  try{
+    const reference = String(req.params.reference || "");
+    const order = db.getOrderByExternalReference(reference);
+    if(!order) return res.status(404).json({ error: "Pedido não encontrado." });
+    if(order.status !== "pago"){
+      return res.status(409).json({ error: "Só dá para pedir avaliação de pedido pago." });
+    }
+    if(!order.customer_email){
+      return res.status(409).json({ error: "Este pedido não tem e-mail para avisar." });
+    }
+    if(order.fulfillment_status !== "postado" && order.fulfillment_status !== "entregue"){
+      return res.status(409).json({ error: "Poste o pedido antes de pedir a avaliação." });
+    }
+    if(db.avaliacoesDoPedido(reference).length){
+      return res.status(409).json({ error: "Esta cliente já avaliou este pedido." });
+    }
+
+    const entregue = order.fulfillment_status === "entregue";
+    const kind = entregue ? "pedir_avaliacao" : "confirmar_recebimento";
+    const jaEnviado = db.getOutboxEntry(kind, reference);
+    if(jaEnviado && Date.now() - (jaEnviado.sent_at || jaEnviado.created_at) < CARENCIA_PEDIR_AVALIACAO_MS){
+      return res.status(429).json({ error: "O convite já foi enviado nos últimos 7 dias. Espere um pouco antes de pedir de novo." });
+    }
+
+    let endereco = null;
+    try { endereco = JSON.parse(order.address_json); } catch {}
+    const avaliarUrl = linkDeAvaliacaoDoPedido(reference);
+    const conteudo = entregue
+      ? email.formatPedirAvaliacaoEmail({ externalReference: reference, address: endereco, avaliarUrl })
+      : email.formatConfirmarRecebimentoEmail({ externalReference: reference, address: endereco, avaliarUrl });
+
+    db.deleteOutboxEntry(kind, reference);
+    const id = db.enqueueEmail({
+      kind,
+      toEmail: order.customer_email,
+      orderReference: reference,
+      subject: conteudo.subject,
+      textBody: conteudo.text,
+      htmlBody: conteudo.html,
+    });
+    if(!id) return res.status(500).json({ error: "Não foi possível colocar o convite na fila." });
+    await entregarEmailDaFila(id);
+    res.json({ ok: true, entregue });
+  }catch(err){
+    console.error("Erro ao pedir avaliação:", err);
+    res.status(500).json({ error: "Não foi possível pedir a avaliação agora." });
+  }
+});
+
 /* POST /api/admin/orders/:reference/avisar-postagem — reenvia o aviso de
    postagem com o código já salvo, para quando o e-mail cai em spam. */
 app.post("/api/admin/orders/:reference/avisar-postagem", auth.requireAdmin, auth.requireAdminTwoFactor, async (req, res) => {
@@ -4838,6 +5019,138 @@ app.get("/api/products/photos/:id", async (req, res) => {
     res.setHeader("Content-Type", photo.mime_type);
     res.end(Buffer.from(photo.data));
   }
+});
+
+/* =========================================================================
+   Depoimentos — painel
+   -------------------------------------------------------------------------
+   Elogios que a cliente mandou por WhatsApp/Instagram e autorizou publicar.
+   Não são avaliações: não têm nota, não levam "Compra verificada", e não
+   entram em db.notaMedia(). Ver o comentário da tabela em lib/db.js.
+
+   ⚠️ consentimento é obrigatório e recusado quando falso. É a única coisa
+   que separa "publicar elogio real" de "inventar elogio", e por isso mora no
+   servidor, não só no checkbox do painel.
+
+   Teto de 6: é quantos cabem na seção da home, e depoimento só ocupa o lugar
+   que a avaliação verificada não preencheu.
+========================================================================= */
+const MAX_DEPOIMENTOS = 6;
+const ORIGENS_DEPOIMENTO = new Set(["whatsapp", "instagram"]);
+const MAX_TEXTO_DEPOIMENTO = 600;
+
+const depoimentoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024, files: 1 },
+  fileFilter(req, file, cb){ cb(null, Boolean(PRODUCT_PHOTO_MIME_EXT[file.mimetype])); },
+});
+
+function textoDeDepoimento(valor, maximo){
+  if(typeof valor !== "string") return null;
+  const limpo = valor.trim().replace(/[ \t]+/g, " ");
+  if(!limpo || limpo.length > maximo) return null;
+  return limpo;
+}
+
+function camposDoDepoimento(body){
+  const texto = textoDeDepoimento(body.texto, MAX_TEXTO_DEPOIMENTO);
+  const nome = textoDeDepoimento(body.nome, 40);
+  const cidade = body.cidade ? textoDeDepoimento(body.cidade, 60) : null;
+  if(!texto) return { erro: `Cole a mensagem da cliente (até ${MAX_TEXTO_DEPOIMENTO} caracteres).` };
+  if(!nome) return { erro: "Escreva o primeiro nome da cliente (até 40 caracteres)." };
+  if(body.cidade && !cidade) return { erro: "Cidade muito longa (até 60 caracteres)." };
+  if(!ORIGENS_DEPOIMENTO.has(body.origem)) return { erro: "Escolha se veio por WhatsApp ou Instagram." };
+  return { texto, nome, cidade, origem: body.origem };
+}
+
+app.get("/api/admin/depoimentos", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  res.json({
+    depoimentos: db.listarDepoimentos().map(d => ({
+      id: d.id,
+      texto: d.texto,
+      nome: d.cliente_nome,
+      cidade: d.cliente_cidade,
+      origem: d.origem,
+      status: d.status,
+      fotoUrl: d.photo_id && d.status === "publicado" ? `/api/depoimentos/fotos/${d.photo_id}?w=160` : null,
+      consentimentoEm: d.consentimento_em,
+    })),
+    max: MAX_DEPOIMENTOS,
+  });
+});
+
+app.post("/api/admin/depoimentos", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  if(db.listarDepoimentos().length >= MAX_DEPOIMENTOS){
+    return res.status(409).json({ error: `São no máximo ${MAX_DEPOIMENTOS} depoimentos. Apague um antes de cadastrar outro.` });
+  }
+  depoimentoUpload.single("foto")(req, res, async (err) => {
+    if(err instanceof multer.MulterError){
+      if(err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Imagem muito grande. O limite é 4MB." });
+      return res.status(400).json({ error: "Não foi possível enviar a imagem." });
+    }
+    if(err){
+      console.error("Erro no upload de foto de depoimento:", err);
+      return res.status(500).json({ error: "Não foi possível enviar a imagem agora." });
+    }
+
+    const campos = camposDoDepoimento(req.body);
+    if(campos.erro) return res.status(400).json({ error: campos.erro });
+    // Recusa no servidor, não só no painel: é a trava que separa publicar um
+    // elogio real de inventar um.
+    if(req.body.consentimento !== "true" && req.body.consentimento !== true){
+      return res.status(400).json({ error: "Confirme que a cliente autorizou publicar a mensagem." });
+    }
+
+    try{
+      let photoId = null;
+      if(req.file){
+        photoId = randomUUID();
+        // Mesmo tratamento da foto de avaliação: reencode que descarta EXIF
+        // (inclusive GPS) antes de qualquer byte encostar no banco.
+        const tratada = await processarFotoDeAvaliacao(req.file.buffer);
+        db.insertReviewPhoto(photoId, "image/jpeg", tratada);
+      }
+      const id = db.criarDepoimento({ ...campos, photoId, consentimentoEm: Date.now() });
+      res.status(201).json({ id });
+    }catch(procErr){
+      console.error("Erro ao gravar depoimento:", procErr);
+      res.status(500).json({ error: "Não foi possível salvar o depoimento agora." });
+    }
+  });
+});
+
+app.patch("/api/admin/depoimentos/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const id = Number(req.params.id);
+  if(!Number.isInteger(id)) return res.status(404).json({ error: "Depoimento não encontrado." });
+  const campos = camposDoDepoimento(req.body);
+  if(campos.erro) return res.status(400).json({ error: campos.erro });
+  const status = req.body.status === "oculto" ? "oculto" : "publicado";
+  if(!db.atualizarDepoimento(id, { ...campos, status })){
+    return res.status(404).json({ error: "Depoimento não encontrado." });
+  }
+  res.json({ ok: true });
+});
+
+app.delete("/api/admin/depoimentos/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const id = Number(req.params.id);
+  if(!Number.isInteger(id)) return res.status(404).json({ error: "Depoimento não encontrado." });
+  db.removerDepoimento(id);
+  res.json({ ok: true });
+});
+
+app.put("/api/admin/depoimentos/ordem", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const ids = req.body?.ids;
+  if(!Array.isArray(ids) || ids.length > MAX_DEPOIMENTOS || !ids.every(Number.isInteger)){
+    return res.status(400).json({ error: "Ordem inválida." });
+  }
+  // Exige a lista COMPLETA e sem repetição, mesmo motivo da ordem das fotos do
+  // topo: aceitar subconjunto deixaria os de fora com a posição antiga.
+  const atuais = db.listarDepoimentos().map(d => d.id);
+  if(ids.length !== atuais.length || new Set(ids).size !== ids.length || !ids.every(i => atuais.includes(i))){
+    return res.status(409).json({ error: "A lista mudou. Recarregue a página e tente de novo." });
+  }
+  db.setOrdemDepoimentos(ids);
+  res.json({ ok: true });
 });
 
 /* =========================================================================

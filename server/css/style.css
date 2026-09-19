@@ -3776,6 +3776,48 @@ body.admin-gate-active .admin-state-area{
   font-size:.7rem; font-weight:600; white-space:nowrap;
 }
 .avaliacao-texto{ margin:0; }
+.avaliacao-selo-origem{ background:var(--blush-100); color:var(--blush-700); }
+.avaliacao-selo-origem .bi-whatsapp{ color:#25a162; }
+.avaliacao-card.is-depoimento .avaliacao-topo{ justify-content:flex-start; }
+
+.avaliacoes-convite{ padding:4rem 0 3.5rem; }
+.avaliacoes-convite-cartao{
+  max-width:34rem; margin:0 auto; text-align:center;
+  padding:2.4rem 1.6rem 2rem; border-radius:var(--radius-md);
+  background:var(--white); border:1px solid var(--blush-150);
+  box-shadow:var(--shadow-soft);
+}
+.avaliacoes-convite-cartao .avaliacao-laco{
+  position:static; width:46px; height:auto; color:var(--blush-300);
+  margin:0 auto .8rem; display:block;
+}
+.avaliacoes-convite-titulo{ margin:.2rem 0 .8rem; }
+.avaliacoes-convite-texto{
+  margin:0 auto 1.4rem; max-width:34ch;
+  color:var(--ink-soft); font-size:.98rem; line-height:1.55;
+}
+.avaliacoes-convite-cta{ padding:.75rem 1.5rem; }
+
+.depoimento-card .hero-admin-corpo{ gap:.4rem; }
+.depoimento-card.is-oculto{ opacity:.6; }
+.depoimento-ordem-solta{ position:static; align-self:flex-start; margin:.7rem .7rem 0; }
+.depoimento-origem{
+  display:inline-flex; align-items:center; gap:.3rem;
+  font-size:.72rem; font-weight:600; color:var(--blush-700);
+}
+.depoimento-origem .bi-whatsapp{ color:#25a162; }
+.depoimento-oculto{ color:var(--ink-soft); font-weight:500; }
+.depoimento-texto{
+  margin:0; font-size:.84rem; line-height:1.4; color:var(--ink);
+  display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden;
+}
+.depoimento-quem{ font-size:.75rem; color:var(--ink-soft); }
+.depoimento-consentimento{
+  padding:.7rem .9rem; border-radius:var(--radius-md);
+  background:var(--blush-50); border:1px solid var(--blush-150);
+}
+.depoimento-consentimento .form-check-label{ font-size:.86rem; line-height:1.4; color:var(--ink); }
+
 .avaliacao-texto p{
   margin:0; font-size:.95rem; line-height:1.6; color:var(--ink); overflow-wrap:anywhere;
   display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:6; overflow:hidden;
