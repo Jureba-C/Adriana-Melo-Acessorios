@@ -9,7 +9,7 @@
     { id:5, name:"Laço Borboleta", cat:"laco-unico", catLabel:"Laço Único", price:44.90, color:"#EA8FB4", badges:[], desc:"Formato de borboleta com fita de organza, ideal para festas infantis." },
     { id:6, name:"Kit Presente 3 Laços", cat:"kit", catLabel:"Kit", price:89.90, color:"#C05480", badges:["Novo"], desc:"Trio de laços em tons de rosa, embalado em caixa para presente." },
     { id:7, name:"Laço Tiara Flor", cat:"tiara", catLabel:"Tiara", price:39.90, color:"#F4B4CC", badges:[], desc:"Tiara macia com flor de tecido, confortável para uso prolongado." },
-    { id:8, name:"Laço Personalizado", cat:"laco-unico", catLabel:"Laço Único", price:64.90, color:"#DD6E9B", badges:["Novo"], desc:"Bordado com o nome que você escolher, embalagem para presente." },
+    { id:8, name:"Laço Personalizado", cat:"laco-unico", catLabel:"Laço Único", price:64.90, color:"#DD6E9B", badges:["Novo"], desc:"Bordado com o nome que você escolher, na cor da fita que combinar." },
   ];
 
   function escapeHTML(str){
