@@ -1526,12 +1526,24 @@ let CACHE_HERO = null;
 function blocoHero(){
   const doPainel = db.listHeroPhotos();
   const fotos = doPainel.length ? doPainel : FOTOS_HERO_PADRAO;
-  // As fotos do painel são servidas por URL imutável (id + largura), mas as
-  // padrão carregam ?v= do conteúdo do arquivo — por isso a assinatura do
-  // cache junta a versão do banco com a dos arquivos.
+  /* As fotos do painel são servidas por URL imutável (id + largura), mas as
+     padrão carregam ?v= do conteúdo do arquivo — por isso a assinatura do
+     cache junta a versão do banco com a dos arquivos.
+
+     ⚠️ Os QUATRO arquivos de cada foto entram na assinatura, não só o
+     -960.jpg. Cada slide referencia 480/960 em jpg e webp, e olhar um só
+     significava que regerar as imagens sem mexer naquele arquivo específico
+     deixava o HTML em cache com o ?v= antigo dos outros três. Como imagem é
+     servida com um ano de cache, quem já tinha visitado ficaria preso na
+     versão velha até o cache do navegador expirar. */
   const assinatura = doPainel.length
     ? db.heroVersion()
-    : FOTOS_HERO_PADRAO.map(f => versaoDoAsset(`img/${f.slug}-960.jpg`)).join("|");
+    : FOTOS_HERO_PADRAO.flatMap(f => [
+        versaoDoAsset(`img/${f.slug}-480.jpg`),
+        versaoDoAsset(`img/${f.slug}-960.jpg`),
+        versaoDoAsset(`img/${f.slug}-480.webp`),
+        versaoDoAsset(`img/${f.slug}-960.webp`),
+      ]).join("|");
   if(CACHE_HERO && CACHE_HERO.assinatura === assinatura) return CACHE_HERO.html;
 
   const html = `<div class="hero-slides" id="heroSlides">
