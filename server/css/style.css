@@ -511,6 +511,9 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   .floaty.f5{ left:44.5%; width:24px; }
   .hero-acoes{ gap:.6rem .7rem; flex-wrap:nowrap; }
   .hero-cta, .hero-whats{ flex:1 1 0; min-width:0; padding-inline:.9rem; font-size:.9rem; white-space:nowrap; }
+  .hero-stats .num.is-texto{ font-size:.86rem; }
+  .hero-stat{ padding:0 1rem; }
+  .hero-stat + .hero-stat::after{ left:-5px; width:11px; height:8px; margin-top:-4px; }
 }
 @keyframes floaty{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-16px) rotate(6deg);} }
 
