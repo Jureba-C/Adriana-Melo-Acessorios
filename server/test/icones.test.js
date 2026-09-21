@@ -37,15 +37,10 @@ test("todo ícone usado no site existe no recorte da fonte", () => {
    antes de qualquer verificação, e no site vira um vazio de largura zero —
    sem erro, sem 404, sem teste vermelho.
 
-   Este teste fecha esse buraco. A lista abaixo não é uma permissão: é uma
-   dívida registrada, e corrigi-la MUDA a aparência da página (um ícone passa a
-   aparecer onde hoje não há nada), então depende da dona da loja decidir. */
-const NOMES_QUE_O_BOOTSTRAP_NAO_TEM = [
-  // index.html, seção "nossa promessa pra você". Não existe no Bootstrap Icons
-  // v1.11.3 — hoje renderiza nada. Trocar por bi-shield-check ou bi-heart faria
-  // um ícone aparecer ali pela primeira vez.
-  "bi-shield-heart",
-];
+   Este teste fecha esse buraco. A lista abaixo não é uma permissão: só serve
+   para registrar uma dívida conhecida enquanto a dona da loja não decide a
+   troca (corrigir muda a aparência: um ícone passa a aparecer onde não havia). */
+const NOMES_QUE_O_BOOTSTRAP_NAO_TEM = [];
 
 test("nenhum ícone novo com nome que o Bootstrap Icons não define", () => {
   const mapa = mapaDeCodepoints();
