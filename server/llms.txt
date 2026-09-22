@@ -73,6 +73,6 @@ O acompanhamento fica em "Meus pedidos", dentro da conta da cliente.
   a pena tentar acessá-las nem citá-las.
 - O ateliê não tem loja física para visita; o atendimento presencial não é
   oferecido. Pedidos e dúvidas passam pelo site ou pelo WhatsApp.
-- Prazo de produção varia por modelo, já que tudo é feito sob encomenda; o
-  prazo real é informado no WhatsApp ou no e-mail de confirmação, não no
-  site.
+- Prazo de produção: até 2 dias úteis, contados a partir da confirmação do
+  pagamento (tudo é feito sob encomenda). O prazo do transporte vem à parte,
+  calculado no carrinho conforme a transportadora escolhida.
