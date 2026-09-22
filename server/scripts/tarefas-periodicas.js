@@ -40,7 +40,12 @@
  *  5. Enfileira o cupom de aniversário para quem cadastrou a data em "Minha
  *     conta" e faz aniversário hoje (horário de Brasília, a partir das 9h),
  *     um por ano — a chave da fila é "aniversario:<id>:<ano>".
- *  6. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
+ *  6. Enfileira o próximo lote das campanhas de novidades em envio (aba
+ *     "Novidades" do painel), ~40 por rodada. O disparo mora em
+ *     lib/campanhas.js porque o painel também precisa dele: sem o cron
+ *     configurado no hPanel, a lojista toca a campanha pelo botão "enviar um
+ *     lote agora", e duas cópias da mesma rotina divergiriam.
+ *  7. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
  *     1 hora — é o único sinal de que o agendamento no hPanel sumiu.
  *
  *  A ordem importa: fechar entregas ANTES de escolher quem recebe "seu
@@ -56,6 +61,7 @@ const emailPhotos = require("../lib/emailPhotos.js");
 const rastreio = require("../lib/rastreio.js");
 const melhorEnvio = require("../lib/melhorEnvio.js");
 const email = require("../lib/email.js");
+const campanhas = require("../lib/campanhas.js");
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3333";
 
@@ -135,7 +141,7 @@ const WHATSAPP_DA_LOJA = "https://wa.me/5561982749808";
 // Kinds promocionais: precisam de List-Unsubscribe, e a fila não guarda
 // cabeçalho nenhum — só assunto, texto e HTML. Remontar aqui, na hora do
 // envio, é o que faz o botão "cancelar inscrição" do Gmail aparecer.
-const KINDS_COM_DESCADASTRO = new Set(["carrinho_esquecido"]);
+const KINDS_COM_DESCADASTRO = new Set(["carrinho_esquecido", "campanha"]);
 
 function linkDeDescadastro(emailDestino){
   const token = db.garantirTokenDeContato(emailDestino);
@@ -220,6 +226,51 @@ function enfileirarLembretesDeCarrinho(agora = Date.now()){
   return novos;
 }
 
+/* As campanhas não conhecem o catálogo (isso vive no server.js), e o cron
+   roda noutro processo. Para o e-mail sair com os laços escolhidos, o nome,
+   preço e link são remontados aqui a partir da rota pública /api/products —
+   sem duplicar o catálogo nem importar o server.js inteiro. */
+async function produtosDaCampanha(campanha){
+  let ids = [];
+  try { ids = JSON.parse(campanha.produtos || "[]"); } catch {}
+  if(!ids.length) return [];
+  try{
+    const res = await fetch(`${CLIENT_ORIGIN}/api/products`);
+    if(!res.ok) return [];
+    const { products } = await res.json();
+    return ids.map(id => {
+      const p = (products || []).find(x => x.id === Number(id));
+      if(!p) return null;
+      return {
+        nome: p.name,
+        preco: "R$ " + Number(p.price).toFixed(2).replace(".", ","),
+        photoUrl: p.photoUrl,
+        url: `${CLIENT_ORIGIN}${p.slug}?utm_source=newsletter&utm_medium=email&utm_campaign=campanha-${campanha.id}`,
+      };
+    }).filter(Boolean);
+  }catch(err){
+    console.error("Não consegui ler o catálogo para a campanha:", err.message || err);
+    return [];
+  }
+}
+
+async function enfileirarLotesDeCampanha(){
+  const emEnvio = db.campanhasEnviando();
+  if(!emEnvio.length){
+    console.log("Campanhas: nenhuma em envio.");
+    return 0;
+  }
+  let novos = 0;
+  for(const campanha of emEnvio){
+    const produtos = await produtosDaCampanha(campanha);
+    const resultado = campanhas.enfileirarLote({ campanha, produtos, origem: CLIENT_ORIGIN });
+    novos += resultado.novos;
+    console.log(`  Campanha "${campanha.assunto}": ${resultado.contagem.enfileirados}/${resultado.contagem.total} na fila.`);
+  }
+  console.log(`Campanhas: ${novos} e-mail(s) novo(s) na fila.`);
+  return novos;
+}
+
 function hojeEmBrasilia(agora){
   const partes = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
@@ -265,6 +316,7 @@ async function main(){
   enfileirarPedidosDeAvaliacao();
   enfileirarLembretesDeCarrinho();
   enfileirarCuponsDeAniversario();
+  await enfileirarLotesDeCampanha();
   await reenviarFilaDeEmail();
   db.gravarEstado("tarefas_periodicas_em", new Date().toISOString());
 }
@@ -276,4 +328,4 @@ if(require.main === module){
   });
 }
 
-module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao, enfileirarLembretesDeCarrinho, enfileirarCuponsDeAniversario };
+module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao, enfileirarLembretesDeCarrinho, enfileirarCuponsDeAniversario, enfileirarLotesDeCampanha };

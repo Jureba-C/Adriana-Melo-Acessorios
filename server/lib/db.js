@@ -604,6 +604,37 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_depoimentos_ordem ON depoimentos(status, posicao);
 
+  -- Campanhas de novidades para quem deixou o e-mail no bloco dos 10%.
+  -- O corpo é TEXTO, nunca HTML: quem escreve é a lojista, o HTML é montado
+  -- por lib/email.js a partir dele, e assim não existe a pergunta "e se ela
+  -- colar um <script>".
+  CREATE TABLE IF NOT EXISTS campanhas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    assunto      TEXT NOT NULL,
+    chamada      TEXT,
+    corpo        TEXT NOT NULL,
+    produtos     TEXT,
+    status       TEXT NOT NULL DEFAULT 'rascunho'
+                 CHECK (status IN ('rascunho', 'enviando', 'concluida', 'cancelada')),
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL,
+    iniciada_em  INTEGER,
+    concluida_em INTEGER
+  );
+
+  -- Retrato da lista no momento do disparo: quem se inscrever depois não
+  -- recebe esta campanha, e quem se descadastrar entre o disparo e o envio
+  -- é checado de novo na hora de enfileirar (é a checagem que importa).
+  CREATE TABLE IF NOT EXISTS campanha_destinatarios (
+    campanha_id  INTEGER NOT NULL REFERENCES campanhas(id) ON DELETE CASCADE,
+    email        TEXT NOT NULL,
+    enfileirado_em INTEGER,
+    PRIMARY KEY (campanha_id, email)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_campanha_fila
+    ON campanha_destinatarios(campanha_id) WHERE enfileirado_em IS NULL;
+
   -- Uma linha por chave. Hoje só guarda a última rodada do cron
   -- (tarefas_periodicas_em), para o painel denunciar quando o agendamento
   -- no hPanel não existe ou parou.
@@ -2027,6 +2058,127 @@ function itensDoCarrinhoEsquecido(referencia, agora = Date.now(), janelaDias = 1
   }
 }
 
+/* ------------------------------ CAMPANHAS ------------------------------ */
+const stmtCriaCampanha = db.prepare(`
+  INSERT INTO campanhas (assunto, chamada, corpo, produtos, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+const stmtListaCampanhas = db.prepare(`SELECT * FROM campanhas ORDER BY created_at DESC`);
+const stmtGetCampanha = db.prepare(`SELECT * FROM campanhas WHERE id = ?`);
+const stmtAtualizaCampanha = db.prepare(`
+  UPDATE campanhas SET assunto = ?, chamada = ?, corpo = ?, produtos = ?, updated_at = ?
+   WHERE id = ? AND status = 'rascunho'
+`);
+const stmtApagaCampanha = db.prepare(`DELETE FROM campanhas WHERE id = ? AND status IN ('rascunho', 'cancelada')`);
+const stmtMudaStatusCampanha = db.prepare(`
+  UPDATE campanhas SET status = ?, updated_at = ?,
+         iniciada_em = COALESCE(iniciada_em, ?),
+         concluida_em = CASE WHEN ? IN ('concluida', 'cancelada') THEN ? ELSE concluida_em END
+   WHERE id = ?
+`);
+
+function criarCampanha({ assunto, chamada, corpo, produtos }){
+  const agora = Date.now();
+  const r = stmtCriaCampanha.run(assunto, chamada ?? null, corpo,
+    JSON.stringify(Array.isArray(produtos) ? produtos : []), agora, agora);
+  return getCampanha(Number(r.lastInsertRowid));
+}
+function listarCampanhas(){ return stmtListaCampanhas.all(); }
+function getCampanha(id){ return stmtGetCampanha.get(id) || null; }
+function atualizarCampanha(id, { assunto, chamada, corpo, produtos }){
+  stmtAtualizaCampanha.run(assunto, chamada ?? null, corpo,
+    JSON.stringify(Array.isArray(produtos) ? produtos : []), Date.now(), id);
+  return getCampanha(id);
+}
+function removerCampanha(id){ return stmtApagaCampanha.run(id).changes > 0; }
+function mudarStatusCampanha(id, status){
+  const agora = Date.now();
+  stmtMudaStatusCampanha.run(status, agora, agora, status, agora, id);
+  return getCampanha(id);
+}
+
+/* Inscritas de verdade: pediram o cupom (opt_in_at) e não se descadastraram.
+   Linha criada só para hospedar token de descadastro (garantirTokenDeContato)
+   fica de fora — nunca pediu para receber novidade nenhuma. */
+const stmtAssinantesAtivas = db.prepare(`
+  SELECT email FROM newsletter_subscribers
+   WHERE unsubscribed_at IS NULL AND opt_in_at IS NOT NULL
+   ORDER BY created_at
+`);
+function assinantesAtivas(){ return stmtAssinantesAtivas.all().map(r => r.email); }
+
+const stmtEstaDescadastrada = db.prepare(
+  `SELECT 1 FROM newsletter_subscribers WHERE email = ? AND unsubscribed_at IS NOT NULL`
+);
+function pediuDescadastro(email){ return Boolean(stmtEstaDescadastrada.get(email)); }
+
+const stmtInsereDestinatario = db.prepare(
+  `INSERT OR IGNORE INTO campanha_destinatarios (campanha_id, email) VALUES (?, ?)`
+);
+function prepararEnvioDaCampanha(id){
+  const emails = assinantesAtivas();
+  // Numa transação: metade da lista gravada seria uma campanha que sai pela
+  // metade sem ninguém perceber.
+  db.exec("BEGIN");
+  try {
+    for(const email of emails) stmtInsereDestinatario.run(id, email);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  mudarStatusCampanha(id, "enviando");
+  return emails.length;
+}
+
+const stmtDestinatariosPendentes = db.prepare(`
+  SELECT email FROM campanha_destinatarios
+   WHERE campanha_id = ? AND enfileirado_em IS NULL
+   ORDER BY email
+   LIMIT ?
+`);
+function destinatariosPendentes(id, limite){
+  return stmtDestinatariosPendentes.all(id, limite).map(r => r.email);
+}
+
+const stmtMarcaDestinatario = db.prepare(`
+  UPDATE campanha_destinatarios SET enfileirado_em = ?
+   WHERE campanha_id = ? AND email = ?
+`);
+function marcarDestinatarioEnfileirado(id, email){
+  stmtMarcaDestinatario.run(Date.now(), id, email);
+}
+
+const stmtCampanhasEnviando = db.prepare(
+  `SELECT * FROM campanhas WHERE status = 'enviando' ORDER BY iniciada_em`
+);
+function campanhasEnviando(){ return stmtCampanhasEnviando.all(); }
+
+/* Progresso mostrado no painel. `enviados` e `falharam` saem do próprio
+   email_outbox, ligado pela chave "campanha:<id>:<email>" — sem tabela
+   paralela de estado que pudesse divergir da fila real. */
+const stmtContagemCampanha = db.prepare(`
+  SELECT
+    (SELECT COUNT(*) FROM campanha_destinatarios WHERE campanha_id = :id) AS total,
+    (SELECT COUNT(*) FROM campanha_destinatarios WHERE campanha_id = :id AND enfileirado_em IS NOT NULL) AS enfileirados,
+    (SELECT COUNT(*) FROM email_outbox WHERE kind = 'campanha' AND order_reference LIKE :prefixo AND sent_at IS NOT NULL) AS enviados,
+    (SELECT COUNT(*) FROM email_outbox WHERE kind = 'campanha' AND order_reference LIKE :prefixo AND sent_at IS NULL AND attempts >= :maxTentativas) AS falharam,
+    (SELECT MAX(last_error) FROM email_outbox WHERE kind = 'campanha' AND order_reference LIKE :prefixo AND sent_at IS NULL) AS ultimo_erro
+`);
+function contagemDaCampanha(id){
+  return stmtContagemCampanha.get({
+    id, prefixo: `campanha:${id}:%`, maxTentativas: MAX_TENTATIVAS_EMAIL,
+  });
+}
+
+const stmtApagaFilaDaCampanha = db.prepare(`
+  DELETE FROM email_outbox
+   WHERE kind = 'campanha' AND sent_at IS NULL AND order_reference LIKE ?
+`);
+function apagarFilaDaCampanha(id){
+  return stmtApagaFilaDaCampanha.run(`campanha:${id}:%`).changes;
+}
+
 /* ---------- Estado da aplicação ---------- */
 const stmtGravaEstado = db.prepare(`
   INSERT INTO app_state (chave, valor, updated_at) VALUES (?, ?, ?)
@@ -2073,10 +2225,13 @@ function deleteOutboxEntry(kind, orderReference){
   return stmtApagaEmailDoPedido.run(kind, orderReference).changes;
 }
 
+/* ⚠️ Campanha por último, sempre. Uma campanha enfileira dezenas de linhas
+   de uma vez; ordenando só por id, o recibo de uma compra feita no meio do
+   disparo ficaria atrás de toda a lista de novidades. */
 const stmtEmailsPendentes = db.prepare(`
   SELECT * FROM email_outbox
    WHERE sent_at IS NULL AND attempts < ? AND next_attempt_at <= ?
-   ORDER BY id
+   ORDER BY (kind = 'campanha') ASC, id ASC
    LIMIT ?
 `);
 function pendingEmails(limite = 20){
@@ -2171,6 +2326,20 @@ module.exports = {
   pedidosParaConfirmarRecebimento,
   pedidosParaPedirAvaliacao,
   pedidosParaLembrarCarrinho,
+  criarCampanha,
+  listarCampanhas,
+  getCampanha,
+  atualizarCampanha,
+  removerCampanha,
+  mudarStatusCampanha,
+  assinantesAtivas,
+  pediuDescadastro,
+  prepararEnvioDaCampanha,
+  destinatariosPendentes,
+  marcarDestinatarioEnfileirado,
+  campanhasEnviando,
+  contagemDaCampanha,
+  apagarFilaDaCampanha,
   itensDoCarrinhoEsquecido,
   gravarEstado,
   lerEstado,

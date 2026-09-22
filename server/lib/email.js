@@ -1109,6 +1109,70 @@ function formatCarrinhoEsquecidoEmail({ address, items, retomarUrl, whatsappUrl,
   return { subject, text, html };
 }
 
+/* Campanha de novidades escrita pela lojista no painel.
+
+   ⚠️ `corpo` é TEXTO, sempre. O HTML sai daqui, de escapeHTML + quebra de
+   parágrafo — nunca do que foi digitado. É o que tira do caminho a pergunta
+   "e se ela colar uma tag", e o que permite o mesmo conteúdo servir para a
+   versão em texto puro do e-mail. */
+function paragrafosDoTexto(texto){
+  return String(texto || "")
+    .split(/\n{2,}/)
+    .map(bloco => bloco.trim())
+    .filter(Boolean)
+    .map(bloco => `
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:15px; line-height:1.65; padding-bottom:16px;">
+          ${escapeHTML(bloco).replace(/\n/g, "<br>")}
+        </td>
+      </tr>`)
+    .join("");
+}
+
+function formatCampanhaEmail({ assunto, chamada, corpo, produtos, shopUrl, unsubscribeUrl }){
+  const lista = Array.isArray(produtos) ? produtos.slice(0, 3) : [];
+
+  const text = [
+    corpo,
+    ...(lista.length ? ["", ...lista.map(p => `• ${p.nome} — ${p.preco}${p.url ? ` (${p.url})` : ""}`)] : []),
+    "",
+    `Ver a coleção: ${shopUrl}`,
+    "",
+    "Adriana Melo Acessórios — ateliê artesanal de laços, Brasília/DF",
+    ...(unsubscribeUrl ? ["", `Não quer mais receber estes e-mails? ${unsubscribeUrl}`] : []),
+  ].join("\n");
+
+  const produtosHtml = lista.map(p => `
+      <tr>
+        ${celulaMiniatura(p.photoUrl, p.nome)}
+        ${CELULA_ESPACO}
+        <td class="e-texto e-borda" valign="middle" style="font-family:${FONT_CORPO}; color:${CORES.texto}; font-size:14px; padding:8px 0; border-bottom:1px solid ${CORES.faixa};">
+          ${p.url ? `<a href="${escapeHTML(p.url)}" style="color:${CORES.texto}; text-decoration:none;">${escapeHTML(p.nome)}</a>` : escapeHTML(p.nome)}
+          <br><span style="color:${CORES.apoio};">${escapeHTML(p.preco)}</span>
+        </td>
+      </tr>`).join("");
+
+  const html = emailShell({
+    titulo: assunto,
+    preheader: chamada || assunto,
+    eyebrow: "novidades do ateliê",
+    tituloCartao: assunto,
+    corpoHtml: `
+      ${paragrafosDoTexto(corpo)}
+      ${produtosHtml ? `
+      <tr>
+        <td style="padding:10px 0 26px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${produtosHtml}</table>
+        </td>
+      </tr>` : ""}
+      ${botaoEmail(shopUrl, "Ver a coleção")}
+      ${rodapeDeDescadastro(unsubscribeUrl)}
+    `,
+  });
+
+  return { subject: assunto, text, html };
+}
+
 /* Cupom de aniversário. Vai para a fila (email_outbox) pelo cron — a
    cliente pediu ao cadastrar a data em "Minha conta", então é consentido;
    o texto lembra que dá para tirar a data a qualquer momento. */
@@ -1214,6 +1278,7 @@ module.exports = {
   formatConfirmarRecebimentoEmail,
   formatPedirAvaliacaoEmail,
   formatCarrinhoEsquecidoEmail,
+  formatCampanhaEmail,
   cabecalhosDeDescadastro,
   formatOrderEmail,
   formatContactEmail,

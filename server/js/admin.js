@@ -3198,8 +3198,218 @@
     }
   });
 
+  const campanhaGradeEl = document.getElementById("campanhaGrade");
+  const campanhaMsgEl = document.getElementById("campanhaMsg");
+  const campanhaModalEl = document.getElementById("campanhaModal");
+  const campanhaModal = campanhaModalEl ? new bootstrap.Modal(campanhaModalEl) : null;
+  const campanhaFormEl = document.getElementById("campanhaForm");
+  const campanhaIdEl = document.getElementById("campanhaId");
+  const campanhaAssuntoEl = document.getElementById("campanhaAssunto");
+  const campanhaChamadaEl = document.getElementById("campanhaChamada");
+  const campanhaCorpoEl = document.getElementById("campanhaCorpo");
+  const campanhaProdutosEl = document.getElementById("campanhaProdutos");
+  const campanhaFormMsgEl = document.getElementById("campanhaFormMsg");
+  const campanhaInscritasEl = document.getElementById("campanhaInscritas");
+  const campanhaAvisoCronEl = document.getElementById("campanhaAvisoCron");
+
+  let campanhaCache = [];
+  let campanhaInscritas = 0;
+
+  const ROTULO_CAMPANHA = {
+    rascunho: "Rascunho", enviando: "Enviando", concluida: "Enviada", cancelada: "Cancelada",
+  };
+
+  function campanhaAviso(texto, erro){
+    if(!campanhaMsgEl) return;
+    campanhaMsgEl.textContent = texto || "";
+    campanhaMsgEl.classList.toggle("text-danger", Boolean(erro));
+  }
+
+  function campanhaCartao(c){
+    const n = c.contagem || {};
+    const progresso = c.status === "rascunho"
+      ? `Vai para ${campanhaInscritas} ${campanhaInscritas === 1 ? "pessoa" : "pessoas"}.`
+      : `${n.enviados || 0} enviado(s) de ${n.total || 0}${n.falharam ? ` · ${n.falharam} com erro` : ""}`;
+    return `
+      <div class="hero-admin-card" data-campanha-id="${c.id}">
+        <div class="hero-admin-corpo">
+          <span class="depoimento-origem"><i class="bi bi-send" aria-hidden="true"></i> ${escapeHTML(ROTULO_CAMPANHA[c.status] || c.status)}</span>
+          <strong>${escapeHTML(c.assunto)}</strong>
+          <p class="admin-hint mb-1">${escapeHTML(String(c.corpo || "").slice(0, 120))}${String(c.corpo || "").length > 120 ? "…" : ""}</p>
+          <span class="depoimento-quem">${escapeHTML(progresso)}</span>
+          <div class="hero-admin-acoes">
+            <button type="button" class="hero-admin-btn" data-campanha-previa aria-label="Ver prévia"><i class="bi bi-eye" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn" data-campanha-teste aria-label="Enviar teste para mim"><i class="bi bi-envelope" aria-hidden="true"></i></button>
+            ${c.status === "rascunho" ? `
+            <button type="button" class="hero-admin-btn" data-campanha-editar aria-label="Editar"><i class="bi bi-pencil" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn" data-campanha-enviar aria-label="Enviar para a lista"><i class="bi bi-send" aria-hidden="true"></i></button>` : ""}
+            ${c.status === "enviando" ? `
+            <button type="button" class="hero-admin-btn" data-campanha-rodar aria-label="Enviar um lote agora"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i></button>
+            <button type="button" class="hero-admin-btn is-apagar" data-campanha-cancelar aria-label="Cancelar o que falta"><i class="bi bi-x-circle" aria-hidden="true"></i></button>` : ""}
+            ${c.status === "rascunho" || c.status === "cancelada" ? `
+            <button type="button" class="hero-admin-btn is-apagar" data-campanha-apagar aria-label="Apagar"><i class="bi bi-trash3" aria-hidden="true"></i></button>` : ""}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function campanhaRender(dados){
+    campanhaCache = dados.campanhas || [];
+    campanhaInscritas = dados.inscritas || 0;
+    if(campanhaInscritasEl){
+      campanhaInscritasEl.textContent = campanhaInscritas === 0
+        ? "Ninguém na lista ainda."
+        : `${campanhaInscritas} ${campanhaInscritas === 1 ? "pessoa" : "pessoas"} na lista.`;
+    }
+    if(campanhaAvisoCronEl){
+      const ultima = dados.ultimaRodadaDoCron ? new Date(dados.ultimaRodadaDoCron).getTime() : 0;
+      campanhaAvisoCronEl.classList.toggle("d-none", Boolean(ultima && Date.now() - ultima < 60 * 60 * 1000));
+    }
+    campanhaGradeEl.innerHTML = campanhaCache.length
+      ? campanhaCache.map(campanhaCartao).join("")
+      : `<p class="admin-hint mb-0">Nenhuma novidade escrita ainda.</p>`;
+  }
+
+  async function campanhaCarregar(){
+    if(!campanhaGradeEl) return;
+    try{
+      const res = await fetchWithTimeout("/api/admin/campanhas");
+      if(!res.ok) throw new Error("Não foi possível carregar as novidades.");
+      campanhaRender(await res.json());
+    }catch(err){
+      console.error("Erro ao carregar campanhas:", err);
+      campanhaAviso(err.message || "Não foi possível carregar as novidades.", true);
+    }
+  }
+
+  function campanhaPreencherProdutos(selecionados){
+    if(!campanhaProdutosEl) return;
+    const lista = Array.isArray(productsCache) ? productsCache : [];
+    campanhaProdutosEl.innerHTML = lista
+      .filter(p => !p.hidden)
+      .map(p => `<option value="${p.id}"${(selecionados || []).includes(p.id) ? " selected" : ""}>${escapeHTML(p.name)}</option>`)
+      .join("");
+  }
+
+  function campanhaAbrirModal(c){
+    if(!campanhaModal) return;
+    campanhaIdEl.value = c ? c.id : "";
+    campanhaAssuntoEl.value = c ? c.assunto : "";
+    campanhaChamadaEl.value = c ? (c.chamada || "") : "";
+    campanhaCorpoEl.value = c ? c.corpo : "";
+    campanhaFormMsgEl.textContent = "";
+    campanhaPreencherProdutos(c ? c.produtos : []);
+    document.getElementById("campanhaModalTitulo").textContent = c ? "Editar novidade" : "Escrever novidade";
+    campanhaModal.show();
+  }
+
+  document.getElementById("campanhaAddBtn")?.addEventListener("click", () => campanhaAbrirModal(null));
+
+  campanhaFormEl?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = campanhaIdEl.value;
+    const corpo = {
+      assunto: campanhaAssuntoEl.value.trim(),
+      chamada: campanhaChamadaEl.value.trim(),
+      corpo: campanhaCorpoEl.value.trim(),
+      produtos: [...campanhaProdutosEl.selectedOptions].map(o => Number(o.value)).slice(0, 3),
+    };
+    try{
+      const res = await fetchWithTimeout(id ? `/api/admin/campanhas/${id}` : "/api/admin/campanhas", {
+        method: id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
+      const dados = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(dados.error || "Não foi possível salvar.");
+      campanhaModal.hide();
+      campanhaAviso("Novidade salva como rascunho. Mande um teste para você antes de enviar para a lista.");
+      await campanhaCarregar();
+    }catch(err){
+      campanhaFormMsgEl.textContent = err.message || "Não foi possível salvar.";
+      campanhaFormMsgEl.classList.add("text-danger");
+    }
+  });
+
+  async function campanhaAcao(id, caminho, corpoDaConfirmacao){
+    if(corpoDaConfirmacao && !confirm(corpoDaConfirmacao)) return;
+    try{
+      const res = await fetchWithTimeout(`/api/admin/campanhas/${id}/${caminho}`, { method: "POST" });
+      const dados = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(dados.error || "Não foi possível concluir.");
+      return dados;
+    }catch(err){
+      campanhaAviso(err.message || "Não foi possível concluir.", true);
+      return null;
+    }
+  }
+
+  campanhaGradeEl?.addEventListener("click", async (e) => {
+    const card = e.target.closest("[data-campanha-id]");
+    if(!card) return;
+    const id = Number(card.dataset.campanhaId);
+    const campanha = campanhaCache.find(c => c.id === id);
+    if(!campanha) return;
+
+    if(e.target.closest("[data-campanha-editar]")) return void campanhaAbrirModal(campanha);
+
+    if(e.target.closest("[data-campanha-previa]")){
+      try{
+        const res = await fetchWithTimeout(`/api/admin/campanhas/${id}/previa`);
+        const dados = await res.json();
+        if(!res.ok) throw new Error(dados.error || "Não foi possível montar a prévia.");
+        alert(`${dados.assunto}\n\n${dados.texto}`);
+      }catch(err){
+        campanhaAviso(err.message || "Não foi possível montar a prévia.", true);
+      }
+      return;
+    }
+
+    if(e.target.closest("[data-campanha-teste]")){
+      const dados = await campanhaAcao(id, "teste");
+      if(dados) campanhaAviso(`Teste enviado para ${dados.destino}.`);
+      return;
+    }
+
+    if(e.target.closest("[data-campanha-enviar]")){
+      const dados = await campanhaAcao(id, "enviar",
+        `Enviar "${campanha.assunto}" para ${campanhaInscritas} pessoa(s)? Isso não tem como desfazer depois que os e-mails saírem.`);
+      if(dados) campanhaAviso(`Campanha disparada para ${dados.total} pessoa(s). Os e-mails saem aos poucos.`);
+      await campanhaCarregar();
+      return;
+    }
+
+    if(e.target.closest("[data-campanha-rodar]")){
+      const dados = await campanhaAcao(id, "rodar");
+      if(dados) campanhaAviso(`${dados.novos} e-mail(s) foram para a fila agora.`);
+      await campanhaCarregar();
+      return;
+    }
+
+    if(e.target.closest("[data-campanha-cancelar]")){
+      const dados = await campanhaAcao(id, "cancelar",
+        "Cancelar o que ainda não saiu? Quem já recebeu continua recebido.");
+      if(dados) campanhaAviso(`${dados.removidos} e-mail(s) que ainda não tinham saído foram cancelados.`);
+      await campanhaCarregar();
+      return;
+    }
+
+    if(e.target.closest("[data-campanha-apagar]")){
+      if(!confirm("Apagar esta novidade?")) return;
+      try{
+        const res = await fetchWithTimeout(`/api/admin/campanhas/${id}`, { method: "DELETE" });
+        const dados = await res.json().catch(() => ({}));
+        if(!res.ok) throw new Error(dados.error || "Não foi possível apagar.");
+        campanhaAviso("Novidade apagada.");
+        await campanhaCarregar();
+      }catch(err){
+        campanhaAviso(err.message || "Não foi possível apagar.", true);
+      }
+    }
+  });
+
   PLCAuth.aoSaberDaSessao(({ user, falhou }) => {
-    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes(), heroCarregar(), depCarregar()) : showOnly(stateForbidden);
+    if(user) return user.isAdmin ? (loadDashboard(), carregarSituacaoDoAviso(), carregarAvaliacoes(), heroCarregar(), depCarregar(), campanhaCarregar()) : showOnly(stateForbidden);
     showOnly(falhou ? stateError : stateLoggedOut);
   });
 })();

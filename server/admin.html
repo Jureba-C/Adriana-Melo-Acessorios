@@ -148,6 +148,7 @@
           <button type="button" class="admin-tab-btn" data-tab="avaliacoes"><i class="bi bi-star-fill"></i> Avaliações <span class="admin-tab-contador d-none" id="avaliacoesContador"></span></button>
           <button type="button" class="admin-tab-btn" data-tab="topo"><i class="bi bi-image"></i> Fotos do topo</button>
           <button type="button" class="admin-tab-btn" data-tab="depoimentos"><i class="bi bi-chat-heart"></i> Depoimentos</button>
+          <button type="button" class="admin-tab-btn" data-tab="novidades"><i class="bi bi-send"></i> Novidades</button>
         </nav>
 
         <div class="admin-tab-panels">
@@ -456,6 +457,27 @@
             <div class="hero-admin-grade" id="depGrade"></div>
           </section>
 
+          <section class="admin-tab-panel d-none" data-tab-panel="novidades">
+            <div class="admin-section-head">
+              <h2 class="admin-section-title">Novidades por e-mail</h2>
+              <button type="button" class="btn-blush btn-sm-blush" id="campanhaAddBtn">
+                <i class="bi bi-plus-lg me-1"></i>Escrever novidade
+              </button>
+            </div>
+            <p class="admin-hint">
+              Escreve para quem deixou o e-mail no bloco &ldquo;Ganhe 10% na primeira compra&rdquo; da
+              home. Todo e-mail sai com link de descadastro, e quem já pediu para sair nunca
+              recebe. <strong id="campanhaInscritas">—</strong>
+            </p>
+            <div class="admin-aviso d-none" id="campanhaAvisoCron">
+              <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+              <span>As tarefas automáticas do servidor não rodam há mais de uma hora. Enquanto isso,
+              a campanha só anda pelo botão <strong>&ldquo;Enviar um lote agora&rdquo;</strong>.</span>
+            </div>
+            <div class="small mb-2 account-msg" id="campanhaMsg" role="status" aria-live="polite"></div>
+            <div class="hero-admin-grade" id="campanhaGrade"></div>
+          </section>
+
         </div>
       </div>
 
@@ -463,6 +485,45 @@
     </div>
   </div>
 </main>
+
+<div class="modal fade" id="campanhaModal" tabindex="-1" aria-labelledby="campanhaModalTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="campanhaModalTitulo">Escrever novidade</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <form id="campanhaForm" novalidate>
+        <div class="modal-body">
+          <input type="hidden" id="campanhaId">
+          <div class="mb-3">
+            <label class="form-label" for="campanhaAssunto">Assunto do e-mail</label>
+            <input class="form-control" id="campanhaAssunto" maxlength="120" required placeholder="Chegaram os laços de Natal 🎀">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="campanhaChamada">Primeira linha (aparece na prévia da caixa de entrada)</label>
+            <input class="form-control" id="campanhaChamada" maxlength="120" placeholder="Feitos à mão, em cetim vermelho e verde">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="campanhaCorpo">Mensagem</label>
+            <textarea class="form-control" id="campanhaCorpo" rows="7" maxlength="2000" required placeholder="Oi!&#10;&#10;Chegaram laços novos no ateliê..."></textarea>
+            <div class="form-text">Escreva como você falaria no WhatsApp. Uma linha em branco separa parágrafos.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="campanhaProdutos">Mostrar até 3 laços no e-mail</label>
+            <select class="form-select" id="campanhaProdutos" multiple size="6"></select>
+            <div class="form-text">Segure Ctrl (ou Command) para escolher mais de um.</div>
+          </div>
+          <div class="small account-msg" id="campanhaFormMsg" role="status" aria-live="polite"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-blush btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn-blush btn-sm-blush">Salvar rascunho</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="depModal" tabindex="-1" aria-labelledby="depModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">

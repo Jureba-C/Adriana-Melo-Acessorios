@@ -50,6 +50,7 @@ const whatsapp = require("./lib/whatsapp");
 const instagram = require("./lib/instagram");
 const email = require("./lib/email");
 const emailPhotos = require("./lib/emailPhotos.js");
+const campanhas = require("./lib/campanhas.js");
 const rastreio = require("./lib/rastreio.js");
 const { prazoDaCotacao } = require("./lib/prazoFrete.js");
 const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
@@ -5281,6 +5282,182 @@ const depoimentoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 4 * 1024 * 1024, files: 1 },
   fileFilter(req, file, cb){ cb(null, Boolean(PRODUCT_PHOTO_MIME_EXT[file.mimetype])); },
+});
+
+/* =========================================================================
+   CAMPANHAS DE NOVIDADES — /api/admin/campanhas
+   -------------------------------------------------------------------------
+   A lista de e-mails existe desde o primeiro dia (bloco dos 10% na home) e
+   nunca recebeu nada além do cupom de boas-vindas. Isto é o que permite
+   escrever para ela.
+
+   O corpo é TEXTO, nunca HTML: o e-mail é montado por lib/email.js a partir
+   dele. Escolha de segurança e de simplicidade — não existe "e se colar uma
+   tag", e a prévia do painel pode ser um <div> comum, sem afrouxar a CSP.
+
+   O disparo em si mora em lib/campanhas.js, compartilhado com o cron.
+========================================================================= */
+const MAX_PRODUTOS_NA_CAMPANHA = 3;
+const MAX_CORPO_CAMPANHA = 2000;
+
+function camposDaCampanha(body){
+  const assunto = typeof body.assunto === "string" ? body.assunto.trim() : "";
+  const chamada = typeof body.chamada === "string" ? body.chamada.trim() : "";
+  const corpo = typeof body.corpo === "string" ? body.corpo.trim() : "";
+  if(!assunto || assunto.length > 120) return { erro: "Escreva um assunto de até 120 caracteres." };
+  if(!corpo || corpo.length > MAX_CORPO_CAMPANHA){
+    return { erro: `Escreva a mensagem (até ${MAX_CORPO_CAMPANHA} caracteres).` };
+  }
+  if(chamada.length > 120) return { erro: "A prévia do assunto deve ter até 120 caracteres." };
+  const produtos = Array.isArray(body.produtos)
+    ? body.produtos.map(Number).filter(Number.isInteger).slice(0, MAX_PRODUTOS_NA_CAMPANHA)
+    : [];
+  return { assunto, chamada: chamada || null, corpo, produtos };
+}
+
+// Nome, preço, foto e link dos laços escolhidos — o catálogo só existe aqui,
+// então é aqui que a lista é montada para lib/campanhas.js e para a prévia.
+function produtosDaCampanha(campanha){
+  let ids = [];
+  try { ids = JSON.parse(campanha.produtos || "[]"); } catch {}
+  const overridesMap = getProductOverridesMap();
+  return ids.map(id => {
+    const p = effectiveProduct(Number(id), overridesMap);
+    if(!p || p.hidden) return null;
+    return {
+      nome: p.name,
+      preco: pricing.formatMoney(p.price),
+      photoUrl: p.photoUrl,
+      url: `${SITE_URL}${produtoUrl.caminhoDoProduto(Number(id), p.name)}?utm_source=newsletter&utm_medium=email&utm_campaign=campanha-${campanha.id}`,
+    };
+  }).filter(Boolean);
+}
+
+function campanhaParaPainel(c){
+  return {
+    id: c.id, assunto: c.assunto, chamada: c.chamada, corpo: c.corpo,
+    produtos: (() => { try { return JSON.parse(c.produtos || "[]"); } catch { return []; } })(),
+    status: c.status,
+    criadaEm: c.created_at,
+    iniciadaEm: c.iniciada_em,
+    concluidaEm: c.concluida_em,
+    contagem: db.contagemDaCampanha(c.id),
+  };
+}
+
+app.get("/api/admin/campanhas", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  res.json({
+    campanhas: db.listarCampanhas().map(campanhaParaPainel),
+    inscritas: db.assinantesAtivas().length,
+    ultimaRodadaDoCron: db.lerEstado("tarefas_periodicas_em")?.valor || null,
+  });
+});
+
+app.post("/api/admin/campanhas", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const campos = camposDaCampanha(req.body || {});
+  if(campos.erro) return res.status(400).json({ error: campos.erro });
+  res.status(201).json({ campanha: campanhaParaPainel(db.criarCampanha(campos)) });
+});
+
+app.patch("/api/admin/campanhas/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const campanha = db.getCampanha(Number(req.params.id));
+  if(!campanha) return res.status(404).json({ error: "Campanha não encontrada." });
+  // Depois de disparada, o texto não pode mais mudar: parte da lista já
+  // recebeu a versão antiga, e as duas metades receberiam e-mails
+  // diferentes com o mesmo assunto.
+  if(campanha.status !== "rascunho"){
+    return res.status(409).json({ error: "Esta campanha já foi disparada e não pode mais ser editada." });
+  }
+  const campos = camposDaCampanha(req.body || {});
+  if(campos.erro) return res.status(400).json({ error: campos.erro });
+  res.json({ campanha: campanhaParaPainel(db.atualizarCampanha(campanha.id, campos)) });
+});
+
+app.delete("/api/admin/campanhas/:id", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const apagou = db.removerCampanha(Number(req.params.id));
+  if(!apagou) return res.status(409).json({ error: "Só dá para apagar rascunho ou campanha cancelada." });
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/campanhas/:id/previa", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const campanha = db.getCampanha(Number(req.params.id));
+  if(!campanha) return res.status(404).json({ error: "Campanha não encontrada." });
+  const conteudo = email.formatCampanhaEmail({
+    assunto: campanha.assunto, chamada: campanha.chamada, corpo: campanha.corpo,
+    produtos: produtosDaCampanha(campanha),
+    shopUrl: SITE_URL,
+    unsubscribeUrl: `${CLIENT_ORIGIN}/api/newsletter/unsubscribe?email=exemplo%40email.com&token=previa`,
+  });
+  res.json({ assunto: conteudo.subject, texto: conteudo.text });
+});
+
+/* Envio de teste vai DIRETO, sem passar pela fila: a lojista está olhando a
+   tela, e um erro na cara dela vale mais que uma tentativa silenciosa
+   daqui a 15 minutos. Mesma escolha do teste do aviso de venda. */
+app.post("/api/admin/campanhas/:id/teste", auth.requireAdmin, auth.requireAdminTwoFactor, strictLimiter, async (req, res) => {
+  const campanha = db.getCampanha(Number(req.params.id));
+  if(!campanha) return res.status(404).json({ error: "Campanha não encontrada." });
+  const destino = process.env.OWNER_EMAIL;
+  if(!destino) return res.status(409).json({ error: "OWNER_EMAIL não está configurado no servidor." });
+  try{
+    const conteudo = email.formatCampanhaEmail({
+      assunto: `[teste] ${campanha.assunto}`, chamada: campanha.chamada, corpo: campanha.corpo,
+      produtos: produtosDaCampanha(campanha),
+      shopUrl: SITE_URL,
+      unsubscribeUrl: `${CLIENT_ORIGIN}/api/newsletter/unsubscribe?email=${encodeURIComponent(destino)}&token=${db.garantirTokenDeContato(destino)}`,
+    });
+    await emailPhotos.enviarComMiniaturas({
+      to: destino, subject: conteudo.subject, text: conteudo.text, html: conteudo.html,
+      headers: email.cabecalhosDeDescadastro("https://adrianameloacessorios.com"),
+    });
+    res.json({ ok: true, destino });
+  }catch(err){
+    console.error("Falha ao enviar teste de campanha:", err);
+    res.status(502).json({ error: `Não consegui enviar: ${err.message || err}` });
+  }
+});
+
+app.post("/api/admin/campanhas/:id/enviar", auth.requireAdmin, auth.requireAdminTwoFactor, strictLimiter, (req, res) => {
+  const campanha = db.getCampanha(Number(req.params.id));
+  if(!campanha) return res.status(404).json({ error: "Campanha não encontrada." });
+  if(campanha.status !== "rascunho"){
+    return res.status(409).json({ error: "Esta campanha já foi disparada." });
+  }
+  const total = db.prepararEnvioDaCampanha(campanha.id);
+  if(!total){
+    db.mudarStatusCampanha(campanha.id, "concluida");
+    return res.status(409).json({ error: "Ninguém na lista de e-mails ainda." });
+  }
+  res.json({ campanha: campanhaParaPainel(db.getCampanha(campanha.id)), total });
+});
+
+/* "Enviar um lote agora": o cron do hPanel pode não estar configurado, e sem
+   este botão a campanha ficaria parada em "enviando" para sempre, com a
+   lojista achando que saiu. Lote menor que o do cron para a resposta não
+   demorar na tela. */
+app.post("/api/admin/campanhas/:id/rodar", auth.requireAdmin, auth.requireAdminTwoFactor, strictLimiter, (req, res) => {
+  const campanha = db.getCampanha(Number(req.params.id));
+  if(!campanha) return res.status(404).json({ error: "Campanha não encontrada." });
+  if(campanha.status !== "enviando"){
+    return res.status(409).json({ error: "Esta campanha não está em envio." });
+  }
+  const { novos } = campanhas.enfileirarLote({
+    campanha, produtos: produtosDaCampanha(campanha), origem: SITE_URL, limite: 15,
+  });
+  res.json({ novos, campanha: campanhaParaPainel(db.getCampanha(campanha.id)) });
+});
+
+app.post("/api/admin/campanhas/:id/cancelar", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
+  const campanha = db.getCampanha(Number(req.params.id));
+  if(!campanha) return res.status(404).json({ error: "Campanha não encontrada." });
+  if(campanha.status !== "enviando"){
+    return res.status(409).json({ error: "Só dá para cancelar campanha em envio." });
+  }
+  // Apaga só o que ainda não saiu: o que já foi enviado não volta atrás, e
+  // fingir que voltou seria mentir no contador do painel.
+  const removidos = db.apagarFilaDaCampanha(campanha.id);
+  db.mudarStatusCampanha(campanha.id, "cancelada");
+  res.json({ removidos, campanha: campanhaParaPainel(db.getCampanha(campanha.id)) });
 });
 
 function textoDeDepoimento(valor, maximo){
