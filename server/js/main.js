@@ -1437,6 +1437,7 @@
   let aberturaPorEndereco = false;
 
   qvModalEl.addEventListener("hidden.bs.modal", () => {
+    fecharZoomDaFoto();
     if(aberturaPorEndereco){
       aberturaPorEndereco = false;
       history.replaceState(null, "", "/");
@@ -1503,6 +1504,57 @@
     });
   }
 
+  const qvZoomEl = document.getElementById("qvZoom");
+  const qvZoomImgEl = document.getElementById("qvZoomImagem");
+  const qvZoomVazio = qvZoomImgEl ? qvZoomImgEl.getAttribute("src") : "";
+
+  function abrirZoomDaFoto(){
+    if(!qvZoomEl || !qvPhotos.length) return;
+    qvZoomImgEl.src = urlDaFoto(qvPhotos[qvPhotoIndex], 900);
+    qvZoomImgEl.alt = document.getElementById("qvName").textContent || "";
+    qvZoomEl.classList.remove("is-ampliado");
+    qvZoomEl.hidden = false;
+  }
+
+  function fecharZoomDaFoto(){
+    if(!qvZoomEl || qvZoomEl.hidden) return;
+    qvZoomEl.hidden = true;
+    qvZoomEl.classList.remove("is-ampliado");
+    qvZoomImgEl.src = qvZoomVazio;
+    document.getElementById("qvZoomBtn")?.focus({ preventScroll: true });
+  }
+
+  document.getElementById("qvZoomBtn")?.addEventListener("click", abrirZoomDaFoto);
+  document.getElementById("qvImage")?.addEventListener("click", abrirZoomDaFoto);
+  document.getElementById("qvZoomFechar")?.addEventListener("click", fecharZoomDaFoto);
+
+  if(qvZoomEl){
+    qvZoomEl.addEventListener("click", (e) => {
+      if(e.target === qvZoomImgEl){
+        const alvo = qvZoomImgEl.getBoundingClientRect();
+        qvZoomImgEl.style.transformOrigin =
+          `${((e.clientX - alvo.left) / alvo.width) * 100}% ${((e.clientY - alvo.top) / alvo.height) * 100}%`;
+        qvZoomEl.classList.toggle("is-ampliado");
+        return;
+      }
+      if(!e.target.closest(".qv-zoom-fechar")) fecharZoomDaFoto();
+    });
+
+    qvZoomImgEl.addEventListener("pointermove", (e) => {
+      if(!qvZoomEl.classList.contains("is-ampliado")) return;
+      const alvo = qvZoomImgEl.getBoundingClientRect();
+      const x = Math.min(Math.max((e.clientX - alvo.left) / alvo.width, 0), 1);
+      const y = Math.min(Math.max((e.clientY - alvo.top) / alvo.height, 0), 1);
+      qvZoomImgEl.style.transformOrigin = `${x * 100}% ${y * 100}%`;
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if(e.key !== "Escape" || qvZoomEl.hidden) return;
+      e.stopPropagation();
+      fecharZoomDaFoto();
+    }, true);
+  }
+
   qvGalleryPrevEl.addEventListener("click", () => setQvPhoto(qvPhotoIndex - 1));
   qvGalleryNextEl.addEventListener("click", () => setQvPhoto(qvPhotoIndex + 1));
   qvGalleryThumbsEl.addEventListener("click", (e) => {
@@ -1532,13 +1584,37 @@
       : "à vista ou boleto";
   }
 
-  const qvShareEl = document.getElementById("qvShare");
+  const qvShareEls = [document.getElementById("qvShare"), document.getElementById("qvShareFab")].filter(Boolean);
+  const qvShareFabEl = document.getElementById("qvShareFab");
+  const qvShareFabBtn = document.getElementById("qvShareFabBtn");
+  const qvShareFabLista = document.getElementById("qvShareFabLista");
 
   function atualizarCompartilharDoProduto(p){
-    if(!qvShareEl) return;
-    qvShareEl.dataset.shareUrl = location.origin + enderecoDoProduto(p);
-    qvShareEl.dataset.shareText = `Olha esse ${p.name} feito à mão 🎀`;
-    if(window.PLCCompartilhar) window.PLCCompartilhar.ligar(qvShareEl);
+    const endereco = location.origin + enderecoDoProduto(p);
+    const texto = `Olha esse ${p.name} feito à mão 🎀`;
+    qvShareEls.forEach(bloco => {
+      bloco.dataset.shareUrl = endereco;
+      bloco.dataset.shareText = texto;
+      if(window.PLCCompartilhar) window.PLCCompartilhar.ligar(bloco);
+    });
+    fecharCompartilharFlutuante();
+  }
+
+  function fecharCompartilharFlutuante(){
+    if(!qvShareFabLista || qvShareFabLista.hidden) return;
+    qvShareFabLista.hidden = true;
+    qvShareFabBtn.setAttribute("aria-expanded", "false");
+  }
+
+  if(qvShareFabBtn){
+    qvShareFabBtn.addEventListener("click", () => {
+      const abrindo = qvShareFabLista.hidden;
+      qvShareFabLista.hidden = !abrindo;
+      qvShareFabBtn.setAttribute("aria-expanded", String(abrindo));
+    });
+    document.addEventListener("click", (e) => {
+      if(!qvShareFabEl.contains(e.target)) fecharCompartilharFlutuante();
+    });
   }
 
   function openQuickView(id, opts){

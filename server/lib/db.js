@@ -399,6 +399,13 @@ ensureColumn("users", "saved_address_json", "TEXT");
 // para quando houver um segundo envio para a lista).
 ensureColumn("newsletter_subscribers", "unsubscribe_token", "TEXT");
 ensureColumn("newsletter_subscribers", "unsubscribed_at", "INTEGER");
+/* Separa quem PEDIU para receber (bloco dos 10% na home) de quem só ganhou
+   uma linha aqui para ter link de descadastro válido — o lembrete de
+   carrinho esquecido precisa de um, e sem linha o token some no vazio e o
+   link não descadastra ninguém. Só quem tem opt_in_at entra em envio de
+   novidades. Linha antiga é toda do bloco dos 10%, por isso o backfill. */
+ensureColumn("newsletter_subscribers", "opt_in_at", "INTEGER");
+db.exec(`UPDATE newsletter_subscribers SET opt_in_at = created_at WHERE opt_in_at IS NULL`);
 
 // Verificação em duas etapas (TOTP) — só para quem é admin, mas as colunas
 // ficam em `users` porque é onde a identidade mora. Ficam nulas para todo
@@ -1606,6 +1613,16 @@ function deleteCustomColor(hex) {
 // OR IGNORE: pedir o cupom de novo com o mesmo e-mail não é erro — só não
 // duplica a linha (e a data original de inscrição é preservada).
 const stmtInsertSubscriber = db.prepare(
+  `INSERT OR IGNORE INTO newsletter_subscribers (email, created_at, opt_in_at) VALUES (?, ?, ?)`
+);
+// Quem já tinha linha só por causa do descadastro (carrinho esquecido) e
+// agora pediu o cupom passa a ser inscrita de verdade.
+const stmtMarcaOptIn = db.prepare(
+  `UPDATE newsletter_subscribers SET opt_in_at = ? WHERE email = ? AND opt_in_at IS NULL`
+);
+// Linha mínima só para o link de descadastro existir: sem opt_in_at, não
+// entra em envio de novidades.
+const stmtInsertContato = db.prepare(
   `INSERT OR IGNORE INTO newsletter_subscribers (email, created_at) VALUES (?, ?)`
 );
 const stmtListSubscribers = db.prepare(
@@ -1613,7 +1630,19 @@ const stmtListSubscribers = db.prepare(
 );
 
 function addNewsletterSubscriber(email) {
-  stmtInsertSubscriber.run(email, Date.now());
+  const agora = Date.now();
+  stmtInsertSubscriber.run(email, agora, agora);
+  stmtMarcaOptIn.run(agora, email);
+}
+
+/* Garante linha para um e-mail que NUNCA se inscreveu, só para o token de
+   descadastro ter onde morar. Sem isto, getOrCreateUnsubscribeToken devolve
+   um token que o UPDATE não gravou em lugar nenhum (zero linhas afetadas) e
+   o link do e-mail não descadastra — falha silenciosa justamente no botão
+   que existe para respeitar quem não quer mais receber. */
+function garantirTokenDeContato(email) {
+  stmtInsertContato.run(email, Date.now());
+  return getOrCreateUnsubscribeToken(email);
 }
 function listNewsletterSubscribers() {
   return stmtListSubscribers.all();
@@ -1932,6 +1961,72 @@ function pedidosParaPedirAvaliacao(agora = Date.now(), esperaDias = 2){
   return stmtEntreguesSemAvaliacao.all(agora - 30 * DIA_MS, agora - esperaDias * DIA_MS);
 }
 
+/* Carrinhos esquecidos: pedido criado no checkout e nunca pago.
+   ⚠️ A espera de 8 horas não é delicadeza, é correção: o Pix fica válido
+   por horas, e lembrar antes disso é cobrar quem ainda ia pagar. O teto de
+   3 dias é a trava contra disparo em massa no primeiro deploy (mesma ideia
+   das janelas de 45/30 dias acima).
+
+   Três exclusões, cada uma por um motivo diferente:
+   - já pagou depois (no mesmo carrinho ou em outro pedido): não é mais
+     carrinho esquecido, e lembrar seria constrangedor;
+   - já recebeu um lembrete nos últimos 30 dias: o índice único do outbox
+     impede repetir para o MESMO pedido, mas não para a mesma pessoa com
+     dois carrinhos;
+   - pediu descadastro: vale também para este e-mail, que é promocional. */
+const stmtCarrinhosEsquecidos = db.prepare(`
+  SELECT o.external_reference, o.customer_email, o.items_json, o.address_json,
+         o.total, o.created_at
+    FROM orders o
+   WHERE o.status = 'pendente'
+     AND o.customer_email IS NOT NULL AND o.customer_email <> ''
+     AND o.created_at BETWEEN ? AND ?
+     AND NOT EXISTS (
+       SELECT 1 FROM orders pago
+        WHERE pago.status = 'pago' AND pago.created_at >= o.created_at
+          AND (pago.customer_email = o.customer_email
+               OR (o.user_id IS NOT NULL AND pago.user_id = o.user_id))
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM email_outbox e
+        WHERE e.kind = 'carrinho_esquecido'
+          AND e.to_email = o.customer_email
+          AND e.created_at >= ?
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM newsletter_subscribers n
+        WHERE n.email = o.customer_email AND n.unsubscribed_at IS NOT NULL
+     )
+   ORDER BY o.created_at
+`);
+function pedidosParaLembrarCarrinho(agora = Date.now(), esperaHoras = 8, janelaDias = 3, capDias = 30){
+  return stmtCarrinhosEsquecidos.all(
+    agora - janelaDias * DIA_MS,
+    agora - esperaHoras * 60 * 60 * 1000,
+    agora - capDias * DIA_MS
+  );
+}
+
+/* Itens de um carrinho abandonado, para o link do lembrete reencher o
+   carrinho sozinho. Devolve SÓ o que a pessoa já sabe (o que ela mesma
+   escolheu), nunca endereço ou telefone: a referência é um UUID que veio
+   no e-mail dela, mas quem tiver o link não precisa ver dado pessoal. */
+const stmtCarrinhoPendente = db.prepare(`
+  SELECT items_json FROM orders
+   WHERE external_reference = ? AND status = 'pendente' AND created_at >= ?
+`);
+function itensDoCarrinhoEsquecido(referencia, agora = Date.now(), janelaDias = 14){
+  const linha = stmtCarrinhoPendente.get(referencia, agora - janelaDias * DIA_MS);
+  if(!linha) return null;
+  try{
+    return JSON.parse(linha.items_json)
+      .map(i => ({ id: Number(i.id), qty: Number(i.qty) }))
+      .filter(i => Number.isInteger(i.id) && Number.isInteger(i.qty) && i.qty > 0);
+  }catch{
+    return null;
+  }
+}
+
 /* ---------- Estado da aplicação ---------- */
 const stmtGravaEstado = db.prepare(`
   INSERT INTO app_state (chave, valor, updated_at) VALUES (?, ?, ?)
@@ -2075,6 +2170,8 @@ module.exports = {
   contarAvaliacoesPendentes,
   pedidosParaConfirmarRecebimento,
   pedidosParaPedirAvaliacao,
+  pedidosParaLembrarCarrinho,
+  itensDoCarrinhoEsquecido,
   gravarEstado,
   lerEstado,
   catalogVersion,
@@ -2179,6 +2276,7 @@ module.exports = {
   addNewsletterSubscriber,
   listNewsletterSubscribers,
   getOrCreateUnsubscribeToken,
+  garantirTokenDeContato,
   unsubscribeNewsletter,
   createContactMessage,
   listContactMessages,

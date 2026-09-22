@@ -808,6 +808,12 @@
   </div>
 </div>
 
+<div class="qv-zoom" id="qvZoom" hidden>
+  <button type="button" class="qv-zoom-fechar" id="qvZoomFechar" aria-label="Fechar a foto ampliada"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+  <img id="qvZoomImagem" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+  <p class="qv-zoom-dica" id="qvZoomDica">Toque na foto para aproximar</p>
+</div>
+
 <div class="modal fade" id="quickViewModal" tabindex="-1" aria-labelledby="qvName" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
     <div class="modal-content" style="border-radius:var(--radius-md); border:none">
@@ -820,6 +826,27 @@
           <div class="qv-thumb is-loading mb-2" id="qvThumb">
             <img id="qvImage" src="" alt="" width="480" height="720" decoding="async">
             <svg class="bow-icon"><use href="#bow-shape"/></svg>
+            <button type="button" class="qv-zoom-btn" id="qvZoomBtn" aria-label="Ampliar a foto"><i class="bi bi-zoom-in" aria-hidden="true"></i></button>
+            <div class="qv-share-fab share-block" id="qvShareFab" data-share-url="">
+              <button type="button" class="qv-share-fab-btn" id="qvShareFabBtn" aria-expanded="false" aria-controls="qvShareFabLista" aria-label="Compartilhar este laço"><i class="bi bi-share-fill" aria-hidden="true"></i></button>
+              <div class="qv-share-fab-lista" id="qvShareFabLista" hidden>
+                <button type="button" class="share-btn share-btn-native" hidden aria-label="Compartilhar este laço">
+                  <i class="bi bi-share-fill"></i>
+                </button>
+                <a class="share-btn" data-share="whatsapp" href="#" target="_blank" rel="noopener noreferrer" aria-label="Enviar este laço pelo WhatsApp">
+                  <i class="bi bi-whatsapp"></i>
+                </a>
+                <a class="share-btn" data-share="facebook" href="#" target="_blank" rel="noopener noreferrer" aria-label="Compartilhar este laço no Facebook">
+                  <i class="bi bi-facebook"></i>
+                </a>
+                <a class="share-btn" data-share="pinterest" href="#" target="_blank" rel="noopener noreferrer" aria-label="Salvar este laço no Pinterest">
+                  <i class="bi bi-pinterest"></i>
+                </a>
+                <button type="button" class="share-btn share-btn-copy" aria-label="Copiar o link deste laço">
+                  <i class="bi bi-link-45deg"></i>
+                </button>
+              </div>
+            </div>
             <button type="button" class="qv-gallery-nav-btn is-prev d-none" id="qvGalleryPrev" aria-label="Foto anterior"><i class="bi bi-chevron-left"></i></button>
             <button type="button" class="qv-gallery-nav-btn is-next d-none" id="qvGalleryNext" aria-label="Próxima foto"><i class="bi bi-chevron-right"></i></button>
           </div>

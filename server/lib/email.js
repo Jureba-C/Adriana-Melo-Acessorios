@@ -789,13 +789,7 @@ async function sendWelcomeCouponEmail({ to, couponCode, percentOff, shopUrl, uns
       </tr>
 
       ${botaoEmail(shopUrl, "Ver a coleção")}
-      ${unsubscribeUrl ? `
-      <tr>
-        <td class="e-tenue" align="center" style="font-family:${FONT_CORPO}; color:${CORES.tenue}; font-size:11px; line-height:1.6; padding-top:18px;">
-          <a class="e-tenue" href="${escapeHTML(unsubscribeUrl)}" style="color:${CORES.tenue}; text-decoration:underline;">Não quero mais receber estes e-mails</a>
-        </td>
-      </tr>
-      ` : ""}
+      ${rodapeDeDescadastro(unsubscribeUrl)}
     `,
   });
 
@@ -807,10 +801,7 @@ async function sendWelcomeCouponEmail({ to, couponCode, percentOff, shopUrl, uns
   // JS/rede no cliente de e-mail; a URL é o link clicável e também o que
   // permite o "cancelar inscrição" de um clique do Gmail/Yahoo (RFC 8058),
   // por isso List-Unsubscribe-Post só é declarado quando há URL.
-  const headers = unsubscribeUrl ? {
-    "List-Unsubscribe": `<mailto:${process.env.SMTP_USER}?subject=descadastrar>, <${unsubscribeUrl}>`,
-    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-  } : undefined;
+  const headers = cabecalhosDeDescadastro(unsubscribeUrl);
 
   await sendEmail({ to, subject, text, html, headers });
 }
@@ -1031,6 +1022,93 @@ function formatPedirAvaliacaoEmail({ externalReference, address, items, avaliarU
   return { subject, text, html };
 }
 
+/* Rodapé e cabeçalhos de descadastro, iguais aos do e-mail do cupom de
+   boas-vindas. Extraídos porque agora há mais de um e-mail promocional, e
+   ⚠️ porque quem sai da FILA (email_outbox) perde os cabeçalhos: a fila
+   guarda assunto, texto e HTML, não headers. Quem reenvia da fila monta os
+   cabeçalhos de novo a partir do e-mail de destino — ver
+   scripts/tarefas-periodicas.js. */
+function rodapeDeDescadastro(unsubscribeUrl){
+  if(!unsubscribeUrl) return "";
+  return `
+      <tr>
+        <td class="e-tenue" align="center" style="font-family:${FONT_CORPO}; color:${CORES.tenue}; font-size:11px; line-height:1.6; padding-top:18px;">
+          <a class="e-tenue" href="${escapeHTML(unsubscribeUrl)}" style="color:${CORES.tenue}; text-decoration:underline;">Não quero mais receber estes e-mails</a>
+        </td>
+      </tr>`;
+}
+
+function cabecalhosDeDescadastro(unsubscribeUrl){
+  if(!unsubscribeUrl) return undefined;
+  return {
+    "List-Unsubscribe": `<mailto:${process.env.SMTP_USER}?subject=descadastrar>, <${unsubscribeUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
+/* Lembrete de carrinho esquecido. Promocional: leva descadastro, e o link
+   volta com os itens já no carrinho (rota /api/carrinho-esquecido). Sem
+   cupom de propósito — desconto por abandono ensina a abandonar, e a loja
+   já dá 10% de boas-vindas, 5% no Pix e leve 4 pague 3. */
+function formatCarrinhoEsquecidoEmail({ address, items, retomarUrl, whatsappUrl, unsubscribeUrl }){
+  const nome = primeiroNome(address);
+  const subject = "Seus laços ficaram esperando 🎀";
+  const lista = (items || []).map(i => `• ${i.name}${i.qty > 1 ? ` (${i.qty})` : ""}`).join("\n");
+
+  const text = [
+    nome ? `Oi, ${nome}!` : "Oi!",
+    "",
+    "Você começou um pedido aqui no ateliê e ele ficou pela metade:",
+    lista,
+    "",
+    `Se quiser terminar, é só abrir este link — os laços já voltam para o carrinho: ${retomarUrl}`,
+    "",
+    ...(whatsappUrl ? [`Ficou com alguma dúvida? Fala comigo no WhatsApp: ${whatsappUrl}`, ""] : []),
+    "Cada peça é feita à mão, sob encomenda, na cor que você escolher.",
+    "",
+    "Adriana Melo Acessórios — ateliê artesanal de laços, Brasília/DF",
+    ...(unsubscribeUrl ? ["", `Não quer mais receber estes e-mails? ${unsubscribeUrl}`] : []),
+  ].join("\n");
+
+  const itensHtml = (items || []).map((i, indice) => `
+      <tr>
+        ${celulaMiniatura(indice < MAX_MINIATURAS ? i.photoUrl : null, i.name)}
+        ${CELULA_ESPACO}
+        <td class="e-texto e-borda" valign="middle" style="font-family:${FONT_CORPO}; color:${CORES.texto}; font-size:14px; padding:8px 0; border-bottom:1px solid ${CORES.faixa};">
+          ${escapeHTML(i.name)}${i.qty > 1 ? ` <span style="color:${CORES.apoio};">(${i.qty})</span>` : ""}
+        </td>
+      </tr>`).join("");
+
+  const html = emailShell({
+    titulo: subject,
+    preheader: "Seu carrinho continua guardado — é só abrir e terminar.",
+    eyebrow: "seu carrinho",
+    tituloCartao: "Ficou faltando pouco 🎀",
+    corpoHtml: `
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:15px; line-height:1.6; padding-bottom:20px;">
+          ${nome ? `Oi, ${escapeHTML(nome)}! ` : ""}Você começou um pedido e ele ficou pela metade. Guardamos tudo para você.
+        </td>
+      </tr>
+      ${itensHtml ? `
+      <tr>
+        <td style="padding-bottom:26px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${itensHtml}</table>
+        </td>
+      </tr>` : ""}
+      ${botaoEmail(retomarUrl, "Terminar meu pedido")}
+      <tr>
+        <td class="e-apoio" align="center" style="font-family:${FONT_CORPO}; color:${CORES.apoio}; font-size:13px; line-height:1.6; padding-top:22px;">
+          Cada peça é feita à mão, sob encomenda${whatsappUrl ? `. Qualquer dúvida, <a href="${escapeHTML(whatsappUrl)}" style="color:${CORES.apoio};">fala comigo no WhatsApp</a>` : ""}.
+        </td>
+      </tr>
+      ${rodapeDeDescadastro(unsubscribeUrl)}
+    `,
+  });
+
+  return { subject, text, html };
+}
+
 /* Cupom de aniversário. Vai para a fila (email_outbox) pelo cron — a
    cliente pediu ao cadastrar a data em "Minha conta", então é consentido;
    o texto lembra que dá para tirar a data a qualquer momento. */
@@ -1135,6 +1213,8 @@ module.exports = {
   sendAvisoDeSegurancaDaConta,
   formatConfirmarRecebimentoEmail,
   formatPedirAvaliacaoEmail,
+  formatCarrinhoEsquecidoEmail,
+  cabecalhosDeDescadastro,
   formatOrderEmail,
   formatContactEmail,
   formatOrderConfirmationEmail,
