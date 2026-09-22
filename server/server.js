@@ -5537,6 +5537,29 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const LARGURAS_HERO = new Set([480, 960]);
 const ENQUADRAMENTO_SHARP = { top: "top", center: "centre", bottom: "bottom" };
 
+/* =========================================================================
+   GET /api/carrinho-esquecido/:referencia — reenche o carrinho pelo link
+   do lembrete de e-mail
+   -------------------------------------------------------------------------
+   Sem isto, o lembrete mandaria a cliente montar o carrinho de novo na mão,
+   que é exatamente o atrito que fez o pedido parar no meio. Retomar o
+   pagamento do pedido original (POST /api/orders/:reference/resume-payment)
+   não serve aqui: aquela rota exige login, e boa parte das compras é feita
+   sem conta.
+
+   Devolve SÓ id e quantidade — nada de endereço, telefone ou valor. A
+   referência é um UUID que só existe no e-mail da própria cliente, e ainda
+   assim quem tiver o link não precisa ver dado pessoal nenhum. Preço e nome
+   saem do catálogo do servidor quando a vitrine montar o carrinho, como em
+   qualquer outra visita.
+========================================================================= */
+app.get("/api/carrinho-esquecido/:referencia", strictLimiter, (req, res) => {
+  const itens = db.itensDoCarrinhoEsquecido(String(req.params.referencia || ""));
+  if(!itens || !itens.length) return res.status(404).json({ error: "Carrinho não encontrado." });
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ items: itens });
+});
+
 app.get("/api/hero/fotos/:id", async (req, res) => {
   if(!UUID_PATTERN.test(req.params.id)) return res.status(404).end();
 

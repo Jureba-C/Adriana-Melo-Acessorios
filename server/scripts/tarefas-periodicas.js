@@ -32,10 +32,15 @@
  *     fila). Só entram pedidos postados nos últimos 45 dias / entregues nos
  *     últimos 30 — trava para o primeiro deploy não disparar e-mail para
  *     cliente de meses atrás.
- *  4. Enfileira o cupom de aniversário para quem cadastrou a data em "Minha
+ *  4. Enfileira o lembrete de carrinho esquecido: pedido criado no checkout,
+ *     nunca pago, entre 8 horas e 3 dias atrás, para quem deixou e-mail. A
+ *     espera de 8 horas existe porque o Pix fica válido por horas — lembrar
+ *     antes seria cobrar quem ainda ia pagar. Um por pedido (índice único da
+ *     fila) e no máximo um por pessoa a cada 30 dias.
+ *  5. Enfileira o cupom de aniversário para quem cadastrou a data em "Minha
  *     conta" e faz aniversário hoje (horário de Brasília, a partir das 9h),
  *     um por ano — a chave da fila é "aniversario:<id>:<ano>".
- *  5. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
+ *  6. Grava a hora desta rodada. O painel mostra, e avisa quando passa de
  *     1 hora — é o único sinal de que o agendamento no hPanel sumiu.
  *
  *  A ordem importa: fechar entregas ANTES de escolher quem recebe "seu
@@ -73,6 +78,9 @@ async function reenviarFilaDeEmail(){
         subject: linha.subject,
         text: linha.text_body,
         html: linha.html_body,
+        headers: KINDS_COM_DESCADASTRO.has(linha.kind)
+          ? email.cabecalhosDeDescadastro(linkDeDescadastro(linha.to_email))
+          : undefined,
       });
       db.markEmailSent(linha.id);
       enviados++;
@@ -120,6 +128,18 @@ async function fecharEntregasConfirmadas(){
 function linkDeAvaliacao(reference){
   const token = db.garantirTokenDeAvaliacao(reference);
   return `${CLIENT_ORIGIN}/avaliar.html?pedido=${encodeURIComponent(reference)}#t=${token}`;
+}
+
+const WHATSAPP_DA_LOJA = "https://wa.me/5561982749808";
+
+// Kinds promocionais: precisam de List-Unsubscribe, e a fila não guarda
+// cabeçalho nenhum — só assunto, texto e HTML. Remontar aqui, na hora do
+// envio, é o que faz o botão "cancelar inscrição" do Gmail aparecer.
+const KINDS_COM_DESCADASTRO = new Set(["carrinho_esquecido"]);
+
+function linkDeDescadastro(emailDestino){
+  const token = db.garantirTokenDeContato(emailDestino);
+  return `${CLIENT_ORIGIN}/api/newsletter/unsubscribe?email=${encodeURIComponent(emailDestino)}&token=${token}`;
 }
 
 function enderecoDe(pedido){
@@ -170,6 +190,36 @@ function enfileirarPedidosDeAvaliacao(agora = Date.now()){
   return novos;
 }
 
+/* ⚠️ Promocional, não transacional: leva link de descadastro, e quem já
+   pediu para sair não entra (a consulta em lib/db.js cuida disso). O
+   e-mail sai da FILA, e a fila não guarda cabeçalho — por isso o
+   List-Unsubscribe é remontado na hora do envio, em reenviarFilaDeEmail. */
+function enfileirarLembretesDeCarrinho(agora = Date.now()){
+  let novos = 0;
+  for(const pedido of db.pedidosParaLembrarCarrinho(agora)){
+    let itens = [];
+    try{ itens = JSON.parse(pedido.items_json); }catch{}
+    const conteudo = email.formatCarrinhoEsquecidoEmail({
+      address: enderecoDe(pedido),
+      items: itens,
+      retomarUrl: `${CLIENT_ORIGIN}/?recuperar=${encodeURIComponent(pedido.external_reference)}`,
+      whatsappUrl: WHATSAPP_DA_LOJA,
+      unsubscribeUrl: linkDeDescadastro(pedido.customer_email),
+    });
+    const id = db.enqueueEmail({
+      kind: "carrinho_esquecido",
+      toEmail: pedido.customer_email,
+      orderReference: pedido.external_reference,
+      subject: conteudo.subject,
+      textBody: conteudo.text,
+      htmlBody: conteudo.html,
+    });
+    if(id) novos++;
+  }
+  console.log(`Carrinhos esquecidos: ${novos} lembrete(s) novo(s) na fila.`);
+  return novos;
+}
+
 function hojeEmBrasilia(agora){
   const partes = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
@@ -213,6 +263,7 @@ async function main(){
   await fecharEntregasConfirmadas();
   enfileirarConfirmacoesDeRecebimento();
   enfileirarPedidosDeAvaliacao();
+  enfileirarLembretesDeCarrinho();
   enfileirarCuponsDeAniversario();
   await reenviarFilaDeEmail();
   db.gravarEstado("tarefas_periodicas_em", new Date().toISOString());
@@ -225,4 +276,4 @@ if(require.main === module){
   });
 }
 
-module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao, enfileirarCuponsDeAniversario };
+module.exports = { reenviarFilaDeEmail, fecharEntregasConfirmadas, enfileirarConfirmacoesDeRecebimento, enfileirarPedidosDeAvaliacao, enfileirarLembretesDeCarrinho, enfileirarCuponsDeAniversario };

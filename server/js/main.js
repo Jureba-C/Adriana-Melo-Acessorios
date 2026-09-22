@@ -539,7 +539,10 @@
     openQuickView(id, { fromPopState: true });
   }
 
-  loadProductOverrides().then(abrirProdutoDoEndereco);
+  loadProductOverrides().then(() => {
+    abrirProdutoDoEndereco();
+    recuperarCarrinhoEsquecido();
+  });
 
   document.getElementById("filterGroup").addEventListener("click", function(e){
     const btn = e.target.closest(".chip");
@@ -612,6 +615,7 @@
   }
 
   const PENDING_ITEM_KEY = "plc_item_pendente";
+  const RECOVERED_CART_KEY = "plc_carrinho_recuperado";
 
   function addToCart(id, qty){
     if(findProduct(id)?.soldOut) return;
@@ -855,8 +859,28 @@
       return;
     }
     resgatarItemPendente();
+    aplicarCarrinhoRecuperado();
     updateTotals();
   });
+
+  function aplicarCarrinhoRecuperado(){
+    let itens = null;
+    try{
+      itens = JSON.parse(sessionStorage.getItem(RECOVERED_CART_KEY) || "null");
+    }catch(err){
+      console.warn("Carrinho recuperado ilegível:", err);
+    }
+    if(!Array.isArray(itens) || !itens.length) return;
+
+    if(!currentUser){
+      window.location.href = "/conta.html?retorno=carrinho";
+      return;
+    }
+
+    sessionStorage.removeItem(RECOVERED_CART_KEY);
+    itens.forEach(item => addToCart(item.id, item.qty));
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("cartOffcanvas")).show();
+  }
 
   function resgatarItemPendente(){
     if(!currentUser) return;
@@ -1426,6 +1450,32 @@
   if(new URLSearchParams(location.search).get("carrinho") === "1"){
     bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("cartOffcanvas")).show();
     history.replaceState(null, "", location.pathname);
+  }
+
+  async function recuperarCarrinhoEsquecido(){
+    const referencia = new URLSearchParams(location.search).get("recuperar");
+    if(!referencia) return;
+    history.replaceState(null, "", location.pathname);
+    try{
+      const res = await fetch(`/api/carrinho-esquecido/${encodeURIComponent(referencia)}`);
+      if(!res.ok) return;
+      const dados = await res.json();
+      const itens = (Array.isArray(dados.items) ? dados.items : [])
+        .filter(item => {
+          const p = findProduct(Number(item.id));
+          return p && !p.soldOut;
+        })
+        .map(item => ({ id: Number(item.id), qty: Number(item.qty) || 1 }));
+      if(!itens.length) return;
+      try{
+        sessionStorage.setItem(RECOVERED_CART_KEY, JSON.stringify(itens));
+      }catch(err){
+        console.warn("Não foi possível guardar o carrinho recuperado:", err);
+      }
+      if(sessionChecked) aplicarCarrinhoRecuperado();
+    }catch(err){
+      console.warn("Não foi possível recuperar o carrinho:", err);
+    }
   }
 
   let qvProductId = null, qvQty = 1;
