@@ -1920,6 +1920,16 @@ section[id], header[id]{ scroll-margin-top:calc(90px + var(--promo-h, 0px)); }
 .share-btn.is-copied{ background:var(--color-success-soft); color:var(--color-success); }
 .share-btn.is-failed{ background:#FBE9E7; color:var(--color-danger); }
 
+.auth-google{ margin-top:1.1rem; }
+.auth-google-ou{
+  display:flex; align-items:center; gap:.7rem;
+  margin-bottom:.9rem; color:var(--ink-soft); font-size:.78rem;
+  text-transform:uppercase; letter-spacing:.08em;
+}
+.auth-google-ou::before,
+.auth-google-ou::after{ content:""; flex:1; height:1px; background:var(--blush-150); }
+.auth-google-botao{ display:flex; justify-content:center; min-height:44px; }
+
 .product-name-link{ color:inherit; text-decoration:none; }
 .product-name-link:hover,
 .product-name-link:focus-visible{ color:var(--blush-700); }

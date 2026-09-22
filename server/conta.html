@@ -6,7 +6,7 @@
 <title>Entrar ou criar conta — Adriana Melo Acessórios</title>
 <meta name="description" content="Entre na sua conta ou cadastre-se para acompanhar seus pedidos na Adriana Melo Acessórios.">
 
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; script-src 'self' https://sdk.mercadopago.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data:; connect-src 'self' https://api.mercadopago.com https://viacep.com.br; frame-src https://www.mercadopago.com https://www.mercadopago.com.br; object-src 'none'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; script-src 'self' https://sdk.mercadopago.com https://accounts.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; font-src 'self'; img-src 'self' https: data:; connect-src 'self' https://api.mercadopago.com https://viacep.com.br https://accounts.google.com; frame-src https://www.mercadopago.com https://www.mercadopago.com.br https://accounts.google.com; object-src 'none'; form-action 'self'">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -109,6 +109,11 @@
             </div>
             <button class="btn-blush w-100" type="submit" id="loginSubmitBtn">Entrar</button>
             <div class="small mt-2 account-msg" id="loginMsg" role="alert"></div>
+            <div class="auth-google d-none" data-auth-google>
+              <div class="auth-google-ou"><span>ou</span></div>
+              <div class="auth-google-botao" data-auth-google-botao></div>
+              <div class="small mt-2 account-msg" data-auth-google-msg role="alert"></div>
+            </div>
             <p class="auth-foot"><i class="bi bi-shield-check"></i>Seus dados ficam protegidos.</p>
           </form>
         </div>
@@ -220,6 +225,11 @@
             </div>
             <button class="btn-blush w-100" type="submit" id="registerSubmitBtn">Criar minha conta</button>
             <div class="small mt-2 account-msg" id="registerMsg" role="alert"></div>
+            <div class="auth-google d-none" data-auth-google>
+              <div class="auth-google-ou"><span>ou</span></div>
+              <div class="auth-google-botao" data-auth-google-botao></div>
+              <div class="small mt-2 account-msg" data-auth-google-msg role="alert"></div>
+            </div>
             <p class="auth-foot"><i class="bi bi-shield-check"></i>Seus dados ficam protegidos.</p>
           </form>
         </div>

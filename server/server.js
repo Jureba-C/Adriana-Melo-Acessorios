@@ -51,6 +51,7 @@ const instagram = require("./lib/instagram");
 const email = require("./lib/email");
 const emailPhotos = require("./lib/emailPhotos.js");
 const campanhas = require("./lib/campanhas.js");
+const googleAuth = require("./lib/googleAuth.js");
 const rastreio = require("./lib/rastreio.js");
 const { prazoDaCotacao } = require("./lib/prazoFrete.js");
 const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
@@ -505,8 +506,8 @@ app.use(helmet({
       // todos servidos por este mesmo servidor (css/vendor/, js/vendor/,
       // css/fonts/), então 'self' cobre tudo. Só o SDK do Mercado Pago
       // continua externo — ele precisa vir do domínio deles.
-      scriptSrc: ["'self'", "https://sdk.mercadopago.com"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "https://sdk.mercadopago.com", "https://accounts.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
       fontSrc: ["'self'"],
       // `https:` (qualquer origem https) em vez de uma lista fixa: o painel
       // administrativo deixa a lojista colar a URL de uma foto hospedada em
@@ -522,8 +523,8 @@ app.use(helmet({
       // ⚠️ Espelhado no <meta> de cada página HTML — os dois têm que mudar
       // juntos (ver "CSP is duplicated" no CLAUDE.md).
       imgSrc: ["'self'", "https:", "data:", "blob:"],
-      connectSrc: ["'self'", "https://api.mercadopago.com", "https://viacep.com.br"],
-      frameSrc: ["https://www.mercadopago.com", "https://www.mercadopago.com.br"],
+      connectSrc: ["'self'", "https://api.mercadopago.com", "https://viacep.com.br", "https://accounts.google.com"],
+      frameSrc: ["https://www.mercadopago.com", "https://www.mercadopago.com.br", "https://accounts.google.com"],
       objectSrc: ["'none'"],
       formAction: ["'self'"],
       // Estas duas JÁ valiam antes de estarem escritas aqui: o helmet mescla
@@ -750,7 +751,12 @@ const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, handler: s
 // limites de propósito: é o único que existe para conter um ataque contra
 // UMA conta específica (adivinhar senha), não uso legítimo em excesso —
 // afrouxar este enfraqueceria a proteção real que ele oferece.
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, handler: sendTooManyRequests });
+// ⚠️ O ajuste por variável de ambiente é IGNORADO em produção de propósito:
+// a bateria de testes precisa de dezenas de chamadas de login numa rodada só,
+// e um .env de produção com esse valor inflado desligaria em silêncio a única
+// proteção contra adivinhação de senha.
+const MAX_AUTH_POR_JANELA = EM_PRODUCAO ? 10 : (Number(process.env.AUTH_RATE_LIMIT_MAX) || 10);
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: MAX_AUTH_POR_JANELA, handler: sendTooManyRequests });
 
 // Limite próprio para a consulta de status do Pix: a página fica perguntando
 // sozinha de 4 em 4 segundos por até 20 minutos (ver js/pagamento-pix.js),
@@ -3700,6 +3706,130 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
   }
 });
 
+/* =========================================================================
+   ENTRAR COM O GOOGLE
+   -------------------------------------------------------------------------
+   O navegador manda o ID token que o Google devolveu; lib/googleAuth.js
+   confere com o próprio Google. Aqui ficam as decisões de conta.
+
+   ⚠️ NÃO vincula conta existente sozinho. Este site não confirma endereço de
+   e-mail em lugar nenhum: qualquer pessoa cadastra vitima@gmail.com com uma
+   senha sua e espera. Se o login pelo Google vinculasse pelo e-mail, a dona
+   de verdade do endereço entraria na conta do impostor — e passaria a
+   digitar CPF, endereço e telefone lá dentro. Então e-mail já cadastrado
+   recebe 409, e a vinculação só acontece de dentro da conta, em
+   /api/auth/google/vincular, por quem já provou a senha.
+
+   ⚠️ Recusa admin e quem tem 2FA. requireAdminTwoFactor (lib/auth.js) só
+   confere se o 2FA está ATIVADO, não se esta sessão passou pelo código —
+   uma sessão nascida no Google entraria no painel sem código nenhum. É a
+   mesma regra que /api/auth/login já aplica ao devolver desafio em vez de
+   sessão para quem tem totp_secret.
+========================================================================= */
+app.get("/api/auth/google/config", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(googleAuth.estaConfigurado()
+    ? { enabled: true, clientId: process.env.GOOGLE_CLIENT_ID }
+    : { enabled: false });
+});
+
+// O nome do Google pode passar do limite que PUT /api/auth/perfil aceita
+// (80): cortar aqui evita criar conta cujo dono nunca consegue salvar o
+// perfil. Sem nome utilizável, cai para a parte antes do @.
+function nomeVindoDoGoogle(perfil){
+  const bruto = String(perfil.nome || "").trim() || String(perfil.email).split("@")[0];
+  return bruto.slice(0, 80);
+}
+
+function recusaGoogleParaContaProtegida(emailAddress, user){
+  if(auth.isAdminEmail(emailAddress) || user?.totp_secret){
+    return "Esta conta usa verificação em duas etapas. Entre com e-mail e senha.";
+  }
+  return null;
+}
+
+app.post("/api/auth/google", authLimiter, async (req, res) => {
+  const ip = req.ip;
+  try {
+    const perfil = await googleAuth.verificarTokenDoGoogle(req.body?.credential);
+    const emailAddress = auth.normalizeEmail(perfil.email);
+    if(!auth.isValidEmail(emailAddress)){
+      return res.status(401).json({ error: "Não consegui ler o e-mail da sua conta Google." });
+    }
+
+    const jaVinculada = db.getUserByGoogleId(perfil.sub);
+    if(jaVinculada){
+      const recusa = recusaGoogleParaContaProtegida(jaVinculada.email, jaVinculada);
+      if(recusa) return res.status(409).json({ error: recusa });
+      db.recordLoginAttempt({ email: jaVinculada.email, ip, ok: true });
+      auth.issueSession(res, jaVinculada.id);
+      return res.json({
+        id: jaVinculada.id, name: jaVinculada.name, email: jaVinculada.email,
+        cep: jaVinculada.cep || null, isAdmin: auth.isAdminEmail(jaVinculada.email),
+      });
+    }
+
+    const recusa = recusaGoogleParaContaProtegida(emailAddress, db.getUserByEmail(emailAddress));
+    if(recusa) return res.status(409).json({ error: recusa });
+
+    if(db.getUserByEmail(emailAddress)){
+      return res.status(409).json({
+        error: "Já existe uma conta com este e-mail. Entre com sua senha e vincule o Google em Minha conta.",
+        contaExistente: true,
+      });
+    }
+
+    // Senha que ninguém conhece: password_hash é NOT NULL, e quem nasce pelo
+    // Google define a sua depois, por "esqueci a senha", se quiser.
+    const senhaImpossivel = await auth.hashPassword(require("crypto").randomBytes(32).toString("hex"));
+    const user = db.createUser({
+      name: nomeVindoDoGoogle(perfil), email: emailAddress,
+      passwordHash: senhaImpossivel, cpf: null,
+      googleId: perfil.sub, semSenha: true,
+    });
+    db.recordLoginAttempt({ email: emailAddress, ip, ok: true });
+    auth.issueSession(res, user.id);
+    res.status(201).json({
+      id: user.id, name: user.name, email: user.email, cep: null,
+      isAdmin: auth.isAdminEmail(user.email),
+    });
+  } catch (err) {
+    if(err.status){
+      return res.status(err.status === 400 ? 400 : (err.status === 503 ? 503 : 401))
+        .json({ error: err.status === 503 ? "Entrar com o Google não está disponível." : "Não consegui confirmar sua conta Google. Tente de novo." });
+    }
+    console.error("Erro no login com o Google:", err);
+    res.status(500).json({ error: "Não foi possível entrar agora. Tente novamente em instantes." });
+  }
+});
+
+/* Vincular o Google a uma conta que já existe — de dentro da conta, por
+   quem já está logada. É o caminho seguro que substitui a vinculação
+   automática por e-mail. */
+app.post("/api/auth/google/vincular", authLimiter, auth.requireAuth, async (req, res) => {
+  try {
+    const perfil = await googleAuth.verificarTokenDoGoogle(req.body?.credential);
+    const emailDoToken = auth.normalizeEmail(perfil.email);
+    const user = db.getUserById(req.user.id);
+    if(emailDoToken !== auth.normalizeEmail(user.email)){
+      return res.status(403).json({ error: "Essa conta Google usa outro e-mail. Entre com a conta Google deste mesmo e-mail." });
+    }
+    if(auth.isAdminEmail(user.email) || user.totp_secret){
+      return res.status(409).json({ error: "Contas com verificação em duas etapas entram só com e-mail e senha." });
+    }
+    const jaDeOutra = db.getUserByGoogleId(perfil.sub);
+    if(jaDeOutra && jaDeOutra.id !== user.id){
+      return res.status(409).json({ error: "Esta conta Google já está ligada a outro cadastro." });
+    }
+    const vinculou = db.setUserGoogleId(user.id, perfil.sub);
+    res.json({ ok: true, jaEstava: !vinculou });
+  } catch (err) {
+    if(err.status) return res.status(err.status === 400 ? 400 : 401).json({ error: "Não consegui confirmar sua conta Google." });
+    console.error("Erro ao vincular conta Google:", err);
+    res.status(500).json({ error: "Não foi possível vincular agora. Tente novamente." });
+  }
+});
+
 /* POST /api/auth/login/2fa — 2ª etapa: troca o desafio pelo cookie de sessão.
    Aceita o código de 6 dígitos do app OU um código de recuperação. */
 app.post("/api/auth/login/2fa", authLimiter, async (req, res) => {
@@ -3825,14 +3955,29 @@ app.post("/api/auth/logout", (req, res) => {
 // oráculo de tentativa de senha com 500 tentativas/15min em vez de 10.
 app.delete("/api/auth/account", authLimiter, auth.requireAuth, async (req, res) => {
   try {
-    const password = req.body?.password;
-    if (!password || typeof password !== "string") {
-      return res.status(400).json({ error: "Confirme sua senha para excluir a conta." });
-    }
     const user = db.getUserById(req.user.id);
-    const ok = user && await auth.verifyPassword(password, user.password_hash);
-    if (!ok) {
-      return res.status(401).json({ error: "Senha incorreta." });
+    const password = req.body?.password;
+    const credential = req.body?.credential;
+    // Quem entrou pelo Google não tem senha para confirmar. Sem este caminho,
+    // essa pessoa ficaria impedida de apagar a própria conta — o oposto do
+    // motivo pelo qual esta rota existe (LGPD art. 18).
+    let ok = false;
+    if(credential){
+      try{
+        const perfil = await googleAuth.verificarTokenDoGoogle(credential);
+        ok = user && auth.normalizeEmail(perfil.email) === auth.normalizeEmail(user.email);
+      }catch{
+        ok = false;
+      }
+      if(!ok) return res.status(401).json({ error: "Não consegui confirmar sua conta Google." });
+    } else {
+      if (!password || typeof password !== "string") {
+        return res.status(400).json({ error: "Confirme sua senha para excluir a conta." });
+      }
+      ok = user && await auth.verifyPassword(password, user.password_hash);
+      if (!ok) {
+        return res.status(401).json({ error: "Senha incorreta." });
+      }
     }
     db.deleteUserAccount(req.user.id);
     auth.clearSession(req, res);
@@ -3961,6 +4106,10 @@ function perfilDaConta(userId){
     nascimento: user.birth_date || "",
     cpfMascarado: mascararCpf(user.cpf),
     criadoEm: user.created_at,
+    // Conta que nasceu pelo Google e nunca escolheu senha: "Minha conta"
+    // esconde o card de trocar senha (que pede a atual) e explica o caminho.
+    semSenha: Boolean(user.sem_senha),
+    temGoogle: Boolean(user.google_id),
   };
 }
 
@@ -4007,6 +4156,12 @@ app.put("/api/auth/perfil", strictLimiter, auth.requireAuth, (req, res) => {
 app.put("/api/auth/email", authLimiter, auth.requireAuth, async (req, res) => {
   try{
     const novo = auth.normalizeEmail(req.body?.email);
+    const contaAtual = db.getUserById(req.user.id);
+    if(contaAtual?.sem_senha){
+      return res.status(409).json({
+        error: 'Sua conta entra pelo Google, e o e-mail vem de lá. Para usar outro e-mail, crie uma senha em "Esqueci a senha" e volte aqui.',
+      });
+    }
     const senha = req.body?.senhaAtual;
     if(!auth.isValidEmail(novo)) return res.status(400).json({ error: "Digite um e-mail válido." });
     if(typeof senha !== "string" || !senha) return res.status(400).json({ error: "Confirme com sua senha atual." });
@@ -4034,6 +4189,12 @@ app.put("/api/auth/senha", authLimiter, auth.requireAuth, async (req, res) => {
   try{
     const atual = req.body?.senhaAtual;
     const nova = String(req.body?.novaSenha || "");
+    const dono = db.getUserById(req.user.id);
+    if(dono?.sem_senha){
+      return res.status(409).json({
+        error: 'Sua conta entra pelo Google e ainda não tem senha. Use "Esqueci a senha" para criar uma.',
+      });
+    }
     if(typeof atual !== "string" || !atual) return res.status(400).json({ error: "Digite sua senha atual." });
     if(!auth.isValidPassword(nova)) return res.status(400).json({ error: "A nova senha precisa ter entre 8 e 72 caracteres." });
     const user = db.getUserById(req.user.id);

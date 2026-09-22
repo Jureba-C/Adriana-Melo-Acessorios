@@ -41,6 +41,62 @@
     return retorno === "carrinho" ? "index.html?carrinho=1" : "pedidos.html";
   }
 
+  const blocosGoogle = [...document.querySelectorAll("[data-auth-google]")];
+
+  function avisoGoogle(texto, tipo){
+    blocosGoogle.forEach(bloco => showMessage(bloco.querySelector("[data-auth-google-msg]"), texto, tipo));
+  }
+
+  async function entrarComGoogle(resposta){
+    avisoGoogle("Entrando...", "");
+    try{
+      const user = await postJSON("/api/auth/google", { credential: resposta.credential });
+      window.location.href = destinationFor(user);
+    }catch(err){
+      avisoGoogle(err.message, "error");
+    }
+  }
+
+  async function prepararGoogle(){
+    if(!blocosGoogle.length) return;
+    let config;
+    try{
+      const res = await fetch("/api/auth/google/config");
+      config = await res.json();
+    }catch{
+      return;
+    }
+    if(!config?.enabled || !config.clientId) return;
+
+    await new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    }).catch(() => null);
+
+    if(!window.google?.accounts?.id) return;
+
+    window.google.accounts.id.initialize({
+      client_id: config.clientId,
+      callback: entrarComGoogle,
+      ux_mode: "popup",
+      cancel_on_tap_outside: true,
+    });
+
+    blocosGoogle.forEach(bloco => {
+      bloco.classList.remove("d-none");
+      window.google.accounts.id.renderButton(bloco.querySelector("[data-auth-google-botao]"), {
+        theme: "outline", size: "large", shape: "pill",
+        text: "continue_with", locale: "pt-BR", width: 280,
+      });
+    });
+  }
+
+  prepararGoogle();
+
   const authShell = document.getElementById("authForms");
   const modeButtons = document.querySelectorAll("[data-auth-mode]");
 

@@ -424,6 +424,24 @@ ensureColumn("users", "totp_recovery_json", "TEXT");
 ensureColumn("users", "phone", "TEXT");
 ensureColumn("users", "birth_date", "TEXT");
 
+/* Entrar com o Google. `google_id` é o `sub` do token — o identificador
+   estável da conta Google, que não muda nem quando a pessoa troca o e-mail
+   lá. Índice parcial porque quase toda linha é NULL.
+
+   `sem_senha` marca quem nasceu pelo Google e nunca escolheu senha. É um
+   sinalizador invertido de propósito: uma coluna "tem_senha" precisaria de
+   backfill a cada boot (como o opt_in_at acima) e um dia marcaria como
+   "tem senha" justamente quem não tem. NULL/0 = todo mundo que já existia.
+
+   ⚠️ password_hash é NOT NULL e o SQLite não afrouxa isso sem reconstruir a
+   tabela. Conta criada pelo Google recebe hash de um segredo aleatório que
+   ninguém conhece — ninguém entra com ele, e "esqueci a senha" continua
+   sendo o caminho para definir uma de verdade. */
+ensureColumn("users", "google_id", "TEXT");
+ensureColumn("users", "sem_senha", "INTEGER");
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google
+           ON users(google_id) WHERE google_id IS NOT NULL`);
+
 // Auditoria de login: toda tentativa entra aqui, com sucesso ou sem. Serve
 // para duas coisas distintas — o bloqueio por força bruta (contar falhas
 // recentes) e o registro de "quem tentou entrar, de onde, quando", que
@@ -688,14 +706,32 @@ seedBirthdayCoupon();
 
 /* ---------------------------- USERS ---------------------------- */
 const stmtInsertUser = db.prepare(
-  `INSERT INTO users (name, email, password_hash, cpf, created_at) VALUES (?, ?, ?, ?, ?)`
+  `INSERT INTO users (name, email, password_hash, cpf, google_id, sem_senha, created_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`
 );
 const stmtGetUserByEmail = db.prepare(`SELECT * FROM users WHERE email = ?`);
 const stmtGetUserById = db.prepare(`SELECT * FROM users WHERE id = ?`);
 
-function createUser({ name, email, passwordHash, cpf }) {
-  const info = stmtInsertUser.run(name, email, passwordHash, cpf || null, Date.now());
+function createUser({ name, email, passwordHash, cpf, googleId, semSenha }) {
+  const info = stmtInsertUser.run(
+    name, email, passwordHash, cpf || null,
+    googleId || null, semSenha ? 1 : 0, Date.now()
+  );
   return getUserById(Number(info.lastInsertRowid));
+}
+
+const stmtGetUserByGoogleId = db.prepare(`SELECT * FROM users WHERE google_id = ?`);
+function getUserByGoogleId(googleId) {
+  return googleId ? (stmtGetUserByGoogleId.get(googleId) || null) : null;
+}
+
+const stmtSetUserGoogleId = db.prepare(
+  `UPDATE users SET google_id = ? WHERE id = ? AND google_id IS NULL`
+);
+// Só grava se ainda estiver vazio: duas contas Google diferentes apontando
+// para o mesmo usuário seria uma porta de entrada, não uma conveniência.
+function setUserGoogleId(userId, googleId) {
+  return stmtSetUserGoogleId.run(googleId, userId).changes > 0;
 }
 function getUserByEmail(email) {
   return stmtGetUserByEmail.get(email) || null;
@@ -836,7 +872,11 @@ function deletePasswordResetsForUser(userId) {
 }
 function updateUserPassword(userId, passwordHash) {
   stmtUpdateUserPassword.run(passwordHash, userId);
+  // Definiu senha de verdade: deixa de ser conta só-Google, e as telas que
+  // dependem disso (trocar senha, excluir conta) voltam ao normal.
+  stmtLimpaSemSenha.run(userId);
 }
+const stmtLimpaSemSenha = db.prepare(`UPDATE users SET sem_senha = 0 WHERE id = ?`);
 
 /* --------------------- EXCLUSÃO DE CONTA (LGPD art. 18) --------------------- */
 // Apaga a conta e os dados pessoais do titular, MAS mantém o histórico
@@ -2354,6 +2394,8 @@ module.exports = {
   markEmailFailed,
   createUser,
   getUserByEmail,
+  getUserByGoogleId,
+  setUserGoogleId,
   getUserById,
   getSavedAddress,
   saveAddress,

@@ -64,6 +64,22 @@ const SEM_2FA_DE_PROPOSITO = new Set([
   "GET /api/admin/2fa/status",
 ]);
 
+/* O login pelo Google NÃO pode servir de porta dos fundos para o painel:
+   requireAdminTwoFactor só confere se o 2FA está ATIVADO, não se esta sessão
+   passou pelo código. Se a recusa sumir da rota, o painel passa a ser
+   acessível com um toque no botão do Google — sem código nenhum. */
+test("entrar com o Google recusa admin e quem tem verificação em duas etapas", () => {
+  const fonte = fs.readFileSync(path.join(RAIZ, "server.js"), "utf8");
+  const inicio = fonte.indexOf('app.post("/api/auth/google"');
+  assert.ok(inicio > 0, "rota de login com o Google sumiu");
+  const trecho = fonte.slice(inicio, inicio + 3000);
+  assert.ok(/recusaGoogleParaContaProtegida/.test(trecho), "a recusa saiu da rota");
+
+  const guarda = fonte.slice(fonte.indexOf("function recusaGoogleParaContaProtegida"));
+  assert.ok(/isAdminEmail/.test(guarda.slice(0, 400)), "deixou de recusar e-mail de admin");
+  assert.ok(/totp_secret/.test(guarda.slice(0, 400)), "deixou de recusar conta com 2FA");
+});
+
 test("toda rota /api/admin exige admin + verificação em duas etapas", () => {
   const fonte = fs.readFileSync(path.join(RAIZ, "server.js"), "utf8");
   const re = /app\.(get|post|put|patch|delete)\(\s*"(\/api\/admin[^"]*)"\s*,([^\n]*)/g;
@@ -121,11 +137,11 @@ const CSP_ESPERADA = {
   "frame-ancestors": "'self'",
   "img-src": "'self' https: data: blob:",
   "object-src": "'none'",
-  "script-src": "'self' https://sdk.mercadopago.com",
+  "script-src": "'self' https://sdk.mercadopago.com https://accounts.google.com",
   "script-src-attr": "'none'",
-  "style-src": "'self' 'unsafe-inline'",
-  "connect-src": "'self' https://api.mercadopago.com https://viacep.com.br",
-  "frame-src": "https://www.mercadopago.com https://www.mercadopago.com.br",
+  "style-src": "'self' 'unsafe-inline' https://accounts.google.com",
+  "connect-src": "'self' https://api.mercadopago.com https://viacep.com.br https://accounts.google.com",
+  "frame-src": "https://www.mercadopago.com https://www.mercadopago.com.br https://accounts.google.com",
 };
 
 function lerCsp(texto){
@@ -208,6 +224,16 @@ const DIVERGENCIAS_ACEITAS = {
   // Mercado Pago, não fala com a API deles e não abre iframe nenhum. Menos
   // permissão que as outras páginas, de propósito.
   "avaliar.html": { "script-src": "'self'", "connect-src": "'self'", "frame-src": AUSENTE },
+  // Única página com "Entrar com o Google": só ela precisa falar com o
+  // accounts.google.com. As outras 12 ficam sem essa permissão de propósito —
+  // o cabeçalho do servidor é um só, mas a <meta> de cada página pode (e
+  // deve) ser mais restrita que ele.
+  "conta.html": {
+    "script-src": "'self' https://sdk.mercadopago.com https://accounts.google.com",
+    "style-src": "'self' 'unsafe-inline' https://accounts.google.com",
+    "connect-src": "'self' https://api.mercadopago.com https://viacep.com.br https://accounts.google.com",
+    "frame-src": "https://www.mercadopago.com https://www.mercadopago.com.br https://accounts.google.com",
+  },
 };
 
 // Servida pelo nginx/Apache quando o Node está fora do ar, então não passa por
