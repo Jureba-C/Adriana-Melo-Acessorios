@@ -1604,6 +1604,7 @@
     if(!qvShareFabLista || qvShareFabLista.hidden) return;
     qvShareFabLista.hidden = true;
     qvShareFabBtn.setAttribute("aria-expanded", "false");
+    document.getElementById("qvThumb")?.classList.remove("is-compartilhando");
   }
 
   if(qvShareFabBtn){
@@ -1611,6 +1612,7 @@
       const abrindo = qvShareFabLista.hidden;
       qvShareFabLista.hidden = !abrindo;
       qvShareFabBtn.setAttribute("aria-expanded", String(abrindo));
+      document.getElementById("qvThumb")?.classList.toggle("is-compartilhando", abrindo);
     });
     document.addEventListener("click", (e) => {
       if(!qvShareFabEl.contains(e.target)) fecharCompartilharFlutuante();
