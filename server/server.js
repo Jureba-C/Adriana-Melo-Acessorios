@@ -4712,7 +4712,7 @@ app.get("/api/products", (req, res) => {
   const products = getAllProductIds()
     .map(id => ({ id, p: effectiveProduct(id, overridesMap) }))
     .filter(({ p }) => !p.hidden)
-    .map(({ id, p }) => ({ id, name: p.name, price: p.price, photoUrl: p.photoUrl, photos: p.photos, category: p.category, badges: p.badges, soldOut: p.soldOut, description: p.description }));
+    .map(({ id, p }) => ({ id, name: p.name, price: p.price, photoUrl: p.photoUrl, photos: p.photos, category: p.category, badges: p.badges, soldOut: p.soldOut, description: p.description, slug: produtoUrl.caminhoDoProduto(id, p.name) }));
   // `paymentRules` viaja junto do catálogo (em vez de numa rota própria) para
   // não gastar mais uma das requisições do rate limit por carregamento de
   // página. A vitrine calcula os preços sozinha com o js/pricing.js que já

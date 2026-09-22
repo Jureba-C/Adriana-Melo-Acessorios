@@ -244,6 +244,10 @@
     return `${plano.count}x de ${formatMoney(plano.value)}`;
   }
 
+  function enderecoDoProduto(p){
+    return p.slug || PLCProdutoUrl.caminhoDoProduto(p.id, p.name);
+  }
+
   function cartaoDeProdutoHTML(p, i){
       const pay = pricing.paymentSummaryFor(p.price);
       const parcelamento = rotuloCurtoDeParcelamento(pay);
@@ -265,7 +269,7 @@
           </div>
           <div class="product-body">
             <div class="product-cat">${escapeHTML(p.catLabel)}</div>
-            <div class="product-name">${escapeHTML(p.name)}</div>
+            <div class="product-name"><a class="product-name-link" href="${enderecoDoProduto(p)}">${escapeHTML(p.name)}</a></div>
             <div class="d-flex align-items-end justify-content-between gap-2">
               <div class="product-pricing">
                 <span class="product-price">${formatMoney(p.price)}</span>
@@ -464,6 +468,7 @@
             color: PALETA_DECORATIVA[o.id % PALETA_DECORATIVA.length],
             badges: Array.isArray(o.badges) ? o.badges : [],
             soldOut: Boolean(o.soldOut),
+            slug: o.slug || null,
             desc: o.description || "Peça exclusiva, feita à mão pela Adriana Melo Acessórios.",
             image: o.photoUrl || null,
             photos: Array.isArray(o.photos) ? o.photos : (o.photoUrl ? [o.photoUrl] : []),
@@ -474,6 +479,7 @@
           return;
         }
         if(o.name && o.name !== p.name){ p.name = o.name; changed = true; }
+        if(o.slug && o.slug !== p.slug){ p.slug = o.slug; changed = true; }
         if(o.description && o.description !== p.desc){ p.desc = o.description; changed = true; }
         if(o.price != null && o.price !== p.price){ p.price = o.price; changed = true; }
         if(o.photoUrl && o.photoUrl !== p.image){ p.image = o.photoUrl; changed = true; }
@@ -1526,6 +1532,15 @@
       : "à vista ou boleto";
   }
 
+  const qvShareEl = document.getElementById("qvShare");
+
+  function atualizarCompartilharDoProduto(p){
+    if(!qvShareEl) return;
+    qvShareEl.dataset.shareUrl = location.origin + enderecoDoProduto(p);
+    qvShareEl.dataset.shareText = `Olha esse ${p.name} feito à mão 🎀`;
+    if(window.PLCCompartilhar) window.PLCCompartilhar.ligar(qvShareEl);
+  }
+
   function openQuickView(id, opts){
     opts = opts || {};
     const p = findProduct(id);
@@ -1564,9 +1579,10 @@
     }
 
     renderQuickViewPayment();
+    atualizarCompartilharDoProduto(p);
     qvModal.show();
     if(!opts.fromPopState){
-      history.pushState({ quickView: id }, "", location.pathname + location.search);
+      history.pushState({ quickView: id }, "", enderecoDoProduto(p) + location.search);
       qvHistoryPushed = true;
     }
   }
@@ -1598,7 +1614,9 @@
     }
 
     const card = e.target.closest(".product-card");
-    if(card) openQuickView(Number(card.dataset.id));
+    if(!card) return;
+    if(e.target.closest(".product-name-link")) e.preventDefault();
+    openQuickView(Number(card.dataset.id));
   });
 
   grid.addEventListener("keydown", function(e){
