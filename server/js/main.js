@@ -614,26 +614,10 @@
     return true;
   }
 
-  const PENDING_ITEM_KEY = "plc_item_pendente";
   const RECOVERED_CART_KEY = "plc_carrinho_recuperado";
 
   function addToCart(id, qty){
     if(findProduct(id)?.soldOut) return;
-
-    if(!currentUser){
-      try{
-        sessionStorage.setItem(PENDING_ITEM_KEY, JSON.stringify({ id, qty }));
-      }catch(err){
-        console.warn("Não foi possível guardar o item pendente:", err);
-      }
-
-      if(!sessionChecked){
-        redirectAoSaberDaSessao = true;
-        return;
-      }
-      window.location.href = "/conta.html?retorno=carrinho";
-      return;
-    }
 
     const existing = cart.find(i => i.id === id);
     if(existing){
@@ -714,7 +698,6 @@
   let currentUser = null;
 
   let sessionChecked = false;
-  let redirectAoSaberDaSessao = false;
 
   let coupon = null; 
 
@@ -828,7 +811,7 @@
   }
 
   function checkoutBlockInfo(){
-    if(!currentUser || cart.length === 0) return null;
+    if(cart.length === 0) return null;
     if(!shipping){
       return { icon: "bi-truck", text: "Informe seu CEP e calcule o frete para liberar o pagamento." };
     }
@@ -852,13 +835,8 @@
     sessionChecked = true;
     renderAuthGate();
 
+    devolverEnderecoDigitado();
     prefillFromAccount();
-
-    if(!currentUser && redirectAoSaberDaSessao){
-      window.location.href = "/conta.html?retorno=carrinho";
-      return;
-    }
-    resgatarItemPendente();
     aplicarCarrinhoRecuperado();
     updateTotals();
   });
@@ -872,28 +850,11 @@
     }
     if(!Array.isArray(itens) || !itens.length) return;
 
-    if(!currentUser){
-      window.location.href = "/conta.html?retorno=carrinho";
-      return;
-    }
-
     sessionStorage.removeItem(RECOVERED_CART_KEY);
     itens.forEach(item => addToCart(item.id, item.qty));
     bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("cartOffcanvas")).show();
   }
 
-  function resgatarItemPendente(){
-    if(!currentUser) return;
-    let pendente = null;
-    try{
-      pendente = JSON.parse(sessionStorage.getItem(PENDING_ITEM_KEY) || "null");
-    }catch(err){
-      console.warn("Item pendente ilegível:", err);
-    }
-
-    sessionStorage.removeItem(PENDING_ITEM_KEY);
-    if(pendente?.id) addToCart(Number(pendente.id), Number(pendente.qty) || 1);
-  }
   renderAuthGate();
 
   const gatewayTextEl = document.getElementById("cartGatewayText");
@@ -1067,6 +1028,34 @@
     cidade: document.getElementById("addrCidade"),
     uf: document.getElementById("addrUf"),
   };
+
+  const GUEST_ADDRESS_KEY = "plc_endereco_digitado";
+
+  function guardarEnderecoDigitado(){
+    const valores = {};
+    Object.entries(addrInputs).forEach(([campo, input]) => { valores[campo] = input.value; });
+    valores.cep = cepInput ? cepInput.value : "";
+    try{
+      sessionStorage.setItem(GUEST_ADDRESS_KEY, JSON.stringify(valores));
+    }catch(err){
+      console.warn("Não foi possível guardar o endereço digitado:", err);
+    }
+  }
+
+  function devolverEnderecoDigitado(){
+    let valores = null;
+    try{
+      valores = JSON.parse(sessionStorage.getItem(GUEST_ADDRESS_KEY) || "null");
+    }catch(err){
+      console.warn("Endereço digitado ilegível:", err);
+    }
+    sessionStorage.removeItem(GUEST_ADDRESS_KEY);
+    if(!valores) return;
+    Object.entries(addrInputs).forEach(([campo, input]) => {
+      if(!input.value && valores[campo]) input.value = valores[campo];
+    });
+    if(cepInput && !cepInput.value && valores.cep) fillCep(valores.cep);
+  }
 
   function getAddress(){
     return {
@@ -1369,6 +1358,7 @@
   async function goToCheckout(){
 
     if(!currentUser){
+      guardarEnderecoDigitado();
       window.location.href = "/conta.html?retorno=carrinho";
       return;
     }

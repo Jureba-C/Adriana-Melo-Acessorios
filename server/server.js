@@ -2192,8 +2192,10 @@ app.post("/api/validate-coupon", strictLimiter, (req, res) => {
         item da compra.
 
    Exige sessão (auth.requireAuth): comprar sem conta não é permitido, para
-   que todo pedido tenha um dono e apareça em "Meus pedidos". O aviso no
-   carrinho (js/main.js) é só conveniência — a trava é esta.
+   que todo pedido tenha um dono e apareça em "Meus pedidos". Esta é a ÚNICA
+   trava — encher o carrinho, cotar frete e aplicar cupom não pedem conta
+   nenhuma, como em qualquer loja. O botão "Entrar para finalizar" do
+   carrinho (js/main.js) é só o aviso antecipado desta linha aqui.
 ========================================================================= */
 /* Valida o pedido que chegou do carrinho e recalcula tudo do lado do
    servidor: itens, cupom, desconto do Pix e frete. É o miolo compartilhado
