@@ -57,6 +57,7 @@ const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // em formato UMD) — é o que garante que o "5% no Pix" e o "3x sem juros"
 // mostrados na tela do produto sejam exatamente os valores cobrados aqui.
 const pricing = require("./js/pricing.js");
+const produtoUrl = require("./js/produto-url.js");
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -789,6 +790,9 @@ const PUBLIC_TOP_LEVEL = new Set([
   // Perplexity) — mesmo papel do robots.txt, só que para quem lê o site
   // para responder perguntas em vez de indexar.
   "llms.txt",
+  // Endereço próprio de cada produto (app.get("/laco/:apelido") mais abaixo).
+  // Sem entrar aqui, a allowlist barra o link antes de a rota existir.
+  "laco",
 ]);
 // Usada tanto pelo bloqueio de allowlist abaixo quanto pelo catch-all no fim
 // do arquivo (depois de express.static e de todas as rotas). Navegação de
@@ -1073,16 +1077,17 @@ function atributoCupomBoasVindas(){
 // visitou antes de uma troca (ícone, foto do hero etc.) fica com a versão
 // antiga por até um ano em qualquer aparelho, sem jeito de forçar
 // atualização a não ser limpando o cache manualmente.
-const REF_ASSET = /\b(href|src)="((?:css|js|img)\/[^"?#]+\.(?:css|js|jpg|jpeg|png|svg|webp|gif)|favicon\.ico|apple-touch-icon\.png)"/g;
+const REF_ASSET = /\b(href|src)="(\/?(?:css|js|img)\/[^"?#]+\.(?:css|js|jpg|jpeg|png|svg|webp|gif)|\/?favicon\.ico|\/?apple-touch-icon\.png)"/g;
 // srcset é outro atributo e outra gramática ("arquivo 400w, arquivo 760w"),
 // então não cabe no REF_ASSET acima — mas precisa do MESMO ?v=, senão a foto
 // responsiva do hero seria o único asset da página a cair no "no-cache" e
 // pagar uma revalidação por visita.
 const REF_SRCSET = /\bsrcset="([^"]+)"/g;
-const CAMINHO_NO_SRCSET = /((?:css|js|img)\/[^\s,?#]+\.(?:jpg|jpeg|png|svg|webp|gif))/g;
+const CAMINHO_NO_SRCSET = /(\/?(?:css|js|img)\/[^\s,?#]+\.(?:jpg|jpeg|png|svg|webp|gif))/g;
 // Marcadores no <head>/<body> do index.html, trocados na hora de servir.
 const MARCA_JSONLD = "<!--#DADOS-ESTRUTURADOS#-->";
 const MARCA_CUPOM = "<!--#CUPOM-BOAS-VINDAS#-->";
+const MARCA_META_SOCIAL = "<!--#META-SOCIAL#-->";
 /* O resultado fica guardado por página. Sem isto, TODA visita pagava um
    readFileSync bloqueante de 68 KB + a regex por cima dele + a reconstrução
    do JSON-LD inteiro a partir do SQLite — e como o HTML sai com "no-cache",
@@ -1464,10 +1469,10 @@ const FOTOS_HERO_PADRAO = [
 function fontesDaFoto(foto){
   return foto.slug
     ? {
-        webp480: comVersao(`img/${foto.slug}-480.webp`),
-        webp960: comVersao(`img/${foto.slug}-960.webp`),
-        jpg480:  comVersao(`img/${foto.slug}-480.jpg`),
-        jpg960:  comVersao(`img/${foto.slug}-960.jpg`),
+        webp480: comVersao(`/img/${foto.slug}-480.webp`),
+        webp960: comVersao(`/img/${foto.slug}-960.webp`),
+        jpg480:  comVersao(`/img/${foto.slug}-480.jpg`),
+        jpg960:  comVersao(`/img/${foto.slug}-960.jpg`),
         temWebpSeparado: true,
       }
     : {
@@ -1574,6 +1579,136 @@ function comAvaliacoes(html){
   return saida;
 }
 
+/* =========================================================================
+   META SOCIAL POR PRODUTO — o cartão que aparece ao colar o link no WhatsApp
+   -------------------------------------------------------------------------
+   As tags og:/twitter: são as MESMAS para a página inteira, então elas não
+   cabem no CACHE_HTML (uma entrada por arquivo). Ficam num marcador trocado
+   DEPOIS do cache, como o cupom e as avaliações já fazem.
+
+   ⚠️ Troca por função, não por string: nome de produto é texto que a lojista
+   escreve, e "$&" numa string de substituição reinjetaria o marcador.
+========================================================================= */
+const OG_IMAGEM_PADRAO = `${SITE_URL}/img/og-adriana-melo-6b333a.jpg`;
+
+function metaSocialPadrao(){
+  return `<link rel="canonical" href="${SITE_URL}/">
+
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Adriana Melo Acessórios">
+<meta property="og:url" content="${SITE_URL}/">
+<meta property="og:title" content="Adriana Melo Acessórios — Laços artesanais feitos com carinho">
+<meta property="og:description" content="Presilhas e laços artesanais em cetim e algodão, feitos sob encomenda na cor que você escolher. Envio para todo o Brasil.">
+<meta property="og:image" content="${OG_IMAGEM_PADRAO}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:alt" content="Adriana Melo Acessórios">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Adriana Melo Acessórios — Laços artesanais feitos com carinho">
+<meta name="twitter:description" content="Presilhas e laços artesanais em cetim e algodão, feitos sob encomenda na cor que você escolher.">
+<meta name="twitter:image" content="${OG_IMAGEM_PADRAO}">`;
+}
+
+/* A foto do produto vive em três formas (BLOB no banco, arquivo em /img, URL
+   externa colada pela lojista) e o WhatsApp só aceita endereço absoluto. A
+   variante ?w=900 é a maior da lista fixa de LARGURAS_DE_FOTO — pedir uma
+   largura fora dela devolveria o original inteiro, que pode ser pesado
+   demais para o robô de prévia baixar. */
+function imagemSocialDoProduto(p){
+  const foto = p.photoUrl;
+  if(!foto) return OG_IMAGEM_PADRAO;
+  if(foto.startsWith("http")) return foto;
+  if(foto.startsWith("/api/products/photos/")) return `${SITE_URL}${foto}?w=900`;
+  return `${SITE_URL}/${foto.replace(/^\//, "")}`;
+}
+
+function descricaoDoProduto(p){
+  if(p.description) return p.description;
+  const rotulo = getAllCategories().find(c => c.slug === p.category)?.label || p.category;
+  return `${p.name} — laço artesanal feito à mão pela Adriana Melo Acessórios, ideal para ${String(rotulo).toLowerCase()}.`;
+}
+
+function tituloDoProduto(p){
+  return `${p.name} — Adriana Melo Acessórios`;
+}
+
+function metaSocialDoProduto(id, p){
+  const url = SITE_URL + produtoUrl.caminhoDoProduto(id, p.name);
+  const titulo = escaparHtml(tituloDoProduto(p));
+  const descricao = escaparHtml(descricaoDoProduto(p));
+  const imagem = escaparHtml(imagemSocialDoProduto(p));
+  return `<link rel="canonical" href="${escaparHtml(url)}">
+
+<meta property="og:type" content="product">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Adriana Melo Acessórios">
+<meta property="og:url" content="${escaparHtml(url)}">
+<meta property="og:title" content="${titulo}">
+<meta property="og:description" content="${descricao}">
+<meta property="og:image" content="${imagem}">
+<meta property="og:image:alt" content="${escaparHtml(p.name)}">
+<meta property="product:price:amount" content="${p.price.toFixed(2)}">
+<meta property="product:price:currency" content="BRL">
+<meta property="product:availability" content="${p.soldOut ? "out of stock" : "in stock"}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${titulo}">
+<meta name="twitter:description" content="${descricao}">
+<meta name="twitter:image" content="${imagem}">`;
+}
+
+function comMetaSocial(html, destaque){
+  if(!html.includes(MARCA_META_SOCIAL)) return html;
+  if(!destaque) return html.replace(MARCA_META_SOCIAL, () => metaSocialPadrao());
+  const { id, produto } = destaque;
+  return html
+    .replace(MARCA_META_SOCIAL, () => metaSocialDoProduto(id, produto))
+    .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escaparHtml(tituloDoProduto(produto))}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/,
+      () => `<meta name="description" content="${escaparHtml(descricaoDoProduto(produto))}">`)
+    // Sem isto a página abriria na vitrine e a cliente teria de procurar, na
+    // mão, o laço que acabou de receber por link.
+    .replace("<body ", () => `<body data-produto="${id}" `);
+}
+
+/* =========================================================================
+   /laco/<id>-<apelido> — endereço próprio de cada produto
+   -------------------------------------------------------------------------
+   O id vem primeiro e é a única parte lida: renomear um produto no painel
+   não pode quebrar link que já circula no WhatsApp. O apelido é enfeite
+   legível, e quando ele muda a resposta é 301 para o canônico, para o Google
+   não indexar o mesmo produto em dois endereços.
+
+   Produto inexistente ou escondido cai na vitrine (302), não em 404: um link
+   compartilhado que vira parede é venda perdida, e o produto pode ter só
+   mudado de nome ou saído de catálogo.
+========================================================================= */
+app.get("/laco/:apelido", (req, res, next) => {
+  const id = produtoUrl.idDoApelido(req.params.apelido);
+  const produto = id == null ? null : effectiveProduct(id, getProductOverridesMap());
+  // Endereço que nunca existiu é 404 de verdade: redirecionar tudo para a
+  // vitrine vira "soft 404" — o Google reclama e o robô volta a pedir o
+  // endereço morto para sempre.
+  if(!produto) return sendNotFound(req, res);
+  // Escondido é diferente: o produto existe e pode voltar, então o link que
+  // já circula leva para a vitrine em vez de para uma parede.
+  if(produto.hidden) return res.redirect(302, "/#colecoes");
+
+  const canonico = produtoUrl.caminhoDoProduto(id, produto.name);
+  if(`/laco/${req.params.apelido}` !== canonico){
+    // A query vai junto: sem isso o 301 apagaria o utm_source=whatsapp do
+    // link compartilhado e a origem da visita sumiria.
+    return res.redirect(301, canonico + req.originalUrl.slice(req.path.length));
+  }
+
+  let html;
+  try { html = htmlVersionado(path.join(SITE_ROOT, "index.html")); } catch { return next(); }
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  return res.send(comMetaSocial(html, { id, produto }));
+});
+
 app.use((req, res, next) => {
   if(req.method !== "GET" && req.method !== "HEAD") return next();
   let rota = decodeURIComponent(req.path);
@@ -1588,7 +1723,7 @@ app.use((req, res, next) => {
   try { html = htmlVersionado(arquivo); } catch { return next(); }
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache");
-  return res.send(html);
+  return res.send(comMetaSocial(html, null));
 });
 
 /* Antes do express.static: entrega CSS/JS já comprimidos em brotli 11 quando

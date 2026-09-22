@@ -28,7 +28,7 @@
         '</div>' +
         '<p class="cookie-consent-text">Usamos só o cookie do login e guardamos o carrinho no seu próprio navegador. ' +
           'Nada de rastreamento. Veja mais na nossa ' +
-          '<a href="politica.html#privacidade">Política de Privacidade</a>.</p>' +
+          '<a href="/politica.html#privacidade">Política de Privacidade</a>.</p>' +
       '</div>' +
       '<div class="cookie-consent-actions">' +
         '<button type="button" class="btn-blush cookie-consent-btn" data-consent="seen">Entendi</button>' +

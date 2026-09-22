@@ -526,7 +526,14 @@
     window.location.reload();
   }
 
-  loadProductOverrides();
+  function abrirProdutoDoEndereco(){
+    const id = Number(document.body.dataset.produto);
+    if(!Number.isInteger(id) || !findProduct(id)) return;
+    aberturaPorEndereco = true;
+    openQuickView(id, { fromPopState: true });
+  }
+
+  loadProductOverrides().then(abrirProdutoDoEndereco);
 
   document.getElementById("filterGroup").addEventListener("click", function(e){
     const btn = e.target.closest(".chip");
@@ -614,7 +621,7 @@
         redirectAoSaberDaSessao = true;
         return;
       }
-      window.location.href = "conta.html?retorno=carrinho";
+      window.location.href = "/conta.html?retorno=carrinho";
       return;
     }
 
@@ -838,7 +845,7 @@
     prefillFromAccount();
 
     if(!currentUser && redirectAoSaberDaSessao){
-      window.location.href = "conta.html?retorno=carrinho";
+      window.location.href = "/conta.html?retorno=carrinho";
       return;
     }
     resgatarItemPendente();
@@ -1332,7 +1339,7 @@
   async function goToCheckout(){
 
     if(!currentUser){
-      window.location.href = "conta.html?retorno=carrinho";
+      window.location.href = "/conta.html?retorno=carrinho";
       return;
     }
     if(cart.length === 0) return;
@@ -1421,8 +1428,16 @@
 
   let qvHistoryPushed = false;
   let qvClosingFromPopstate = false;
+  let aberturaPorEndereco = false;
 
   qvModalEl.addEventListener("hidden.bs.modal", () => {
+    if(aberturaPorEndereco){
+      aberturaPorEndereco = false;
+      history.replaceState(null, "", "/");
+      qvHistoryPushed = false;
+      qvClosingFromPopstate = false;
+      return;
+    }
     if(qvHistoryPushed && !qvClosingFromPopstate){
       qvHistoryPushed = false;
       history.back();

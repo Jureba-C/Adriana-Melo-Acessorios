@@ -18,7 +18,7 @@
         <p class="section-sub mb-4">Você pode tentar recarregar a página. Se o problema continuar, volte para o início e tente de novo em instantes.</p>
         <div class="d-flex flex-column gap-2">
           <button type="button" class="btn-blush" id="errorBoundaryReload">Recarregar página</button>
-          <a href="index.html" class="btn-outline-blush">Voltar ao Início</a>
+          <a href="/index.html" class="btn-outline-blush">Voltar ao Início</a>
         </div>
       </div>
     `;
