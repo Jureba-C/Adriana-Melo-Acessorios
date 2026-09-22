@@ -967,7 +967,10 @@ function dadosEstruturados(){
   const rotuloCategoria = new Map(getAllCategories().map(c => [c.slug, c.label]));
   const produtos = getAllProductIds().map((id, i) => {
     const p = effectiveProduct(id, overridesMap);
-    if(!p) return null;
+    // Escondido pelo painel não pode continuar anunciado ao Google: o
+    // endereço responde desvio para a vitrine, e marcação apontando para
+    // desvio é exatamente o que vira "produto indisponível" no Search Console.
+    if(!p || p.hidden) return null;
     const categoria = rotuloCategoria.get(p.category) || p.category;
     const item = {
       "@type": "Product",
@@ -983,9 +986,11 @@ function dadosEstruturados(){
         "@type": "Offer",
         price: p.price.toFixed(2),
         priceCurrency: "BRL",
-        availability: "https://schema.org/InStock",
+        availability: p.soldOut
+          ? "https://schema.org/OutOfStock"
+          : "https://schema.org/InStock",
         itemCondition: "https://schema.org/NewCondition",
-        url: `${SITE_URL}/#colecoes`,
+        url: SITE_URL + produtoUrl.caminhoDoProduto(id, p.name),
         seller: { "@id": `${SITE_URL}/#loja` },
         hasMerchantReturnPolicy: { "@id": POLITICA_TROCA_ID },
       },
@@ -995,8 +1000,8 @@ function dadosEstruturados(){
     if(p.photoUrl){
       item.image = p.photoUrl.startsWith("http") ? p.photoUrl : `${SITE_URL}/${p.photoUrl.replace(/^\//, "")}`;
     }
-    return { "@type": "ListItem", position: i + 1, item };
-  }).filter(Boolean);
+    return { "@type": "ListItem", item };
+  }).filter(Boolean).map((linha, i) => ({ ...linha, position: i + 1 }));
 
   return {
     "@context": "https://schema.org",
@@ -1088,6 +1093,7 @@ const CAMINHO_NO_SRCSET = /(\/?(?:css|js|img)\/[^\s,?#]+\.(?:jpg|jpeg|png|svg|we
 const MARCA_JSONLD = "<!--#DADOS-ESTRUTURADOS#-->";
 const MARCA_CUPOM = "<!--#CUPOM-BOAS-VINDAS#-->";
 const MARCA_META_SOCIAL = "<!--#META-SOCIAL#-->";
+const MARCA_DADOS_PRODUTO = "<!--#DADOS-PRODUTO#-->";
 /* O resultado fica guardado por página. Sem isto, TODA visita pagava um
    readFileSync bloqueante de 68 KB + a regex por cima dele + a reconstrução
    do JSON-LD inteiro a partir do SQLite — e como o HTML sai com "no-cache",
@@ -1658,12 +1664,54 @@ function metaSocialDoProduto(id, p){
 <meta name="twitter:image" content="${imagem}">`;
 }
 
+/* A página de um laço precisa de uma entidade principal, não só de uma
+   linha dentro da ItemList da loja — é o que faz o Google mostrar preço e
+   disponibilidade no resultado daquele produto. Sai num marcador separado
+   porque o JSON-LD da loja é montado DENTRO do CACHE_HTML e é igual para
+   todo mundo; este varia por produto.
+
+   Continua sem aggregateRating: as avaliações do site são por PEDIDO, e
+   pendurar a média da loja num produto específico é exatamente a marcação
+   inventada que dadosEstruturados() se recusa a emitir. */
+function blocoDadosDoProduto(id, p){
+  const categoria = getAllCategories().find(c => c.slug === p.category)?.label || p.category;
+  const dados = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: p.name,
+    description: descricaoDoProduto(p),
+    category: categoria,
+    url: SITE_URL + produtoUrl.caminhoDoProduto(id, p.name),
+    image: imagemSocialDoProduto(p),
+    brand: { "@type": "Brand", name: "Adriana Melo Acessórios" },
+    offers: {
+      "@type": "Offer",
+      price: p.price.toFixed(2),
+      priceCurrency: "BRL",
+      availability: p.soldOut
+        ? "https://schema.org/OutOfStock"
+        : "https://schema.org/InStock",
+      itemCondition: "https://schema.org/NewCondition",
+      url: SITE_URL + produtoUrl.caminhoDoProduto(id, p.name),
+      seller: { "@id": `${SITE_URL}/#loja` },
+      hasMerchantReturnPolicy: { "@id": POLITICA_TROCA_ID },
+    },
+  };
+  const json = JSON.stringify(dados).replace(/</g, "\\u003c");
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
 function comMetaSocial(html, destaque){
   if(!html.includes(MARCA_META_SOCIAL)) return html;
-  if(!destaque) return html.replace(MARCA_META_SOCIAL, () => metaSocialPadrao());
+  if(!destaque){
+    return html
+      .replace(MARCA_META_SOCIAL, () => metaSocialPadrao())
+      .replace(MARCA_DADOS_PRODUTO, "");
+  }
   const { id, produto } = destaque;
   return html
     .replace(MARCA_META_SOCIAL, () => metaSocialDoProduto(id, produto))
+    .replace(MARCA_DADOS_PRODUTO, () => blocoDadosDoProduto(id, produto))
     .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escaparHtml(tituloDoProduto(produto))}</title>`)
     .replace(/<meta name="description" content="[^"]*">/,
       () => `<meta name="description" content="${escaparHtml(descricaoDoProduto(produto))}">`)
@@ -1684,6 +1732,49 @@ function comMetaSocial(html, destaque){
    compartilhado que vira parede é venda perdida, e o produto pode ter só
    mudado de nome ou saído de catálogo.
 ========================================================================= */
+/* =========================================================================
+   /sitemap.xml — gerado, não mais um arquivo fixo
+   -------------------------------------------------------------------------
+   Enquanto era arquivo, listava só a home e a política: nenhum produto
+   tinha endereço próprio para listar. Agora tem, e a lista muda toda vez
+   que a lojista cria, renomeia ou esconde um laço — coisa que um arquivo
+   em disco não acompanha.
+
+   Fica guardado em memória com a versão do catálogo junto (a mesma chave
+   que o JSON-LD usa, vinda do banco e não de um contador em memória, que
+   divergiria entre workers do Passenger). Precisa vir ANTES do
+   express.static, senão o arquivo antigo em disco responderia primeiro.
+========================================================================= */
+let CACHE_SITEMAP = null;
+
+function sitemapXml(){
+  const versao = db.catalogVersion();
+  if(CACHE_SITEMAP && CACHE_SITEMAP.versao === versao) return CACHE_SITEMAP.xml;
+
+  const overridesMap = getProductOverridesMap();
+  const linhas = [
+    `  <url>\n    <loc>${SITE_URL}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${SITE_URL}/politica.html</loc>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>`,
+  ];
+  for(const id of getAllProductIds()){
+    const p = effectiveProduct(id, overridesMap);
+    // Esgotado continua na lista: a página existe e volta a vender. Só o
+    // escondido sai, porque o endereço dele desvia para a vitrine.
+    if(!p || p.hidden) continue;
+    const loc = escaparHtml(SITE_URL + produtoUrl.caminhoDoProduto(id, p.name));
+    linhas.push(`  <url>\n    <loc>${loc}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`);
+  }
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${linhas.join("\n")}\n</urlset>\n`;
+  CACHE_SITEMAP = { versao, xml };
+  return xml;
+}
+
+app.get("/sitemap.xml", (req, res) => {
+  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.send(sitemapXml());
+});
+
 app.get("/laco/:apelido", (req, res, next) => {
   const id = produtoUrl.idDoApelido(req.params.apelido);
   const produto = id == null ? null : effectiveProduct(id, getProductOverridesMap());

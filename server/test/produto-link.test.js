@@ -125,3 +125,42 @@ test("esgotado continua com página, só muda a disponibilidade anunciada", asyn
   assert.match(html, /<meta property="product:availability" content="out of stock">/);
   db.upsertProductOverride(5, { soldOut: false });
 });
+
+test("o sitemap lista cada laço visível e some com o escondido", async () => {
+  const xml = await (await fetch(`${ORIGIN}/sitemap.xml`)).text();
+  assert.match(xml, /<loc>https:\/\/adrianameloacessorios\.com\/<\/loc>/);
+  assert.match(xml, /<loc>[^<]*\/laco\/2-laco-duquesa<\/loc>/);
+
+  db.upsertProductOverride(7, { hidden: true });
+  const depois = await (await fetch(`${ORIGIN}/sitemap.xml`)).text();
+  assert.doesNotMatch(depois, /\/laco\/7-/);
+  db.upsertProductOverride(7, { hidden: false });
+});
+
+test("a página do laço tem dados estruturados de produto, sem nota inventada", async () => {
+  const html = await (await fetch(`${ORIGIN}/laco/2-laco-duquesa`)).text();
+  const blocos = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+    .map(m => JSON.parse(m[1].replace(/\\u003c/g, "<")));
+  const produto = blocos.find(b => b["@type"] === "Product");
+  assert.ok(produto, "faltou o bloco Product");
+  assert.equal(produto.name, "Laço Duquesa");
+  assert.equal(produto.offers.price, "49.90");
+  assert.equal(produto.offers.availability, "https://schema.org/InStock");
+  assert.match(produto.url, /\/laco\/2-laco-duquesa$/);
+  assert.doesNotMatch(html, /aggregateRating/);
+});
+
+test("a home não carrega dados de um produto só", async () => {
+  const html = await (await fetch(`${ORIGIN}/`)).text();
+  assert.doesNotMatch(html, /<!--#DADOS-PRODUTO#-->/);
+  const blocos = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+  assert.equal(blocos.length, 1);
+});
+
+test("oferta do catálogo aponta para o endereço do laço, não para a vitrine", async () => {
+  const html = await (await fetch(`${ORIGIN}/`)).text();
+  const grafo = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const lista = grafo["@graph"].find(n => n["@type"] === "ItemList");
+  assert.match(lista.itemListElement[0].item.offers.url, /\/laco\/\d+-/);
+  assert.deepEqual(lista.itemListElement.map(l => l.position), lista.itemListElement.map((_, i) => i + 1));
+});

@@ -5,6 +5,7 @@ User-agent: *
 Allow: /$
 Allow: /index.html
 Allow: /politica.html
+Allow: /laco/
 Allow: /llms.txt
 Disallow: /admin.html
 Disallow: /conta.html
