@@ -36,7 +36,8 @@ const multer = require("multer");
 // UPLOAD DE FOTO DE PRODUTO, abaixo) — sem isso, um upload de 4MB
 // multiplicado por vários produtos incharia rápido o data.db.
 const sharp = require("sharp");
-const { randomUUID } = require("crypto");
+const crypto = require("crypto");
+const { randomUUID } = crypto;
 const rateLimit = require("express-rate-limit");
 // Só para desenhar o QR code do cadastro da verificação em duas etapas —
 // o algoritmo TOTP em si é feito com o crypto do próprio Node (lib/auth.js).
@@ -52,6 +53,7 @@ const email = require("./lib/email");
 const emailPhotos = require("./lib/emailPhotos.js");
 const campanhas = require("./lib/campanhas.js");
 const googleAuth = require("./lib/googleAuth.js");
+const tarefasPeriodicas = require("./scripts/tarefas-periodicas.js");
 const rastreio = require("./lib/rastreio.js");
 const { prazoDaCotacao } = require("./lib/prazoFrete.js");
 const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
@@ -142,6 +144,9 @@ if(!process.env.INSTAGRAM_ACCESS_TOKEN){
 }
 if(!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS){
   avisoConfig("SMTP incompleto (SMTP_HOST/PORT/USER/PASS). NENHUM e-mail sai do site: nem o recibo da cliente, nem o aviso de venda nova para a lojista, nem a redefinição de senha.");
+}
+if(!process.env.CRON_SECRET){
+  avisoConfig("CRON_SECRET não definido. As tarefas periódicas (fila de e-mail, lembrete de carrinho, campanhas) NUNCA rodam sozinhas nesta hospedagem sem cron tradicional — configure e agende um serviço externo batendo em /api/interno/tarefas-periodicas.");
 }
 if(!process.env.OWNER_EMAIL){
   avisoConfig("OWNER_EMAIL não definido. Você NÃO é avisada quando alguém compra nem quando chega mensagem pelo formulário de contato — o pedido entra normalmente, mas ninguém te conta.");
@@ -764,6 +769,13 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: MAX_AUTH_POR_JANE
 // da API permite. Sem um balde separado, uma cliente que demora para pagar
 // esbarraria no limite geral e o status parava de atualizar em silêncio.
 const statusPollLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500, handler: sendTooManyRequests });
+
+// Chamada esperada: uma a cada 15 minutos, de um serviço externo (ver rota
+// /api/interno/tarefas-periodicas). Um pouco de folga para retry do
+// provedor sem abrir espaço de verdade para adivinhar o CRON_SECRET —
+// mesmo raciocínio do authLimiter, só que aqui quem erra é sempre a MESMA
+// rota, então nem precisa da folga generosa dos limites de navegação.
+const cronLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, handler: sendTooManyRequests });
 
 /* =========================================================================
    ARQUIVOS ESTÁTICOS DO SITE
@@ -6219,6 +6231,58 @@ app.post("/api/admin/orders/:reference/generate-label", auth.requireAdmin, auth.
 // css/js/img ou /api) mas não bateu com nenhum arquivo real do
 // express.static nem com nenhuma rota da API — ex.: /css/arquivo-que-nao-
 // existe.css ou /api/rota-que-nao-existe.
+/* =========================================================================
+   POST /api/interno/tarefas-periodicas — cron sem cron
+   -------------------------------------------------------------------------
+   Esta hospedagem publica direto do GitHub e não tem cron job tradicional
+   (nem hPanel clássico, nem Gerenciador de Arquivos que sobrevive a um novo
+   deploy). A fila de e-mail, o lembrete de carrinho esquecido e o envio de
+   campanhas dependiam de scripts/tarefas-periodicas.js rodar sozinho a cada
+   15 minutos — sem cron, nada disso roda nunca.
+
+   Solução: um serviço externo gratuito (cron-job.org ou parecido) bate
+   nesta rota a cada 15 minutos, como faria um cron de verdade. A rota é
+   pública (qualquer um pode tentar chamá-la), então quem prova que é o
+   serviço agendado — e não um estranho — é o CRON_SECRET na query string,
+   comparado em tempo constante (mesmo cuidado do token de descadastro).
+
+   GET, não POST: os serviços gratuitos de "bater uma URL de tempos em
+   tempos" só sabem fazer GET. Por ser GET, o verifyOrigin já deixa passar
+   sem Origin (a mesma regra que abre exceção para o link de descadastro).
+
+   Uma trava em memória (não no banco) impede duas rodadas ao mesmo tempo —
+   dois provedores de cron configurados por engano, ou uma rodada lenta
+   ainda em andamento quando a próxima dispara. Não precisa sobreviver a um
+   reinício do processo: nesse caso já não há rodada em andamento mesmo. */
+let tarefasPeriodicasRodando = false;
+
+app.get("/api/interno/tarefas-periodicas", cronLimiter, async (req, res) => {
+  const segredo = process.env.CRON_SECRET;
+  if(!segredo){
+    return res.status(503).json({ error: "CRON_SECRET não configurado no servidor." });
+  }
+  const recebido = String(req.query.token || "");
+  const bateu = recebido.length === segredo.length
+    && crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(segredo));
+  if(!bateu){
+    return res.status(401).json({ error: "Token inválido." });
+  }
+  if(tarefasPeriodicasRodando){
+    return res.status(409).json({ error: "Já tem uma rodada em andamento." });
+  }
+
+  tarefasPeriodicasRodando = true;
+  try{
+    await tarefasPeriodicas.main();
+    res.json({ ok: true, em: new Date().toISOString() });
+  }catch(err){
+    console.error("Erro numa rodada de tarefas periódicas via HTTP:", err);
+    res.status(500).json({ error: "Rodada falhou. Ver log do servidor." });
+  }finally{
+    tarefasPeriodicasRodando = false;
+  }
+});
+
 app.use(sendNotFound);
 
 /* =========================================================================

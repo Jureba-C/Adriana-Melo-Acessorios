@@ -166,6 +166,20 @@ Ele tira um snapshot consistente (funciona com o site no ar), criptografa em
 AES-256-GCM e guarda em `server/backups/data-AAAA-MM-DD-HH-MM-SS.db.enc`,
 apagando sozinho o que passar de 30 dias.
 
+⚠️ **Se a hospedagem não tiver cron job** (é o caso do painel novo da
+Hostinger, que publica direto do GitHub): não existe onde agendar nada. Use
+um serviço externo gratuito (cron-job.org e similares) batendo de 15 em 15
+minutos em:
+
+```
+https://SEUDOMINIO/api/interno/tarefas-periodicas?token=SEU_CRON_SECRET
+```
+
+Ver `CRON_SECRET` no `.env.example`. Sem isso, a fila de e-mail, o lembrete
+de carrinho esquecido e as campanhas nunca rodam sozinhos. O backup abaixo
+não tem equivalente por HTTP — nessa hospedagem ele precisa ser rodado à
+mão por SSH de vez em quando.
+
 **Agendar (cron do hPanel, diário às 3h):**
 
 ```
