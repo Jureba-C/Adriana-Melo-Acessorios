@@ -145,6 +145,9 @@ if(!process.env.INSTAGRAM_ACCESS_TOKEN){
 if(!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS){
   avisoConfig("SMTP incompleto (SMTP_HOST/PORT/USER/PASS). NENHUM e-mail sai do site: nem o recibo da cliente, nem o aviso de venda nova para a lojista, nem a redefinição de senha.");
 }
+if(EM_PRODUCAO && process.env.NODE_ENV !== "production"){
+  avisoConfig("NODE_ENV não está como 'production'. O cookie de sessão continua seguro (o Secure também olha o CLIENT_ORIGIN), mas bibliotecas de terceiros podem assumir modo de desenvolvimento — ajuste no painel.");
+}
 if(!process.env.CRON_SECRET){
   avisoConfig("CRON_SECRET não definido. As tarefas periódicas (fila de e-mail, lembrete de carrinho, campanhas) NUNCA rodam sozinhas nesta hospedagem sem cron tradicional — configure e agende um serviço externo batendo em /api/interno/tarefas-periodicas.");
 }
@@ -3457,7 +3460,15 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
     if(!auth.isValidCpf(cpf)){
       return res.status(400).json({ error: "CPF inválido — confira os números digitados." });
     }
-    if(db.getUserByEmail(email)){
+    /* ⚠️ Mesma resposta de "já existe" para e-mail de admin, de propósito:
+       ser admin depende SÓ de o e-mail estar em ADMIN_EMAIL_HASHES, e o
+       e-mail da lojista está publicado no site. Se a conta dela não
+       existisse — banco restaurado, conta excluída, ou um segundo admin
+       cadastrado no .env antes de criar a conta — qualquer pessoa
+       registraria aquele e-mail e entraria no painel, porque a conta nova
+       não tem 2FA e poderia ativar o próprio. O 409 genérico fecha a porta
+       sem confirmar quais e-mails são de admin. */
+    if(db.getUserByEmail(email) || auth.isAdminEmail(email)){
       return res.status(409).json({ error: "Já existe uma conta com este e-mail." });
     }
 
@@ -3747,6 +3758,12 @@ app.post("/api/auth/login/2fa/email", authLimiter, async (req, res) => {
     if(result.error === "expired"){
       return res.status(401).json({ error: "Sessão expirada. Faça login novamente.", restart: true });
     }
+    if(result.error === "resend_limit"){
+      return res.status(429).json({
+        error: "Já enviamos códigos demais para este acesso. Faça login de novo para começar outro.",
+        restart: true,
+      });
+    }
     if(result.error === "cooldown"){
       const segundos = Math.ceil(result.retryAfterMs / 1000);
       return res.status(429).json({ error: `Aguarde ${segundos} segundo${segundos === 1 ? "" : "s"} para pedir um novo código.` });
@@ -3785,6 +3802,15 @@ app.post("/api/auth/logout", (req, res) => {
 app.delete("/api/auth/account", authLimiter, auth.requireAuth, async (req, res) => {
   try {
     const user = db.getUserById(req.user.id);
+    /* Excluir a conta de admin abriria o mesmo buraco que o cadastro acima
+       fecha: a linha sumiria e o e-mail ficaria livre para quem registrasse
+       primeiro. Para sair de verdade, tira-se o hash de ADMIN_EMAIL_HASHES
+       antes. */
+    if(user && auth.isAdminEmail(user.email)){
+      return res.status(409).json({
+        error: "Conta de administradora não pode ser excluída por aqui. Remova o acesso no servidor antes.",
+      });
+    }
     const password = req.body?.password;
     const credential = req.body?.credential;
     // Quem entrou pelo Google não tem senha para confirmar. Sem este caminho,
@@ -4006,8 +4032,13 @@ app.put("/api/auth/email", authLimiter, auth.requireAuth, async (req, res) => {
     }
     const antigo = user.email;
     db.updateUserEmail(user.id, novo);
+    /* Trocar de e-mail muda o canal de recuperação de senha, então vale o
+       mesmo tratamento de trocar a senha: quem estiver logada noutro
+       aparelho cai fora. Sem isto, uma sessão roubada sobrevivia à
+       reação mais óbvia da dona da conta. */
+    const saiu = db.deleteOtherSessions(user.id, auth.sessionTokenHash(req));
     avisarContaEmSegundoPlano({ to: antigo, nome: String(user.name || "").split(" ")[0], oQue: "email", novoEmail: novo });
-    res.json(perfilDaConta(user.id));
+    res.json({ ...perfilDaConta(user.id), sessoesEncerradas: saiu });
   }catch(err){
     console.error("Erro ao trocar e-mail:", err);
     res.status(500).json({ error: "Não foi possível trocar o e-mail agora." });

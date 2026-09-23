@@ -490,6 +490,12 @@ ensureColumn("two_factor_challenges", "email_code_hash", "TEXT");
 ensureColumn("two_factor_challenges", "email_code_expires_at", "INTEGER");
 ensureColumn("two_factor_challenges", "email_code_attempts", "INTEGER NOT NULL DEFAULT 0");
 ensureColumn("two_factor_challenges", "email_code_sent_at", "INTEGER");
+/* Quantos códigos por e-mail já foram pedidos neste desafio, e quando ele
+   nasceu. Sem os dois, cada reenvio zerava as tentativas e empurrava a
+   validade: o desafio de 5 minutos virava eterno e o código de 6 dígitos
+   ganhava chances infinitas. */
+ensureColumn("two_factor_challenges", "email_code_resends", "INTEGER NOT NULL DEFAULT 0");
+ensureColumn("two_factor_challenges", "created_at", "INTEGER");
 
 /* =========================================================================
    AVALIAÇÕES DE PRODUTO
@@ -981,7 +987,7 @@ const stmtSetTotp = db.prepare(
   `UPDATE users SET totp_secret = ?, totp_enabled_at = ?, totp_recovery_json = ? WHERE id = ?`
 );
 const stmtInsertChallenge = db.prepare(
-  `INSERT INTO two_factor_challenges (token_hash, user_id, expires_at) VALUES (?, ?, ?)`
+  `INSERT INTO two_factor_challenges (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`
 );
 const stmtGetChallenge = db.prepare(`SELECT * FROM two_factor_challenges WHERE token_hash = ?`);
 const stmtDeleteChallenge = db.prepare(`DELETE FROM two_factor_challenges WHERE token_hash = ?`);
@@ -991,7 +997,7 @@ const stmtDeleteExpiredChallenges = db.prepare(
 const stmtSetTwoFactorEmailCode = db.prepare(`
   UPDATE two_factor_challenges
   SET email_code_hash = ?, email_code_expires_at = ?, email_code_attempts = 0,
-      email_code_sent_at = ?, expires_at = ?
+      email_code_sent_at = ?, expires_at = ?, email_code_resends = ?
   WHERE token_hash = ?
 `);
 const stmtIncrementEmailCodeAttempts = db.prepare(
@@ -1003,7 +1009,7 @@ function setUserTotp(userId, { secret, recoveryJson }) {
   stmtSetTotp.run(secret || null, secret ? Date.now() : null, recoveryJson || null, userId);
 }
 function createTwoFactorChallenge({ tokenHash, userId, expiresAt }) {
-  stmtInsertChallenge.run(tokenHash, userId, expiresAt);
+  stmtInsertChallenge.run(tokenHash, userId, expiresAt, Date.now());
 }
 function getTwoFactorChallenge(tokenHash) {
   stmtDeleteExpiredChallenges.run(Date.now());
@@ -1015,8 +1021,8 @@ function deleteTwoFactorChallenge(tokenHash) {
 // Grava um código novo (substitui qualquer código anterior do mesmo
 // desafio) e estende expires_at do desafio para acompanhar o prazo do
 // código, já que pedir por e-mail pode levar mais tempo que os 5min padrão.
-function setTwoFactorEmailCode({ tokenHash, codeHash, codeExpiresAt, sentAt, challengeExpiresAt }) {
-  stmtSetTwoFactorEmailCode.run(codeHash, codeExpiresAt, sentAt, challengeExpiresAt, tokenHash);
+function setTwoFactorEmailCode({ tokenHash, codeHash, codeExpiresAt, sentAt, challengeExpiresAt, resends }) {
+  stmtSetTwoFactorEmailCode.run(codeHash, codeExpiresAt, sentAt, challengeExpiresAt, resends ?? 0, tokenHash);
 }
 function incrementTwoFactorEmailCodeAttempts(tokenHash) {
   stmtIncrementEmailCodeAttempts.run(tokenHash);

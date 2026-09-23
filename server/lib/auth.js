@@ -33,8 +33,16 @@ const DUMMY_HASH = bcrypt.hashSync("senha-de-referencia-para-tempo-constante", B
 async function hashPassword(password) {
   return bcrypt.hash(password, BCRYPT_COST);
 }
+/* ⚠️ Hash ausente devolve false, SEMPRE — mas só depois de gastar o mesmo
+   tempo de um bcrypt real (DUMMY_HASH), para não virar detector de "esta
+   conta existe". Sem o `return false`, qualquer linha com password_hash
+   vazio aceitaria a frase do DUMMY_HASH, que está escrita neste arquivo,
+   como senha válida em trocar senha, trocar e-mail, excluir conta e ativar
+   2FA. Hoje nenhuma linha tem hash vazio; a conta criada pelo Google
+   (sem_senha) é exatamente o tipo de mudança que um dia grava um. */
 async function verifyPassword(password, hash) {
-  return bcrypt.compare(password, hash || DUMMY_HASH);
+  const confere = await bcrypt.compare(password, hash || DUMMY_HASH);
+  return Boolean(hash) && confere;
 }
 
 /* ------------------------------ VALIDAÇÃO ------------------------------ */
@@ -123,10 +131,20 @@ function parseCookies(req) {
   return out;
 }
 
+/* ⚠️ `secure` NÃO pode depender só de NODE_ENV. O resto do projeto decide
+   "estou em produção?" pelo CLIENT_ORIGIN começar com https (ver EM_PRODUCAO
+   no server.js), justamente porque NODE_ENV é fácil de faltar num painel de
+   hospedagem. Se faltasse, o site seguia com HSTS e CSP de produção enquanto
+   o cookie de SESSÃO saía sem Secure — e nada denunciava. */
+function emHttps() {
+  return process.env.NODE_ENV === "production"
+    || String(process.env.CLIENT_ORIGIN || "").startsWith("https://");
+}
+
 function cookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: emHttps(),
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_TTL_MS,
@@ -352,6 +370,10 @@ async function consumeRecoveryCode(code, hashes) {
    sem nunca deixar um cookie de sessão válido ser emitido cedo demais. */
 const TWO_FACTOR_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
+const EMAIL_2FA_MAX_RESENDS = 3;
+// Prazo que nenhum reenvio ultrapassa, contado da criação do desafio.
+const TWO_FACTOR_CHALLENGE_MAX_TTL_MS = 20 * 60 * 1000;
+
 function issueTwoFactorChallenge(userId) {
   const token = crypto.randomBytes(32).toString("hex");
   db.createTwoFactorChallenge({
@@ -411,12 +433,25 @@ async function issueTwoFactorEmailCode(challengeToken) {
   if (row.email_code_sent_at && now - row.email_code_sent_at < EMAIL_2FA_RESEND_COOLDOWN_MS) {
     return { error: "cooldown", retryAfterMs: EMAIL_2FA_RESEND_COOLDOWN_MS - (now - row.email_code_sent_at) };
   }
+  /* ⚠️ Teto de reenvios. Cada reenvio zera o contador de tentativas do
+     código, então sem limite quem já tem a senha pedia código novo a cada
+     61 segundos e ganhava 5 chances por rodada, para sempre — o segundo
+     fator viraria questão de tempo. Também evita usar a loja para encher a
+     caixa de entrada de alguém. */
+  if ((row.email_code_resends || 0) >= EMAIL_2FA_MAX_RESENDS) {
+    return { error: "resend_limit" };
+  }
   const code = generateEmailTwoFactorCode();
   const codeHash = await bcrypt.hash(code, BCRYPT_COST);
   const codeExpiresAt = now + EMAIL_2FA_CODE_TTL_MS;
+  /* O reenvio empurra a validade do desafio para caber o código novo, mas
+     NUNCA além do prazo absoluto: senão o desafio de 5 minutos virava
+     eterno, bastando pedir código de tempos em tempos. */
+  const tetoAbsoluto = (row.created_at || now) + TWO_FACTOR_CHALLENGE_MAX_TTL_MS;
   db.setTwoFactorEmailCode({
     tokenHash, codeHash, codeExpiresAt, sentAt: now,
-    challengeExpiresAt: Math.max(row.expires_at, codeExpiresAt),
+    challengeExpiresAt: Math.min(Math.max(row.expires_at, codeExpiresAt), tetoAbsoluto),
+    resends: (row.email_code_resends || 0) + 1,
   });
   return { code, user };
 }

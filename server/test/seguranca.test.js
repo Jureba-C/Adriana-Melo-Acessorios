@@ -80,6 +80,54 @@ test("entrar com o Google recusa admin e quem tem verificação em duas etapas",
   assert.ok(/totp_secret/.test(guarda.slice(0, 400)), "deixou de recusar conta com 2FA");
 });
 
+/* Ser admin depende SÓ de o e-mail estar em ADMIN_EMAIL_HASHES, e o e-mail
+   da lojista está publicado no site. Se a conta dela não existir — banco
+   restaurado, conta excluída, segundo admin cadastrado antes de criar a
+   conta — quem registrar primeiro vira admin, e a conta nova ainda pode
+   ativar o próprio 2FA. O cadastro tem de recusar, com a MESMA mensagem
+   de "já existe" para não virar detector de e-mail de admin. */
+test("não dá para se cadastrar com o e-mail de admin", async () => {
+  const res = await fetch(`${ORIGIN}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: ORIGIN },
+    body: JSON.stringify({
+      name: "Invasora", email: "seg@test.com",
+      password: "senha-123456", cpf: "39053344705", consent: true,
+    }),
+  });
+  assert.equal(res.status, 409);
+  const corpo = await res.json();
+  assert.match(corpo.error, /já existe/i, "mensagem genérica, igual à de e-mail tomado");
+  assert.equal(res.headers.getSetCookie?.().some(c => c.startsWith("plc_session=")) ?? false, false,
+    "não pode sair sessão nenhuma");
+});
+
+/* O cookie de sessão precisa de Secure em produção. Amarrar isso a NODE_ENV
+   dava um site com HSTS e CSP de produção e cookie sem Secure quando a
+   variável faltasse no painel — sem nada denunciar. */
+test("o cookie de sessão só é Secure quando o site é https", () => {
+  const fonte = fs.readFileSync(path.join(RAIZ, "lib", "auth.js"), "utf8");
+  const i = fonte.indexOf("function cookieOptions");
+  const trecho = fonte.slice(i, i + 400);
+  assert.match(trecho, /secure:\s*emHttps\(\)/, "cookieOptions deixou de consultar o https");
+  assert.match(fonte, /CLIENT_ORIGIN[^\n]*startsWith\("https:\/\/"\)/,
+    "emHttps precisa olhar o CLIENT_ORIGIN, não só NODE_ENV");
+});
+
+/* Rota fora de /api/admin que faz trabalho de admin (hoje o cron) precisa
+   de segredo próprio: ela é pública, sem cookie e sem 2FA. */
+test("toda rota /api/interno exige um segredo", () => {
+  const fonte = fs.readFileSync(path.join(RAIZ, "server.js"), "utf8");
+  const rotas = [...fonte.matchAll(/app\.(get|post|put|patch|delete)\(\s*"(\/api\/interno[^"]*)"/g)];
+  assert.ok(rotas.length >= 1, "sumiu a rota interna? confira este teste");
+  for(const [, , rota] of rotas){
+    const i = fonte.indexOf(`"${rota}"`);
+    const corpo = fonte.slice(i, i + 1500);
+    assert.match(corpo, /CRON_SECRET/, `${rota} precisa conferir um segredo`);
+    assert.match(corpo, /timingSafeEqual/, `${rota} precisa comparar em tempo constante`);
+  }
+});
+
 test("toda rota /api/admin exige admin + verificação em duas etapas", () => {
   const fonte = fs.readFileSync(path.join(RAIZ, "server.js"), "utf8");
   const re = /app\.(get|post|put|patch|delete)\(\s*"(\/api\/admin[^"]*)"\s*,([^\n]*)/g;

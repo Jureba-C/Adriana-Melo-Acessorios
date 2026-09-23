@@ -21,7 +21,15 @@
  * ⚠️ Tudo falha FECHADO: rede fora do ar, resposta estranha, timeout ou
  * qualquer erro inesperado negam o login. Nunca o contrário.
  */
-const TOKENINFO_URL = process.env.GOOGLE_TOKENINFO_URL || "https://oauth2.googleapis.com/tokeninfo";
+/* ⚠️ O endereço só é configurável FORA de produção — ele existe para o teste
+   apontar para um Google falso local. Em produção, quem conseguisse escrever
+   essa variável passaria a emitir sessão para qualquer e-mail, sem precisar
+   de senha nenhuma: é a variável mais perigosa do arquivo. */
+const TOKENINFO_PADRAO = "https://oauth2.googleapis.com/tokeninfo";
+const EM_PRODUCAO = String(process.env.CLIENT_ORIGIN || "").startsWith("https://");
+const TOKENINFO_URL = EM_PRODUCAO
+  ? TOKENINFO_PADRAO
+  : (process.env.GOOGLE_TOKENINFO_URL || TOKENINFO_PADRAO);
 
 // Três blocos base64url separados por ponto. Conferido ANTES de montar a URL:
 // um token com "&" ou "#" no meio viraria parâmetro extra na query.

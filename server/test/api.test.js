@@ -113,6 +113,21 @@ async function seedLoggedInUser({ name, email, password, cpf }) {
   db.createSession({ tokenHash, userId: user.id, expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 });
   return { user, cookie: `plc_session=${token}` };
 }
+/* O cadastro pelo site RECUSA e-mail que esteja em ADMIN_EMAIL_HASHES (senão
+   quem registrasse primeiro viraria admin quando a conta não existisse). Na
+   vida real a lojista cria a conta ANTES de o hash entrar no .env; aqui o
+   hash já está de pé desde o boot, então a conta nasce direto no banco. */
+async function contaDeAdmin(email){
+  const user = db.getUserByEmail(email)
+    || db.createUser({ name: "Admin", email, passwordHash: await auth.hashPassword("SenhaADM12345!"), cpf: null });
+  const token = crypto.randomBytes(32).toString("hex");
+  db.createSession({
+    tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+    userId: user.id, expiresAt: Date.now() + 60 * 60 * 1000,
+  });
+  return `plc_session=${token}`;
+}
+
 function cookieFrom(res) {
   const raw = res.headers.get("set-cookie");
   return raw ? raw.split(";")[0] : null;
@@ -206,10 +221,13 @@ test("controle de acesso admin: cliente comum não entra, admin entra", async ()
   const asComum = await fetch(ORIGIN + "/api/admin/orders", { headers: { Cookie: comumCookie } });
   assert.equal(asComum.status, 403, "cliente comum -> 403");
 
-  // Admin (e-mail com hash em ADMIN_EMAIL_HASHES; 2FA desligado no teste)
-  const ra = await post("/api/auth/register", { name: "Admin", email: ADMIN_EMAIL, password: "SenhaADM12345!", cpf: "11144477735" });
-  const adminCookie = cookieFrom(ra);
-  assert.equal((await ra.json()).isAdmin, true);
+  // Cadastrar-se com o e-mail de admin é recusado de propósito (ver
+  // test/seguranca.test.js): a conta de admin nasce no banco, não pelo site.
+  const recusado = await post("/api/auth/register", { name: "Invasora", email: ADMIN_EMAIL, password: "SenhaADM12345!", cpf: "11144477735" });
+  assert.equal(recusado.status, 409, "e-mail de admin não pode ser cadastrado pelo site");
+
+  const adminCookie = await contaDeAdmin(ADMIN_EMAIL);
+  assert.equal((await (await fetch(ORIGIN + "/api/auth/me", { headers: { Cookie: adminCookie } })).json()).isAdmin, true);
   const asAdmin = await fetch(ORIGIN + "/api/admin/orders", { headers: { Cookie: adminCookie } });
   assert.equal(asAdmin.status, 200, "admin -> 200");
 });
