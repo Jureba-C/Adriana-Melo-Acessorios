@@ -38,7 +38,9 @@ function criarCarrinho({ email = "cliente@test.com", status = "pendente" } = {})
   db.createOrder({
     externalReference: ref,
     status,
-    items: [{ id: 2, qty: 1 }, { id: 6, qty: 2 }],
+    // Mesma forma que orderRowFrom grava de verdade: só id/qty/price, SEM
+    // nome — é isso que fazia o e-mail sair com "undefined".
+    items: [{ id: 2, qty: 1, price: 49.9 }, { id: 6, qty: 2, price: 89.9 }],
     address: { nome: "Ana Paula", rua: "Rua das Flores", numero: "10", cep: "70000000" },
     shipping: { name: "PAC", price: 20 },
     subtotal: 100, shippingPrice: 20, total: 120,
@@ -100,6 +102,10 @@ test("o lembrete sai uma vez só por carrinho, e com o link que reenche o carrin
 
   const fila = db.getOutboxEntry("carrinho_esquecido", ref);
   assert.ok(fila.html_body.includes(`?recuperar=${ref}`), "o link precisa trazer o carrinho de volta");
+  // O pedido guarda só id/qty/price; o nome vem do catálogo na hora do envio.
+  assert.match(fila.text_body, /Laço Duquesa/, "o e-mail precisa dizer QUAL laço ficou esperando");
+  assert.doesNotMatch(fila.text_body, /undefined/, "nunca pode chegar 'undefined' na cliente");
+  assert.doesNotMatch(fila.html_body, /undefined/);
   assert.ok(fila.html_body.includes("Não quero mais receber"), "e-mail promocional sem descadastro é spam");
   assert.ok(!/cupom|desconto de|%\s*OFF/i.test(fila.text_body), "sem desconto por abandono");
 });

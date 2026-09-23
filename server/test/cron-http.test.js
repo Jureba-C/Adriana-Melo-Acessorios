@@ -74,6 +74,14 @@ test("token errado não roda, inclusive com tamanho diferente", async () => {
   assert.equal(db.lerEstado("tarefas_periodicas_em"), null);
 });
 
+test("token com acento do mesmo tamanho é 401, não 500", async () => {
+  // timingSafeEqual compara BYTES: "á" tem o mesmo length de string e 2 bytes.
+  const comAcento = SEGREDO.slice(0, -1) + "é";
+  assert.equal(comAcento.length, SEGREDO.length, "o teste só vale se o length bater");
+  const res = await fetch(`${ORIGIN}/api/interno/tarefas-periodicas?token=${encodeURIComponent(comAcento)}`);
+  assert.equal(res.status, 401);
+});
+
 test("com o token certo roda e registra a hora da rodada", async () => {
   const res = await fetch(`${ORIGIN}/api/interno/tarefas-periodicas?token=${encodeURIComponent(SEGREDO)}`);
   assert.equal(res.status, 200);

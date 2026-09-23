@@ -1856,10 +1856,17 @@ function garantirTokenDeAvaliacao(ref){
   return stmtGetReviewToken.get(ref)?.review_token || null;
 }
 
+/* ⚠️ Tamanho em BYTES: timingSafeEqual exige buffers iguais, e um token com
+   caractere acentuado tem o mesmo `length` de string e mais bytes — estourava
+   RangeError, virava 500, e quebrava a propriedade de "token errado responde
+   igual a pedido inexistente". */
 function tokenDeAvaliacaoConfere(ref, token){
   const certo = stmtGetReviewToken.get(ref)?.review_token;
-  if(!certo || typeof token !== "string" || token.length !== certo.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(certo), Buffer.from(token));
+  if(!certo || typeof token !== "string") return false;
+  const recebido = Buffer.from(token);
+  const esperado = Buffer.from(certo);
+  if(recebido.length !== esperado.length) return false;
+  return crypto.timingSafeEqual(recebido, esperado);
 }
 
 const stmtUpsertReview = db.prepare(`

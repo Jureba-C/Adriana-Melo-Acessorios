@@ -125,8 +125,11 @@ const ESTILO_DO_EMAIL = `
   ${regrasEscuras("[data-ogsc]")}
 `;
 
+/* `str ?? ""` e não `String(str)`: um campo ausente virava o texto
+   "undefined" dentro do e-mail da cliente — foi exatamente o que aconteceu
+   com o lembrete de carrinho, que listava "• undefined" no lugar do laço. */
 function escapeHTML(str) {
-  return String(str).replace(/[&<>"']/g, ch => ({
+  return String(str ?? "").replace(/[&<>"']/g, ch => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   }[ch]));
 }
@@ -202,7 +205,7 @@ function emailShell({ titulo, preheader, eyebrow, tituloCartao, corpoHtml }) {
                 </tr>
                 <tr>
                   <td align="center" class="e-titulo" style="font-family:${FONT_TITULO}; color:${CORES.titulo}; font-size:26px; line-height:1.3; font-weight:bold; padding-bottom:14px;">
-                    ${tituloCartao}
+                    ${escapeHTML(tituloCartao)}
                   </td>
                 </tr>
                 ${corpoHtml}

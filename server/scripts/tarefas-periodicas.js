@@ -62,6 +62,9 @@ const rastreio = require("../lib/rastreio.js");
 const melhorEnvio = require("../lib/melhorEnvio.js");
 const email = require("../lib/email.js");
 const campanhas = require("../lib/campanhas.js");
+const catalogo = require("../lib/catalogo.js");
+const produtoUrl = require("../js/produto-url.js");
+const pricing = require("../js/pricing.js");
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3333";
 
@@ -148,6 +151,26 @@ function linkDeDescadastro(emailDestino){
   return `${CLIENT_ORIGIN}/api/newsletter/unsubscribe?email=${encodeURIComponent(emailDestino)}&token=${token}`;
 }
 
+/* items_json guarda só {id, qty, price} — nome e foto não cabem lá, porque
+   o produto pode ser renomeado depois da compra e o pedido tem de continuar
+   mostrando o que foi comprado, não um retrato velho. Para o e-mail, o nome
+   vem do catálogo na hora do envio.
+   ⚠️ Sem isto o lembrete de carrinho listava "• undefined" para a cliente. */
+function itensComNome(itemsJson){
+  let brutos = [];
+  try { brutos = JSON.parse(itemsJson); } catch { return []; }
+  const overrides = catalogo.getProductOverridesMap();
+  return brutos.map(item => {
+    const p = catalogo.effectiveProduct(Number(item.id), overrides);
+    return {
+      id: item.id,
+      qty: Number(item.qty) || 1,
+      name: p?.name || `Produto #${item.id}`,
+      photoUrl: p?.photoUrl || null,
+    };
+  });
+}
+
 function enderecoDe(pedido){
   try { return JSON.parse(pedido.address_json); } catch { return null; }
 }
@@ -203,11 +226,9 @@ function enfileirarPedidosDeAvaliacao(agora = Date.now()){
 function enfileirarLembretesDeCarrinho(agora = Date.now()){
   let novos = 0;
   for(const pedido of db.pedidosParaLembrarCarrinho(agora)){
-    let itens = [];
-    try{ itens = JSON.parse(pedido.items_json); }catch{}
     const conteudo = email.formatCarrinhoEsquecidoEmail({
       address: enderecoDe(pedido),
-      items: itens,
+      items: itensComNome(pedido.items_json),
       retomarUrl: `${CLIENT_ORIGIN}/?recuperar=${encodeURIComponent(pedido.external_reference)}`,
       whatsappUrl: WHATSAPP_DA_LOJA,
       unsubscribeUrl: linkDeDescadastro(pedido.customer_email),
@@ -226,32 +247,26 @@ function enfileirarLembretesDeCarrinho(agora = Date.now()){
   return novos;
 }
 
-/* As campanhas não conhecem o catálogo (isso vive no server.js), e o cron
-   roda noutro processo. Para o e-mail sair com os laços escolhidos, o nome,
-   preço e link são remontados aqui a partir da rota pública /api/products —
-   sem duplicar o catálogo nem importar o server.js inteiro. */
-async function produtosDaCampanha(campanha){
+/* ⚠️ Isto já foi um fetch em ${CLIENT_ORIGIN}/api/products — ou seja, o
+   servidor chamando a si mesmo por HTTP quando a rodada é disparada pela
+   rota /api/interno/tarefas-periodicas. Além de frágil, qualquer falha
+   desse fetch era engolida e a campanha saía SEM os laços que a lojista
+   escolheu. Agora lê o catálogo direto, no mesmo processo. */
+function produtosDaCampanha(campanha){
   let ids = [];
   try { ids = JSON.parse(campanha.produtos || "[]"); } catch {}
   if(!ids.length) return [];
-  try{
-    const res = await fetch(`${CLIENT_ORIGIN}/api/products`);
-    if(!res.ok) return [];
-    const { products } = await res.json();
-    return ids.map(id => {
-      const p = (products || []).find(x => x.id === Number(id));
-      if(!p) return null;
-      return {
-        nome: p.name,
-        preco: "R$ " + Number(p.price).toFixed(2).replace(".", ","),
-        photoUrl: p.photoUrl,
-        url: `${CLIENT_ORIGIN}${p.slug}?utm_source=newsletter&utm_medium=email&utm_campaign=campanha-${campanha.id}`,
-      };
-    }).filter(Boolean);
-  }catch(err){
-    console.error("Não consegui ler o catálogo para a campanha:", err.message || err);
-    return [];
-  }
+  const overrides = catalogo.getProductOverridesMap();
+  return ids.map(id => {
+    const p = catalogo.effectiveProduct(Number(id), overrides);
+    if(!p || p.hidden) return null;
+    return {
+      nome: p.name,
+      preco: pricing.formatMoney(p.price),
+      photoUrl: p.photoUrl,
+      url: `${CLIENT_ORIGIN}${produtoUrl.caminhoDoProduto(Number(id), p.name)}?utm_source=newsletter&utm_medium=email&utm_campaign=campanha-${campanha.id}`,
+    };
+  }).filter(Boolean);
 }
 
 async function enfileirarLotesDeCampanha(){
@@ -262,7 +277,7 @@ async function enfileirarLotesDeCampanha(){
   }
   let novos = 0;
   for(const campanha of emEnvio){
-    const produtos = await produtosDaCampanha(campanha);
+    const produtos = produtosDaCampanha(campanha);
     const resultado = campanhas.enfileirarLote({ campanha, produtos, origem: CLIENT_ORIGIN });
     novos += resultado.novos;
     console.log(`  Campanha "${campanha.assunto}": ${resultado.contagem.enfileirados}/${resultado.contagem.total} na fila.`);

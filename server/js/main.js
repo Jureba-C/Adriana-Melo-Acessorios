@@ -1356,14 +1356,22 @@
   }
 
   async function goToCheckout(){
+    if(cart.length === 0) return;
+    const pendente = checkoutBlockInfo();
 
     if(!currentUser){
+      if(pendente){
+        irParaPasso(2);
+        addressValidationAttempted = true;
+        renderAddressErrors();
+        focusFirstInvalidAddressField();
+        showCheckoutHintToast(pendente.text);
+        return;
+      }
       guardarEnderecoDigitado();
       window.location.href = "/conta.html?retorno=carrinho";
       return;
     }
-    if(cart.length === 0) return;
-    const pendente = checkoutBlockInfo();
     if(pendente){
       if(shipping){
         irParaPasso(2);

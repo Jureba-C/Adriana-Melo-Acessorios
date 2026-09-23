@@ -83,6 +83,20 @@ test("o e-mail leva descadastro e não vira HTML o que a lojista escreveu", () =
   assert.ok(linha.html_body.includes("unsubscribe"), "link de descadastro no corpo");
 });
 
+test("assunto escrito pela lojista não vira HTML no e-mail", () => {
+  db.addNewsletterSubscriber("assunto@test.com");
+  const campanha = db.criarCampanha({
+    assunto: 'Promo <img src=x onerror=alert(1)> & cia', chamada: null,
+    corpo: "Chegaram novidades.", produtos: [],
+  });
+  db.prepararEnvioDaCampanha(campanha.id);
+  campanhas.enfileirarLote({ campanha, produtos: [], origem: ORIGEM });
+
+  const linha = db.getOutboxEntry("campanha", `campanha:${campanha.id}:assunto@test.com`);
+  assert.ok(!linha.html_body.includes("<img src=x onerror"), "tag do assunto não pode sair crua");
+  assert.ok(linha.html_body.includes("&lt;img src=x"), "sai como texto");
+});
+
 test("o lote respeita o limite e continua de onde parou", () => {
   for(let i = 0; i < 5; i++) db.addNewsletterSubscriber(`lote${i}@test.com`);
   const campanha = novaCampanha("Novidades de outubro");
