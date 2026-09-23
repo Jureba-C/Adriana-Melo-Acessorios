@@ -2232,6 +2232,22 @@ function apagarFilaDaCampanha(id){
   return stmtApagaFilaDaCampanha.run(`campanha:${id}:%`).changes;
 }
 
+/* Trava de rodada das tarefas periódicas, no BANCO e não na memória: a
+   hospedagem pode subir mais de um processo, e dois processos com uma
+   variável cada um não se enxergam. Vale por tempo (não é preciso
+   destravar à mão se o processo morrer) e usa o app_state que já existe. */
+const stmtPegaTrava = db.prepare(`
+  INSERT INTO app_state (chave, valor, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, updated_at = excluded.updated_at
+   WHERE CAST(app_state.valor AS INTEGER) <= ?
+`);
+function tentarTravarRodada(chave, duracaoMs = 10 * 60 * 1000){
+  const agora = Date.now();
+  return stmtPegaTrava.run(chave, String(agora + duracaoMs), agora, agora).changes > 0;
+}
+const stmtSoltaTrava = db.prepare(`DELETE FROM app_state WHERE chave = ?`);
+function destravarRodada(chave){ stmtSoltaTrava.run(chave); }
+
 /* ---------- Estado da aplicação ---------- */
 const stmtGravaEstado = db.prepare(`
   INSERT INTO app_state (chave, valor, updated_at) VALUES (?, ?, ?)
@@ -2287,8 +2303,35 @@ const stmtEmailsPendentes = db.prepare(`
    ORDER BY (kind = 'campanha') ASC, id ASC
    LIMIT ?
 `);
+/* ⚠️ REIVINDICA as linhas antes de devolver, numa transação. Sem isto,
+   duas rodadas simultâneas — dois workers do Passenger, ou o cron externo
+   batendo de novo enquanto a rodada anterior ainda envia — liam a MESMA
+   linha pendente e mandavam o mesmo e-mail duas vezes para a cliente.
+   Empurrar next_attempt_at para frente funciona como aluguel: quem pegou
+   tem esse tempo para enviar, e se o processo morrer no meio a linha
+   volta sozinha para a fila quando o aluguel vence, sem precisar de
+   ninguém destravando nada à mão. */
+const ALUGUEL_DE_ENVIO_MS = 10 * 60 * 1000;
+const stmtReivindicaEmail = db.prepare(
+  `UPDATE email_outbox SET next_attempt_at = ? WHERE id = ? AND sent_at IS NULL AND next_attempt_at <= ?`
+);
 function pendingEmails(limite = 20){
-  return stmtEmailsPendentes.all(MAX_TENTATIVAS_EMAIL, Date.now(), limite);
+  const agora = Date.now();
+  const candidatos = stmtEmailsPendentes.all(MAX_TENTATIVAS_EMAIL, agora, limite);
+  const meus = [];
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for(const linha of candidatos){
+      if(stmtReivindicaEmail.run(agora + ALUGUEL_DE_ENVIO_MS, linha.id, agora).changes > 0){
+        meus.push(linha);
+      }
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return meus;
 }
 
 // Saúde dos avisos que vão para a LOJISTA (venda nova, contato). Serve ao
@@ -2331,9 +2374,16 @@ const stmtEmailFalhou = db.prepare(
 /* Espera crescente entre tentativas (5min, 15, 45, 2h15, 6h45): provedor de
    SMTP fora do ar costuma voltar sozinho, e insistir de minuto em minuto só
    ajuda a ser marcado como spam. */
+/* Só para teste: força a hora da próxima tentativa, para simular aluguel
+   vencido sem esperar 10 minutos de relógio. */
+const stmtAdiaEmail = db.prepare(`UPDATE email_outbox SET next_attempt_at = ? WHERE id = ?`);
+function adiarEmail(id, quando){ stmtAdiaEmail.run(quando, id); }
+
 function markEmailFailed(id, erro){
   const linha = getOutboxEmail(id);
   const tentativas = (linha ? linha.attempts : 0) + 1;
+  // A espera é recontada do zero a partir de agora, substituindo o aluguel
+  // que pendingEmails gravou ao reivindicar a linha.
   const espera = 5 * 60 * 1000 * Math.pow(3, tentativas - 1);
   stmtEmailFalhou.run(Date.now() + espera, String(erro).slice(0, 500), id);
 }
@@ -2394,6 +2444,8 @@ module.exports = {
   contagemDaCampanha,
   apagarFilaDaCampanha,
   itensDoCarrinhoEsquecido,
+  tentarTravarRodada,
+  destravarRodada,
   gravarEstado,
   lerEstado,
   catalogVersion,
@@ -2405,6 +2457,7 @@ module.exports = {
   getOutboxEmail,
   markEmailSent,
   markEmailFailed,
+  adiarEmail,
   createUser,
   getUserByEmail,
   getUserByGoogleId,

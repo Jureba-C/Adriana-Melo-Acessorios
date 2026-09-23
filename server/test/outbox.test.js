@@ -333,3 +333,33 @@ test("aviso de contato usa a mesma fila e não colide com o de venda", () => {
   assert.notEqual(venda, contato);
   assert.equal(db.getOutboxEmail(contato).order_reference, null);
 });
+
+test("duas rodadas ao mesmo tempo não mandam o mesmo e-mail duas vezes", () => {
+  /* Era o furo da trava em memória: ela vale para UM processo, e a
+     hospedagem pode subir mais de um. Sem reivindicar a linha, as duas
+     rodadas liam a mesma pendência e a cliente recebia em dobro. */
+  const id = db.enqueueEmail({
+    kind: "pedido_confirmado", toEmail: "dupla@test.com", orderReference: "ref-dupla",
+    subject: "Seu pedido", textBody: "recibo", htmlBody: "<p>recibo</p>",
+  });
+  assert.ok(id);
+
+  const rodadaA = db.pendingEmails(20).filter(l => l.id === id);
+  const rodadaB = db.pendingEmails(20).filter(l => l.id === id);
+
+  assert.equal(rodadaA.length, 1, "a primeira rodada pega a linha");
+  assert.equal(rodadaB.length, 0, "a segunda não pode pegar a mesma linha");
+});
+
+test("linha reivindicada volta para a fila se o processo morrer no meio", () => {
+  const id = db.enqueueEmail({
+    kind: "pedido_confirmado", toEmail: "orfa@test.com", orderReference: "ref-orfa",
+    subject: "Seu pedido", textBody: "recibo", htmlBody: "<p>recibo</p>",
+  });
+  assert.equal(db.pendingEmails(20).filter(l => l.id === id).length, 1);
+  // Ninguém marcou como enviada (simula o processo caindo). Passado o
+  // aluguel, a linha precisa reaparecer sozinha — sem destravar na mão.
+  assert.equal(db.pendingEmails(20).filter(l => l.id === id).length, 0, "ainda alugada");
+  db.adiarEmail(id, Date.now() - 1000);
+  assert.equal(db.pendingEmails(20).filter(l => l.id === id).length, 1, "aluguel vencido devolve à fila");
+});

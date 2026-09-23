@@ -6101,11 +6101,17 @@ app.post("/api/admin/orders/:reference/generate-label", auth.requireAdmin, auth.
    tempos" só sabem fazer GET. Por ser GET, o verifyOrigin já deixa passar
    sem Origin (a mesma regra que abre exceção para o link de descadastro).
 
-   Uma trava em memória (não no banco) impede duas rodadas ao mesmo tempo —
-   dois provedores de cron configurados por engano, ou uma rodada lenta
-   ainda em andamento quando a próxima dispara. Não precisa sobreviver a um
-   reinício do processo: nesse caso já não há rodada em andamento mesmo. */
-let tarefasPeriodicasRodando = false;
+   A trava contra duas rodadas simultâneas vive no BANCO (db.tentarTravarRodada),
+   não numa variável: a hospedagem pode subir mais de um processo, e dois
+   processos com uma variável cada um não se enxergam — era assim que o mesmo
+   e-mail da fila podia sair duas vezes para a cliente. A trava vale por tempo,
+   então um processo que morra no meio não deixa nada travado para sempre.
+
+   A resposta sai NA HORA, antes de a rodada terminar: fechar entregas dorme
+   1,5s por pedido e a rodada passa fácil dos 30 segundos que um serviço
+   gratuito de agendamento espera — ele marcaria falha e tentaria de novo,
+   e a lojista veria "cron falhando" em rodadas que deram certo. */
+const TRAVA_TAREFAS = "tarefas_periodicas_rodando";
 
 app.get("/api/interno/tarefas-periodicas", cronLimiter, async (req, res) => {
   const segredo = process.env.CRON_SECRET;
@@ -6122,20 +6128,15 @@ app.get("/api/interno/tarefas-periodicas", cronLimiter, async (req, res) => {
   if(!bateu){
     return res.status(401).json({ error: "Token inválido." });
   }
-  if(tarefasPeriodicasRodando){
+  if(!db.tentarTravarRodada(TRAVA_TAREFAS)){
     return res.status(409).json({ error: "Já tem uma rodada em andamento." });
   }
 
-  tarefasPeriodicasRodando = true;
-  try{
-    await tarefasPeriodicas.main();
-    res.json({ ok: true, em: new Date().toISOString() });
-  }catch(err){
-    console.error("Erro numa rodada de tarefas periódicas via HTTP:", err);
-    res.status(500).json({ error: "Rodada falhou. Ver log do servidor." });
-  }finally{
-    tarefasPeriodicasRodando = false;
-  }
+  res.json({ ok: true, iniciada: new Date().toISOString() });
+
+  tarefasPeriodicas.main()
+    .catch(err => console.error("Erro numa rodada de tarefas periódicas via HTTP:", err))
+    .finally(() => db.destravarRodada(TRAVA_TAREFAS));
 });
 
 app.use(sendNotFound);

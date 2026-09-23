@@ -87,8 +87,25 @@ test("com o token certo roda e registra a hora da rodada", async () => {
   assert.equal(res.status, 200);
   const corpo = await res.json();
   assert.equal(corpo.ok, true);
+  /* A resposta sai ANTES de a rodada terminar, de propósito: a rodada passa
+     fácil dos 30s que o serviço de agendamento espera, e ele marcaria falha
+     numa rodada que deu certo. Então aqui espera-se a marca aparecer. */
+  const limite = Date.now() + 5000;
+  while(!db.lerEstado("tarefas_periodicas_em") && Date.now() < limite){
+    await new Promise(r => setTimeout(r, 100));
+  }
 
   const marca = db.lerEstado("tarefas_periodicas_em");
   assert.ok(marca?.valor, "o painel depende desta marca para avisar que o cron morreu");
   assert.ok(Date.now() - new Date(marca.valor).getTime() < 60_000, "a marca é desta rodada");
+});
+
+test("rodada em andamento recusa a próxima, em vez de rodar duas vezes", async () => {
+  /* A trava vive no banco, não numa variável: a hospedagem pode subir mais
+     de um processo. Aqui a trava é posta na mão para não depender de pegar
+     a rodada anterior no ar. */
+  db.tentarTravarRodada("tarefas_periodicas_rodando");
+  const res = await fetch(`${ORIGIN}/api/interno/tarefas-periodicas?token=${encodeURIComponent(SEGREDO)}`);
+  assert.equal(res.status, 409);
+  db.destravarRodada("tarefas_periodicas_rodando");
 });

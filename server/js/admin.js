@@ -2733,9 +2733,9 @@
         partes.push(`Último aviso entregue em ${formatDate(d.ultimoEnviadoEm)}.`);
       }
       if(!d.tarefasEm){
-        partes.push("⚠️ As tarefas automáticas (entrega automática, \"seu pedido chegou?\" e pedido de avaliação) nunca rodaram neste servidor — o agendamento no painel da hospedagem precisa ser criado.");
+        partes.push("⚠️ As tarefas automáticas (entrega automática, \"seu pedido chegou?\" e pedido de avaliação) nunca rodaram neste servidor — o agendamento externo (cron-job.org) precisa estar ativo.");
       }else if(Date.now() - d.tarefasEm > 60 * 60 * 1000){
-        partes.push(`⚠️ As tarefas automáticas não rodam desde ${formatDate(d.tarefasEm)} — confira o agendamento no painel da hospedagem.`);
+        partes.push(`⚠️ As tarefas automáticas não rodam desde ${formatDate(d.tarefasEm)} — confira o agendamento no cron-job.org.`);
       }else{
         partes.push(`Tarefas automáticas rodando (última vez em ${formatDate(d.tarefasEm)}).`);
       }
