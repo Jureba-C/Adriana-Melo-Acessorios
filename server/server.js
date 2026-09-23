@@ -557,10 +557,24 @@ app.use(rateLimit({
 // para conter abuso automatizado. A consulta de status do Pix fica de fora:
 // ela sozinha já passa desse total num único pagamento (ver
 // statusPollLimiter, mais abaixo) e tem seu próprio limite, maior.
+/* ⚠️ As FOTOS ficam de fora deste balde. Toda imagem de produto, avaliação,
+   depoimento e do topo é servida por /api/... (elas moram no banco, não em
+   disco), então uma navegação pesada sem cache — celular em rede ruim, aba
+   anônima, catálogo grande — comia a cota de 500 e a MESMA cliente passava
+   a levar 429 na hora de pagar. O limite global logo acima já isenta
+   css/js/img pelo mesmo motivo; faltou estender às fotos do banco, que têm
+   balde próprio (fotosLimiter). */
+const ROTA_DE_FOTO = /^\/(products|avaliacoes|depoimentos|hero)\/(photos|fotos)\//;
 app.use("/api", rateLimit({
   windowMs: 15 * 60 * 1000, max: 500, handler: sendTooManyRequests,
-  skip: (req) => req.path.startsWith("/orders/") && req.path.endsWith("/status"),
+  skip: (req) => (req.path.startsWith("/orders/") && req.path.endsWith("/status"))
+    || ROTA_DE_FOTO.test(req.path),
 }));
+
+// Folgado de propósito: uma página de catálogo tem dezenas de fotos, e elas
+// são o conteúdo em si. Existe só para conter quem baixa em laço.
+const fotosLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 3000, handler: sendTooManyRequests });
+app.use("/api", (req, res, next) => (ROTA_DE_FOTO.test(req.path) ? fotosLimiter(req, res, next) : next()));
 
 // Limite mais rígido para rotas sensíveis (evita spam/força bruta). Essas
 // rotas dividem o mesmo balde: calcular frete, validar cupom e criar o
@@ -570,6 +584,26 @@ app.use("/api", rateLimit({
 // estourou em uso manual normal (bem menos que um ataque de verdade), por
 // isso a folga maior aqui.
 const strictLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, handler: sendTooManyRequests });
+
+/* Balde separado para a cotação de frete. Ela não exige conta (e não deve
+   exigir: a cliente cota antes de decidir comprar), mas cada chamada vira
+   uma consulta AUTENTICADA ao Melhor Envio com o token da loja. No balde
+   compartilhado, quem ficasse cotando em laço queimava a cota da loja lá E
+   travava o pagamento de quem estava comprando de verdade. */
+const freteLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, handler: sendTooManyRequests });
+
+/* Enviar avaliação carrega até 10 fotos de 4MB, e cada uma passa pelo sharp
+   NO MESMO processo que serve a loja. Quem tem um link de avaliação válido
+   (a cliente, ou quem recebeu o e-mail encaminhado) podia repetir isso 100
+   vezes por janela. O teto de fotos continua em 10 porque um pedido grande
+   tem itens demais para caber em 5 — o que segura o abuso é a frequência,
+   não tirar foto de quem tem direito a mandar.
+
+   30 é folgado para uma pessoa (uma avaliação sincera são 2 ou 3 envios,
+   contando a troca de uma foto) e aperta bastante quem quisesse usar a
+   rota para gastar CPU: antes eram as mesmas 100 do balde compartilhado
+   com o checkout, que ainda por cima ficava sem cota junto. */
+const avaliacaoLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, handler: sendTooManyRequests });
 
 // Limite ainda mais rígido para login/cadastro — dificulta força bruta de
 // senha e criação em massa de contas. Não segue a mesma folga dos outros
@@ -1927,7 +1961,7 @@ async function quoteShipping(cepDestino, validatedItems){
    calculadas de verdade junto ao Melhor Envio (peso/valor vêm do
    catálogo do servidor, nunca do navegador).
 ========================================================================= */
-app.post("/api/calculate-shipping", strictLimiter, async (req, res) => {
+app.post("/api/calculate-shipping", freteLimiter, async (req, res) => {
   try {
     const cep = String(req.body?.cep || "").replace(/\D/g, "");
     if(!/^\d{8}$/.test(cep)){
@@ -2682,7 +2716,7 @@ async function processarFotoDeAvaliacao(buffer){
     .toBuffer();
 }
 
-app.post("/api/avaliar/:reference", strictLimiter, (req, res) => {
+app.post("/api/avaliar/:reference", avaliacaoLimiter, (req, res) => {
   const order = pedidoDoToken(req);
   if(!order) return res.status(404).json({ error: "Link inválido ou expirado." });
   if(order.fulfillment_status !== "entregue"){
