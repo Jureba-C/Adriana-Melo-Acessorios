@@ -12,6 +12,8 @@
  *  - a CSP que sai no cabeçalho é exatamente a esperada, diretiva por
  *    diretiva — hoje parte dela vem dos padrões do helmet, e trocar isso sem
  *    perceber derrubaria proteção sem nenhum sintoma visível;
+ *  - o Cross-Origin-Opener-Policy deixa o popup do login com Google falar
+ *    de volta com a página (o padrão do helmet deixava a janela em branco);
  *  - a CSP do <meta> de cada página nunca é mais FROUXA que a do cabeçalho.
  *    Os dois são mantidos à mão e o navegador aplica a interseção, então é
  *    fácil um ganhar uma permissão que o outro não tem e ninguém notar.
@@ -211,6 +213,14 @@ test("a CSP do cabeçalho é exatamente a esperada", async () => {
   const atual = lerCsp(bruta);
   delete atual["upgrade-insecure-requests"];
   assert.deepEqual(atual, CSP_ESPERADA);
+});
+
+// Com o padrão do helmet (same-origin) a janela do "Entrar com Google" abria,
+// ia até accounts.google.com/gsi/transform e ficava em branco: sem o elo com
+// a página que a abriu, a credencial não tinha para onde voltar.
+test("a política de janelas deixa o popup do Google devolver o login", async () => {
+  const res = await fetch(ORIGIN + "/");
+  assert.equal(res.headers.get("cross-origin-opener-policy"), "same-origin-allow-popups");
 });
 
 // Cada página HTML repete a CSP num <meta>, e o navegador aplica a INTERSEÇÃO

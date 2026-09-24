@@ -377,6 +377,13 @@ app.use(helmet({
       ...(CLIENT_ORIGIN.startsWith("https://") ? {} : { upgradeInsecureRequests: null }),
     },
   },
+  // O padrão do helmet (same-origin) corta o elo entre a página e a janela do
+  // "Entrar com Google": o popup chega em accounts.google.com/gsi/transform,
+  // não consegue devolver a credencial e fica em branco para sempre. O Google
+  // exige same-origin-allow-popups para o botão em modo popup. Continua
+  // isolando a página de quem a abriu; só deixa as janelas que ELA abre
+  // falarem de volta com ela.
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
 }));
 
 // O helmet não escreve Permissions-Policy, e sem ela a página (e qualquer
