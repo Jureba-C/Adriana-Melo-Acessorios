@@ -1302,10 +1302,6 @@
   const apName = document.getElementById("apName");
   const apDescription = document.getElementById("apDescription");
   const apPrice = document.getElementById("apPrice");
-  const apWeight = document.getElementById("apWeight");
-  const apWidth = document.getElementById("apWidth");
-  const apHeight = document.getElementById("apHeight");
-  const apLength = document.getElementById("apLength");
   const apCategory = document.getElementById("apCategory");
 
   function atualizarDescricaoAutomatica(){
@@ -1562,10 +1558,6 @@
       name: apName.value.trim(),
       description: apDescription.value.trim(),
       price: Number(apPrice.value),
-      weight: Number(apWeight.value),
-      width: Number(apWidth.value),
-      height: Number(apHeight.value),
-      length: Number(apLength.value),
       category: apCategory.value,
       badges: [apBadgeBestseller, apBadgeNew].filter(cb => cb.checked).map(cb => cb.value),
     };

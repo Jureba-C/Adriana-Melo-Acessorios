@@ -55,6 +55,7 @@ const campanhas = require("./lib/campanhas.js");
 const googleAuth = require("./lib/googleAuth.js");
 const tarefasPeriodicas = require("./scripts/tarefas-periodicas.js");
 const rastreio = require("./lib/rastreio.js");
+const { vaiNaCaixaPadrao } = require("./lib/empacotamento.js");
 const { prazoDaCotacao } = require("./lib/prazoFrete.js");
 const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // Mesmo arquivo que a vitrine e o carrinho carregam no navegador (js/pricing.js,
@@ -4999,15 +5000,28 @@ function isValidDimension(v, max){
   return typeof v === "number" && Number.isFinite(v) && v > 0 && v <= max;
 }
 
+// O painel não pede mais peso/medidas. Elas só pesam no frete de quem viaja
+// fora da caixinha padrão (hoje, cabide — ver lib/empacotamento.js); para
+// esses, copiar do último produto da MESMA categoria mantém a cotação
+// realista em vez de cotar um cabide como se fosse um laço. Sem nenhum
+// irmão cadastrado, cai na caixinha padrão.
+function medidasPadraoParaNovo(category){
+  if(category && !vaiNaCaixaPadrao({ category })){
+    const irmaos = db.listCustomProducts().filter(p => p.category === category);
+    const ultimo = irmaos[irmaos.length - 1];
+    if(ultimo) return { weight: ultimo.weight, width: ultimo.width, height: ultimo.height, length: ultimo.length };
+  }
+  return { ...CAIXA_PADRAO };
+}
+
 /* =========================================================================
    POST /api/admin/products — cria um produto do zero
    -------------------------------------------------------------------------
    Diferente do PATCH abaixo (que edita um produto que já existe), esta
-   rota recebe o produto INTEIRO — inclusive peso/dimensões, que para os 8
-   produtos fixos vêm só de PRODUCTS e nunca são editáveis por aqui, mas
-   para um produto novo não têm de onde herdar. A foto entra depois, pelo
-   fluxo de sempre (POST .../:id/photo + PATCH), porque o upload de foto
-   exige um id que só existe depois deste POST responder.
+   rota recebe o produto INTEIRO. Peso/dimensões são opcionais desde que o
+   painel deixou de pedir: ver medidasPadraoParaNovo. A foto entra depois,
+   pelo fluxo de sempre (POST .../:id/photo + PATCH), porque o upload de
+   foto exige um id que só existe depois deste POST responder.
 ========================================================================= */
 app.post("/api/admin/products", auth.requireAdmin, auth.requireAdminTwoFactor, (req, res) => {
   try {
@@ -5021,19 +5035,22 @@ app.post("/api/admin/products", auth.requireAdmin, auth.requireAdminTwoFactor, (
     if(!isValidProductPrice(price)){
       return res.status(400).json({ error: "Preço inválido. Use um valor entre R$ 0,01 e R$ 99.999,99." });
     }
-    const weight = Number(body.weight);
-    if(!isValidDimension(weight, 20)){
-      return res.status(400).json({ error: "Peso inválido. Use um valor entre 0,01 e 20 kg." });
-    }
-    const width = Number(body.width);
-    const height = Number(body.height);
-    const length = Number(body.length);
-    if(![width, height, length].every(v => isValidDimension(v, 100))){
-      return res.status(400).json({ error: "Dimensões inválidas. Use valores entre 0,01 e 100 cm." });
-    }
     const category = body.category ? String(body.category).trim() : "";
     if(category && !isValidCategorySlug(category)){
       return res.status(400).json({ error: "Categoria inválida." });
+    }
+    const informouMedidas = ["weight", "width", "height", "length"]
+      .some(k => body[k] !== undefined && body[k] !== null && body[k] !== "");
+    const padrao = informouMedidas ? null : medidasPadraoParaNovo(category);
+    const weight = padrao ? padrao.weight : Number(body.weight);
+    if(!isValidDimension(weight, 20)){
+      return res.status(400).json({ error: "Peso inválido. Use um valor entre 0,01 e 20 kg." });
+    }
+    const width = padrao ? padrao.width : Number(body.width);
+    const height = padrao ? padrao.height : Number(body.height);
+    const length = padrao ? padrao.length : Number(body.length);
+    if(![width, height, length].every(v => isValidDimension(v, 100))){
+      return res.status(400).json({ error: "Dimensões inválidas. Use valores entre 0,01 e 100 cm." });
     }
     const badges = "badges" in body ? body.badges : [];
     if(!isValidBadges(badges)){

@@ -512,6 +512,30 @@ test("descrição do produto: PATCH edita, GET /api/products reflete, POST /api/
   assert.equal((await created.json()).description, "Feito sob encomenda.");
 });
 
+test("produto novo sem peso/medidas: laço pega a caixinha padrão, cabide copia o último cabide", async () => {
+  const adminCookie = sharedAdminCookie;
+  assert.ok(adminCookie);
+  const { CAIXA_PADRAO } = require("../lib/empacotamento.js");
+  const medidas = p => ({ weight: p.weight, width: p.width, height: p.height, length: p.length });
+
+  const laco = await post("/api/admin/products", { name: "Laço Sem Medidas", price: 29, category: "parzinho", badges: [] }, adminCookie);
+  assert.equal(laco.status, 201);
+  assert.deepEqual(medidas(db.getCustomProduct((await laco.json()).id)), CAIXA_PADRAO);
+
+  const cabideMedido = await post("/api/admin/products", {
+    name: "Cabide Medido", price: 78, category: "cabide", badges: [],
+    weight: 0.35, width: 30, height: 2, length: 40,
+  }, adminCookie);
+  assert.equal(cabideMedido.status, 201);
+
+  const cabideNovo = await post("/api/admin/products", { name: "Cabide Sem Medidas", price: 78, category: "cabide", badges: [] }, adminCookie);
+  assert.equal(cabideNovo.status, 201);
+  assert.deepEqual(medidas(db.getCustomProduct((await cabideNovo.json()).id)), { weight: 0.35, width: 30, height: 2, length: 40 });
+
+  const medidaErrada = await post("/api/admin/products", { name: "Medida Errada", price: 10, weight: 0, badges: [] }, adminCookie);
+  assert.equal(medidaErrada.status, 400, "quem manda medida continua sendo validado");
+});
+
 test("continuar pagamento: 404 se não existe/não é da cliente, 409 se já não está pendente", async () => {
   // Duas clientes novas, cada uma dona de um pedido — tudo inserido direto
   // no banco (db.createUser/createSession/createOrder), sem passar por
