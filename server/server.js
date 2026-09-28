@@ -55,7 +55,7 @@ const campanhas = require("./lib/campanhas.js");
 const googleAuth = require("./lib/googleAuth.js");
 const tarefasPeriodicas = require("./scripts/tarefas-periodicas.js");
 const rastreio = require("./lib/rastreio.js");
-const { vaiNaCaixaPadrao } = require("./lib/empacotamento.js");
+const { CAIXAS, CATEGORIAS_FORA_DA_CAIXA, vaiNaCaixaPadrao } = require("./lib/empacotamento.js");
 const { prazoDaCotacao } = require("./lib/prazoFrete.js");
 const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // Mesmo arquivo que a vitrine e o carrinho carregam no navegador (js/pricing.js,
@@ -5000,15 +5000,15 @@ function isValidDimension(v, max){
   return typeof v === "number" && Number.isFinite(v) && v > 0 && v <= max;
 }
 
-// O painel não pede mais peso/medidas. Elas só pesam no frete de quem viaja
-// fora da caixinha padrão (hoje, cabide — ver lib/empacotamento.js); para
-// esses, copiar do último produto da MESMA categoria mantém a cotação
-// realista em vez de cotar um cabide como se fosse um laço. Sem nenhum
-// irmão cadastrado, cai na caixinha padrão.
-function medidasPadraoParaNovo(category){
-  if(category && !vaiNaCaixaPadrao({ category })){
-    const irmaos = db.listCustomProducts().filter(p => p.category === category);
-    const ultimo = irmaos[irmaos.length - 1];
+// O painel não pede mais peso/medidas, só "caixa padrão" ou "caixa maior".
+// As medidas só pesam no frete de quem vai na caixa maior (lib/empacotamento.js);
+// para esses, copiar do último produto que já viaja assim (hoje, os cabides)
+// mantém a cotação realista em vez de cotar um cabide como se fosse um laço.
+// Sem nenhum cadastrado, cai na caixinha padrão.
+function medidasPadraoParaNovo(caixa){
+  if(caixa === "maior"){
+    const maiores = db.listCustomProducts().filter(p => !vaiNaCaixaPadrao(p));
+    const ultimo = maiores[maiores.length - 1];
     if(ultimo) return { weight: ultimo.weight, width: ultimo.width, height: ultimo.height, length: ultimo.length };
   }
   return { ...CAIXA_PADRAO };
@@ -5019,7 +5019,7 @@ function medidasPadraoParaNovo(category){
    -------------------------------------------------------------------------
    Diferente do PATCH abaixo (que edita um produto que já existe), esta
    rota recebe o produto INTEIRO. Peso/dimensões são opcionais desde que o
-   painel deixou de pedir: ver medidasPadraoParaNovo. A foto entra depois,
+   painel passou a pedir só a embalagem: ver medidasPadraoParaNovo. A foto entra depois,
    pelo fluxo de sempre (POST .../:id/photo + PATCH), porque o upload de
    foto exige um id que só existe depois deste POST responder.
 ========================================================================= */
@@ -5039,9 +5039,15 @@ app.post("/api/admin/products", auth.requireAdmin, auth.requireAdminTwoFactor, (
     if(category && !isValidCategorySlug(category)){
       return res.status(400).json({ error: "Categoria inválida." });
     }
+    const caixa = body.caixa
+      ? String(body.caixa)
+      : (CATEGORIAS_FORA_DA_CAIXA.has(category) ? "maior" : "padrao");
+    if(!CAIXAS.has(caixa)){
+      return res.status(400).json({ error: "Embalagem inválida." });
+    }
     const informouMedidas = ["weight", "width", "height", "length"]
       .some(k => body[k] !== undefined && body[k] !== null && body[k] !== "");
-    const padrao = informouMedidas ? null : medidasPadraoParaNovo(category);
+    const padrao = informouMedidas ? null : medidasPadraoParaNovo(caixa);
     const weight = padrao ? padrao.weight : Number(body.weight);
     if(!isValidDimension(weight, 20)){
       return res.status(400).json({ error: "Peso inválido. Use um valor entre 0,01 e 20 kg." });
@@ -5063,7 +5069,7 @@ app.post("/api/admin/products", auth.requireAdmin, auth.requireAdminTwoFactor, (
 
     const created = db.insertCustomProduct({
       startAt: CUSTOM_PRODUCT_ID_START, name, price: Math.round(price * 100) / 100,
-      weight, width, height, length, category: category || null, badges, description: description || null,
+      weight, width, height, length, category: category || null, badges, description: description || null, caixa,
     });
     res.status(201).json({
       id: created.id, name: created.name, price: created.price, photoUrl: null, photos: [],

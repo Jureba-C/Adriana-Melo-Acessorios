@@ -91,3 +91,15 @@ test("a caixa nunca fica menor que a caixa padrão", () => {
   assert.equal(pkg.length, CAIXA_PADRAO.length);
   assert.equal(pkg.height, CAIXA_PADRAO.height);
 });
+
+test("a embalagem escolhida no cadastro vale mais que a categoria", () => {
+  assert.equal(vaiNaCaixaPadrao({ category: "parzinho", caixa: "maior" }), false);
+  assert.equal(vaiNaCaixaPadrao({ category: "cabide", caixa: "padrao" }), true);
+  assert.equal(vaiNaCaixaPadrao({ category: "cabide", caixa: null }), false, "produto antigo segue a categoria");
+  assert.equal(vaiNaCaixaPadrao({ category: "parzinho" }), true);
+
+  const grande = { price: 78, weight: 0.35, width: 30, height: 2, length: 40, category: "parzinho", caixa: "maior" };
+  const pkg = buildPackage([{ qty: 2, product: grande }]);
+  assert.equal(pkg.weight, 0.7);
+  assert.equal(pkg.length, 40);
+});

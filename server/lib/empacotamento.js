@@ -30,7 +30,13 @@ const PESO_LACO_KG = 0.02;
    realmente volumoso precisa ser declarado aqui. */
 const CATEGORIAS_FORA_DA_CAIXA = new Set(["cabide"]);
 
+/* A escolha feita no cadastro ("padrao" | "maior") manda. Só produto
+   criado antes dessa opção existir (caixa NULL) cai na regra por categoria. */
+const CAIXAS = new Set(["padrao", "maior"]);
+
 function vaiNaCaixaPadrao(product) {
+  if (product.caixa === "maior") return false;
+  if (product.caixa === "padrao") return true;
   return !CATEGORIAS_FORA_DA_CAIXA.has(String(product.category || "").trim());
 }
 
@@ -83,6 +89,7 @@ module.exports = {
   PESO_EMBALAGEM_KG,
   PESO_LACO_KG,
   CATEGORIAS_FORA_DA_CAIXA,
+  CAIXAS,
   vaiNaCaixaPadrao,
   buildPackage,
 };

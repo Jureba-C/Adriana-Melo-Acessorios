@@ -1303,6 +1303,16 @@
   const apDescription = document.getElementById("apDescription");
   const apPrice = document.getElementById("apPrice");
   const apCategory = document.getElementById("apCategory");
+  const apCaixaPadrao = document.getElementById("apCaixaPadrao");
+  const apCaixaMaior = document.getElementById("apCaixaMaior");
+
+  function ajustarCaixaPelaCategoria(){
+    if(addProductForm.dataset.caixaManual === "true") return;
+    const maior = apCategory.value === "cabide";
+    apCaixaMaior.checked = maior;
+    apCaixaPadrao.checked = !maior;
+  }
+  [apCaixaPadrao, apCaixaMaior].forEach(r => r.addEventListener("change", () => { addProductForm.dataset.caixaManual = "true"; }));
 
   function atualizarDescricaoAutomatica(){
     if(apDescription.dataset.descricaoManual === "true") return;
@@ -1317,12 +1327,14 @@
 
   async function aoDigitarNomeAdicionar(){
     await autoDetectarCategoria(apName.value, apCategory);
+    ajustarCaixaPelaCategoria();
     atualizarDescricaoAutomatica();
   }
   const aoDigitarNomeAdicionarComAtraso = comAtraso(aoDigitarNomeAdicionar, 400);
   apName.addEventListener("input", aoDigitarNomeAdicionarComAtraso);
   apCategory.addEventListener("change", () => {
     apCategory.dataset.categoriaManual = "true";
+    ajustarCaixaPelaCategoria();
     atualizarDescricaoAutomatica();
   });
   const apBadgeBestseller = document.getElementById("apBadgeBestseller");
@@ -1546,6 +1558,7 @@
     resetApPhotos();
     apCategory.dataset.categoriaManual = "false";
     apDescription.dataset.descricaoManual = "false";
+    addProductForm.dataset.caixaManual = "false";
     renderCategoryOptions(apCategory, "");
     apMsg.textContent = "";
     apMsg.className = "small account-msg";
@@ -1559,6 +1572,7 @@
       description: apDescription.value.trim(),
       price: Number(apPrice.value),
       category: apCategory.value,
+      caixa: apCaixaMaior.checked ? "maior" : "padrao",
       badges: [apBadgeBestseller, apBadgeNew].filter(cb => cb.checked).map(cb => cb.value),
     };
 

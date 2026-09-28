@@ -183,6 +183,7 @@ function effectiveProduct(id, overridesMap){
     return {
       name: custom.name, price: custom.price,
       weight: custom.weight, width: custom.width, height: custom.height, length: custom.length,
+      caixa: custom.caixa || null,
       category: custom.category, photos, photoUrl: photos[0] || null,
       badges: custom.badges ? JSON.parse(custom.badges) : [],
       // NULL = nunca customizado -> todas as cores disponíveis (não deixa

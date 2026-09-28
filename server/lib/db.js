@@ -333,6 +333,10 @@ ensureColumn("custom_products", "hidden", "INTEGER");
 // marcar algo como indisponível.
 ensureColumn("product_overrides", "sold_out", "INTEGER");
 ensureColumn("custom_products", "sold_out", "INTEGER");
+// Embalagem escolhida no cadastro: "padrao" (divide a caixinha) ou "maior"
+// (viaja em volume próprio, como cabide). NULL = produto de antes da opção,
+// que segue a regra por categoria de lib/empacotamento.js.
+ensureColumn("custom_products", "caixa", "TEXT");
 // Telefone só com dígitos, copiado do endereço na hora de gravar o pedido.
 // É o único identificador que sobra para quem compra sem conta — sem uma
 // coluna própria, casar "(61) 98274-9808" com "61982749808" dentro do JSON
@@ -1544,8 +1548,8 @@ const stmtGetCustomProduct = db.prepare(`SELECT * FROM custom_products WHERE id 
 const stmtMaxCustomProductId = db.prepare(`SELECT MAX(id) AS maxId FROM custom_products`);
 const stmtInsertCustomProduct = db.prepare(`
   INSERT INTO custom_products
-    (id, name, price, weight, width, height, length, category, photo_url, badges, available_colors, photos, allow_second_color, description, ncm, hidden, sold_out, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, name, price, weight, width, height, length, category, photo_url, badges, available_colors, photos, allow_second_color, description, ncm, hidden, sold_out, caixa, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const stmtUpdateCustomProduct = db.prepare(`
   UPDATE custom_products SET
@@ -1567,7 +1571,7 @@ function nextCustomProductId(startAt) {
   const { maxId } = stmtMaxCustomProductId.get();
   return Math.max(startAt - 1, maxId || 0) + 1;
 }
-function insertCustomProduct({ startAt, name, price, weight, width, height, length, category, badges, description }) {
+function insertCustomProduct({ startAt, name, price, weight, width, height, length, category, badges, description, caixa }) {
   const id = nextCustomProductId(startAt);
   const now = Date.now();
   stmtInsertCustomProduct.run(
@@ -1580,6 +1584,7 @@ function insertCustomProduct({ startAt, name, price, weight, width, height, leng
     null, // ncm: produto novo começa sem classificação fiscal
     0,    // hidden: produto novo começa visível na vitrine
     0,    // sold_out: produto novo começa disponível para compra
+    caixa || null,
     now, now
   );
   return getCustomProduct(id);

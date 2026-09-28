@@ -512,26 +512,32 @@ test("descrição do produto: PATCH edita, GET /api/products reflete, POST /api/
   assert.equal((await created.json()).description, "Feito sob encomenda.");
 });
 
-test("produto novo sem peso/medidas: laço pega a caixinha padrão, cabide copia o último cabide", async () => {
+test("produto novo escolhe a embalagem: caixa padrão ou caixa maior (copia as medidas do último que vai na maior)", async () => {
   const adminCookie = sharedAdminCookie;
   assert.ok(adminCookie);
   const { CAIXA_PADRAO } = require("../lib/empacotamento.js");
   const medidas = p => ({ weight: p.weight, width: p.width, height: p.height, length: p.length });
+  const criar = async body => {
+    const res = await post("/api/admin/products", { price: 29, badges: [], ...body }, adminCookie);
+    assert.equal(res.status, 201);
+    return db.getCustomProduct((await res.json()).id);
+  };
 
-  const laco = await post("/api/admin/products", { name: "Laço Sem Medidas", price: 29, category: "parzinho", badges: [] }, adminCookie);
-  assert.equal(laco.status, 201);
-  assert.deepEqual(medidas(db.getCustomProduct((await laco.json()).id)), CAIXA_PADRAO);
+  const laco = await criar({ name: "Laço Caixa Padrão", category: "parzinho", caixa: "padrao" });
+  assert.deepEqual(medidas(laco), CAIXA_PADRAO);
+  assert.equal(laco.caixa, "padrao");
 
-  const cabideMedido = await post("/api/admin/products", {
-    name: "Cabide Medido", price: 78, category: "cabide", badges: [],
-    weight: 0.35, width: 30, height: 2, length: 40,
-  }, adminCookie);
-  assert.equal(cabideMedido.status, 201);
+  const cabideMedido = await criar({ name: "Cabide Medido", category: "cabide", weight: 0.35, width: 30, height: 2, length: 40 });
+  assert.equal(cabideMedido.caixa, "maior", "sem escolha, cabide vai na caixa maior");
 
-  const cabideNovo = await post("/api/admin/products", { name: "Cabide Sem Medidas", price: 78, category: "cabide", badges: [] }, adminCookie);
-  assert.equal(cabideNovo.status, 201);
-  assert.deepEqual(medidas(db.getCustomProduct((await cabideNovo.json()).id)), { weight: 0.35, width: 30, height: 2, length: 40 });
+  const outroGrande = await criar({ name: "Peça Grande", category: "parzinho", caixa: "maior" });
+  assert.deepEqual(medidas(outroGrande), { weight: 0.35, width: 30, height: 2, length: 40 });
 
+  const semEscolha = await criar({ name: "Laço Sem Escolha", category: "parzinho" });
+  assert.equal(semEscolha.caixa, "padrao");
+
+  const invalida = await post("/api/admin/products", { name: "Caixa Inventada", price: 10, caixa: "gigante", badges: [] }, adminCookie);
+  assert.equal(invalida.status, 400);
   const medidaErrada = await post("/api/admin/products", { name: "Medida Errada", price: 10, weight: 0, badges: [] }, adminCookie);
   assert.equal(medidaErrada.status, 400, "quem manda medida continua sendo validado");
 });
