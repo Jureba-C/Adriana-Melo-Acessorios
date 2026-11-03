@@ -137,6 +137,34 @@ test("o sitemap lista cada laço visível e some com o escondido", async () => {
   db.upsertProductOverride(7, { hidden: false });
 });
 
+test("sitemap traz lastmod em cada endereço, e o de produto editado é o dia da edição", async () => {
+  db.upsertProductOverride(4, { description: "Mexida para o lastmod." });
+  const xml = await (await fetch(`${ORIGIN}/sitemap.xml`)).text();
+  const urls = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map(m => m[1]);
+  assert.ok(urls.length > 2);
+  for(const u of urls) assert.match(u, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/, u);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const produto4 = urls.find(u => /\/laco\/4-/.test(u));
+  assert.match(produto4, new RegExp(`<lastmod>${hoje}</lastmod>`));
+});
+
+test("robots.txt declara o Content-Signal sem liberar treino de IA", async () => {
+  const robots = await (await fetch(`${ORIGIN}/robots.txt`)).text();
+  assert.match(robots, /^Content-Signal: search=yes, ai-input=yes, ai-train=no$/m);
+});
+
+test("home: navegador recebe HTML, quem pede Markdown recebe o llms.txt, e o Link aponta os dois", async () => {
+  const html = await fetch(`${ORIGIN}/`, { headers: { Accept: "text/html,application/xhtml+xml,*/*;q=0.8" } });
+  assert.match(html.headers.get("content-type"), /text\/html/);
+  assert.match(html.headers.get("link"), /<\/llms\.txt>; rel="alternate"; type="text\/markdown"/);
+  assert.match(html.headers.get("link"), /rel="privacy-policy"/);
+  assert.match(html.headers.get("vary") || "", /Accept/i);
+
+  const md = await fetch(`${ORIGIN}/`, { headers: { Accept: "text/markdown" } });
+  assert.match(md.headers.get("content-type"), /text\/markdown/);
+  assert.match(await md.text(), /^# Adriana Melo Acessórios/);
+});
+
 test("a página do laço tem dados estruturados de produto, sem nota inventada", async () => {
   const html = await (await fetch(`${ORIGIN}/laco/2-laco-duquesa`)).text();
   const blocos = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]

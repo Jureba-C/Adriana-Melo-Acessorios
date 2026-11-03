@@ -1633,18 +1633,26 @@ function sitemapXml(){
   if(CACHE_SITEMAP && CACHE_SITEMAP.versao === versao) return CACHE_SITEMAP.xml;
 
   const overridesMap = getProductOverridesMap();
-  const linhas = [
-    `  <url>\n    <loc>${SITE_URL}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
-    `  <url>\n    <loc>${SITE_URL}/politica.html</loc>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>`,
-  ];
+  // lastmod: produto usa o updated_at do banco; produto fixo nunca editado
+  // e as páginas usam a data do arquivo (no ar, a do último deploy).
+  const dia = ms => new Date(ms).toISOString().slice(0, 10);
+  const mtime = arquivo => fs.statSync(path.join(SITE_ROOT, arquivo)).mtimeMs;
+  const catalogoFixo = fs.statSync(path.join(__dirname, "lib", "catalogo.js")).mtimeMs;
+  const produtos = [];
   for(const id of getAllProductIds()){
     const p = effectiveProduct(id, overridesMap);
     // Esgotado continua na lista: a página existe e volta a vender. Só o
     // escondido sai, porque o endereço dele desvia para a vitrine.
     if(!p || p.hidden) continue;
-    const loc = escaparHtml(SITE_URL + produtoUrl.caminhoDoProduto(id, p.name));
-    linhas.push(`  <url>\n    <loc>${loc}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`);
+    const linha = id >= CUSTOM_PRODUCT_ID_START ? db.getCustomProduct(id) : overridesMap.get(id);
+    produtos.push({ loc: escaparHtml(SITE_URL + produtoUrl.caminhoDoProduto(id, p.name)), alterado: linha?.updated_at || catalogoFixo });
   }
+  const home = Math.max(mtime("index.html"), ...produtos.map(p => p.alterado));
+  const linhas = [
+    `  <url>\n    <loc>${SITE_URL}/</loc>\n    <lastmod>${dia(home)}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+    `  <url>\n    <loc>${SITE_URL}/politica.html</loc>\n    <lastmod>${dia(mtime("politica.html"))}</lastmod>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>`,
+    ...produtos.map(p => `  <url>\n    <loc>${p.loc}</loc>\n    <lastmod>${dia(p.alterado)}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>`),
+  ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${linhas.join("\n")}\n</urlset>\n`;
   CACHE_SITEMAP = { versao, xml };
   return xml;
@@ -1691,6 +1699,18 @@ app.use((req, res, next) => {
   // duas travas que o restante do arquivo já aplica.
   if(!arquivo.startsWith(SITE_ROOT + path.sep)) return next();
   if(!PUBLIC_TOP_LEVEL.has(rota.split("/")[1])) return next();
+  // Home negocia o formato: assistente de IA que pede Markdown recebe o
+  // llms.txt (a loja em texto) em vez do HTML inteiro. Navegador manda
+  // text/html no Accept e continua recebendo a página.
+  if(req.path === "/" || rota === "/index.html"){
+    res.setHeader("Link", '</llms.txt>; rel="alternate"; type="text/markdown", </politica.html>; rel="terms-of-service", </politica.html#privacidade>; rel="privacy-policy"');
+    res.setHeader("Vary", "Accept");
+    if(req.accepts(["text/html", "text/markdown"]) === "text/markdown"){
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.send(fs.readFileSync(path.join(SITE_ROOT, "llms.txt"), "utf8"));
+    }
+  }
   let html;
   try { html = htmlVersionado(arquivo); } catch { return next(); }
   res.setHeader("Content-Type", "text/html; charset=utf-8");

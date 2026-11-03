@@ -2,6 +2,7 @@
 # são privadas (ou só fazem sentido no meio de uma compra) e apareceriam
 # soltas na busca. A loja em si fica liberada.
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /$
 Allow: /index.html
 Allow: /politica.html
