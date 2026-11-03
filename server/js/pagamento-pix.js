@@ -6,11 +6,10 @@
   const LIMITE_MS = 20 * 60 * 1000; 
 
   const statePagar = document.getElementById("statePagar");
-  const statePago = document.getElementById("statePago");
   const stateSemDados = document.getElementById("stateSemDados");
 
   function showOnly(el){
-    [statePagar, statePago, stateSemDados].forEach(s => s.classList.toggle("d-none", s !== el));
+    [statePagar, stateSemDados].forEach(s => s.classList.toggle("d-none", s !== el));
   }
 
   function brl(v){
@@ -81,7 +80,7 @@
     }catch(err){
       console.warn("Não foi possível limpar o carrinho salvo:", err);
     }
-    showOnly(statePago);
+    location.replace(`pagamento-sucesso.html?external_reference=${encodeURIComponent(dados.reference)}`);
   }
 
   async function checarStatus(){
