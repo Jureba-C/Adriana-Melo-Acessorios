@@ -1089,12 +1089,10 @@ function estrelasHtml(nota){
    pronto para quem está sem JS ou pediu menos movimento. */
 function blocoNotaMedia(){
   const { total, media } = db.notaMedia();
-  if(!total){
-    return `<div class="hero-stat"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-truck"></i></span><span class="num is-texto">Todo o Brasil</span><span class="lbl">envio com rastreio</span></div>`;
-  }
+  if(!total) return "";
   const nota = media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const rotulo = total === 1 ? "de 1 avaliação" : `de ${total} avaliações`;
-  return `<div class="hero-stat hero-stat-nota"><span class="hero-stat-icone" aria-hidden="true"><i class="bi bi-star-fill"></i></span><span class="num"><span class="num-valor" data-contar="${media.toFixed(1)}" data-casas="1">${nota}</span><i class="bi bi-star-fill num-estrela" aria-hidden="true"></i></span><span class="lbl">${rotulo}</span></div>`;
+  return `<li class="vantagem hero-stat-nota"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-star-fill"></i></span><span class="vantagem-texto"><strong><span class="num-valor" data-contar="${media.toFixed(1)}" data-casas="1">${nota}</span> de 5</strong><span>${rotulo}</span></span></li>`;
 }
 
 /* Lacinhos e brilhos de fundo da seção de avaliações. Posições fixas (não
@@ -1318,23 +1316,14 @@ function secaoAvaliacoes(){
 }
 
 /* =========================================================================
-   Carrossel de fotos do topo da home
+   Topo da home
    -------------------------------------------------------------------------
-   As fotos saem do painel (tabela hero_photos). Com a tabela vazia, valem
-   as cinco de FOTOS_HERO_PADRAO, que são os arquivos img/hero-* com que o
-   site nasceu — trocar tudo pelo painel e depois apagar não deixa o topo
-   em branco.
-
-   O primeiro slide fica solto dentro de .hero-slides e os demais dentro de
-   um <template> (que mora dentro do quadro só porque ali o marcador fica com
-   as tags equilibradas; <template> não renderiza, a posição é indiferente). Isso não é estilo: slides empilhados em position:absolute
-   contam como visíveis para o navegador, então loading="lazy" NÃO segura o
-   download — só o <template> segura. O primeiro leva fetchpriority="high"
-   por ser o LCP da home.
+   O topo é o banner por categoria (blocoBanner, abaixo). FOTOS_HERO_PADRAO
+   são os arquivos img/hero-* com que o site nasceu: o banner usa a primeira
+   quando não há nenhum produto com foto, e o painel ainda lista as cinco.
 ========================================================================= */
-const MARCA_HERO = "<!--#HERO-FOTOS#-->";
+const MARCA_BANNER = "<!--#BANNER-HOME#-->";
 const MARCA_HERO_PRELOAD = "<!--#HERO-PRELOAD#-->";
-const HERO_SIZES = "(max-width: 575.98px) 78vw, (max-width: 991.98px) 62vw, 420px";
 
 const FOTOS_HERO_PADRAO = [
   { slug: "hero-laco-bailarina", legenda: "Laço rosa de bailarina com bolsinha preta",
@@ -1371,87 +1360,97 @@ function fontesDaFoto(foto){
       };
 }
 
-/* O preload adianta a imagem do topo (o LCP da home): sem ele o navegador só
-   descobre a foto quando o parser chega no <body>, depois de resolver os 4 CSS
-   que bloqueiam a renderização. O fetchpriority="high" do <img> já ajuda, mas
-   só a partir do momento em que a tag é lida.
-
-   Para as fotos fixas, o preload é do WEBP e leva type="image/webp": navegador
-   sem suporte a webp simplesmente ignora o link e descobre o JPEG do jeito
-   normal — nunca baixa os dois. As fotos do painel são servidas pela mesma URL
-   nos dois formatos (a rota escolhe pelo Accept), então ali não há type. */
-function preloadHero(foto){
-  const f = fontesDaFoto(foto);
-  const tipo = f.temWebpSeparado ? ' type="image/webp"' : "";
-  const p480 = f.temWebpSeparado ? f.webp480 : f.jpg480;
-  const p960 = f.temWebpSeparado ? f.webp960 : f.jpg960;
-  return `<link rel="preload" as="image"${tipo} imagesrcset="${p480} 480w, ${p960} 960w" imagesizes="${HERO_SIZES}" fetchpriority="high">`;
-}
-
-function slideHero(foto, primeiro){
-  const prioridade = primeiro ? ' fetchpriority="high"' : "";
-  const ativa = primeiro ? " is-ativa" : "";
-  const fontes = fontesDaFoto(foto);
-  // Uma foto do painel é servida pela MESMA URL em webp e jpeg (a rota
-  // decide pelo Accept do navegador), então ali o <source type="image/webp">
-  // não teria o que acrescentar e sai fora — deixá-lo faria o navegador
-  // pedir o mesmo arquivo com outro nome, sem ganho.
-  const source = fontes.temWebpSeparado
-    ? `<source type="image/webp" sizes="${HERO_SIZES}" srcset="${fontes.webp480} 480w, ${fontes.webp960} 960w">`
-    : "";
-  return `<div class="hero-slide${ativa}" data-legenda="${escaparHtml(foto.legenda)}">
-                  <picture>
-                    ${source}
-                    <img src="${fontes.jpg960}" srcset="${fontes.jpg480} 480w, ${fontes.jpg960} 960w" sizes="${HERO_SIZES}"
-                         alt="${escaparHtml(foto.alt)}" width="960" height="1200" decoding="async"${prioridade}>
-                  </picture>
-                </div>`;
-}
-
 function comVersao(rel){
   const v = versaoDoAsset(rel);
   return v ? `${rel}?v=${v}` : rel;
 }
 
-let CACHE_HERO = null;
+/* Banner do topo da home: um slide por categoria que tem produto visível com
+   foto, na ordem das categorias. Muda sozinho quando o catálogo muda (cache
+   pela versão do catálogo). Sem nenhum slide possível — catálogo vazio ou sem
+   fotos — entra um slide genérico com a primeira foto fixa de img/hero-*,
+   para o topo nunca ficar em branco.
 
-function blocoHero(){
-  const doPainel = db.listHeroPhotos();
-  const fotos = doPainel.length ? doPainel : FOTOS_HERO_PADRAO;
-  /* As fotos do painel são servidas por URL imutável (id + largura), mas as
-     padrão carregam ?v= do conteúdo do arquivo — por isso a assinatura do
-     cache junta a versão do banco com a dos arquivos.
+   O primeiro slide vai direto na página e os demais num <template>: slides
+   empilhados contam como visíveis para o navegador, e só o <template> segura
+   o download das fotos que ainda não apareceram. */
+const BANNER_SIZES = "(max-width: 575.98px) 44vw, (max-width: 991.98px) 36vw, 340px";
+const MAX_SLIDES_BANNER = 6;
+const TEXTO_DO_BANNER = {
+  "laco-unico":  ["Laço único", "um para cada penteado"],
+  "parzinho":    ["Parzinhos", "para usar em dupla"],
+  "laco-g":      ["Laços grandes", "para chamar atenção"],
+  "laco-pompom": ["Laço pompom", "fofinho e cheio de charme"],
+  "tiara":       ["Tiaras", "para completar o look"],
+  "kit":         ["Kits", "presente pronto"],
+  "bolsa":       ["Bolsinhas", "combinando com o laço"],
+  "cabide":      ["Cabides de laço", "para guardar com carinho"],
+};
 
-     ⚠️ Os QUATRO arquivos de cada foto entram na assinatura, não só o
-     -960.jpg. Cada slide referencia 480/960 em jpg e webp, e olhar um só
-     significava que regerar as imagens sem mexer naquele arquivo específico
-     deixava o HTML em cache com o ?v= antigo dos outros três. Como imagem é
-     servida com um ano de cache, quem já tinha visitado ficaria preso na
-     versão velha até o cache do navegador expirar. */
-  const assinatura = doPainel.length
-    ? db.heroVersion()
-    : FOTOS_HERO_PADRAO.flatMap(f => [
-        versaoDoAsset(`img/${f.slug}-480.jpg`),
-        versaoDoAsset(`img/${f.slug}-960.jpg`),
-        versaoDoAsset(`img/${f.slug}-480.webp`),
-        versaoDoAsset(`img/${f.slug}-960.webp`),
-      ]).join("|");
-  if(CACHE_HERO && CACHE_HERO.assinatura === assinatura) return CACHE_HERO.html;
+function fontesDoBanner(url){
+  if(!/^\/api\/products\/photos\//.test(url)) return { src: url, srcset: "" };
+  const base = url.split("?")[0];
+  return { src: `${base}?w=600`, srcset: `${base}?w=400 400w, ${base}?w=600 600w, ${base}?w=900 900w` };
+}
 
+function slidesDoBanner(){
+  const overridesMap = getProductOverridesMap();
+  const produtos = getAllProductIds()
+    .map(id => effectiveProduct(id, overridesMap))
+    .filter(p => p && !p.hidden && p.photoUrl);
+  const slides = [];
+  for(const cat of getAllCategories()){
+    if(slides.length >= MAX_SLIDES_BANNER) break;
+    const produto = produtos.find(p => p.category === cat.slug);
+    if(!produto) continue;
+    const [titulo, frase] = TEXTO_DO_BANNER[cat.slug] || [cat.label, "feito à mão pela Adriana"];
+    slides.push({ slug: cat.slug, rotulo: cat.label, titulo, frase, cta: `Ver ${cat.label}`, alt: produto.name, fontes: fontesDoBanner(produto.photoUrl) });
+  }
+  if(slides.length) return slides;
+  const padrao = FOTOS_HERO_PADRAO[0];
+  const f = fontesDaFoto(padrao);
+  return [{ slug: "todos", rotulo: "Adriana Melo", titulo: "Laços feitos à mão", frase: "pela Adriana Melo", cta: "Ver a loja",
+    alt: padrao.alt, fontes: { src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` } }];
+}
+
+function slideDoBanner(s, primeiro){
+  const conjunto = s.fontes.srcset ? ` srcset="${s.fontes.srcset}" sizes="${BANNER_SIZES}"` : "";
+  return `<div class="hero-slide banner-slide${primeiro ? " is-ativa" : ""}" data-legenda="${escaparHtml(s.titulo)}">
+                <div class="banner-texto">
+                  <p class="banner-titulo">${escaparHtml(s.titulo)}</p>
+                  <p class="banner-frase">${escaparHtml(s.frase)}</p>
+                  <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${escaparHtml(s.cta)} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                </div>
+                <figure class="banner-polaroide">
+                  <span class="banner-fita" aria-hidden="true"></span>
+                  <svg class="bow-icon banner-polaroide-laco" aria-hidden="true"><use href="#bow-shape"/></svg>
+                  <img src="${s.fontes.src}"${conjunto} alt="${escaparHtml(s.alt)}" width="600" height="750" decoding="async"${primeiro ? ' fetchpriority="high"' : ""}>
+                  <figcaption>${escaparHtml(s.rotulo)}</figcaption>
+                </figure>
+              </div>`;
+}
+
+let CACHE_BANNER = null;
+
+function blocoBanner(){
+  const versao = db.catalogVersion();
+  if(CACHE_BANNER && CACHE_BANNER.versao === versao) return CACHE_BANNER.html;
+  const slides = slidesDoBanner();
   const html = `<div class="hero-slides" id="heroSlides">
-                ${slideHero(fotos[0], true)}
-              </div>
-              <span class="hero-quadro-badge" aria-hidden="true">feito à mão <i class="bi bi-heart-fill"></i></span>
-              <template id="heroSlidesExtras">
-                ${fotos.slice(1).map(f => slideHero(f, false)).join("\n                ")}
-              </template>`;
-  CACHE_HERO = { assinatura, html, preload: preloadHero(fotos[0]) };
+              ${slideDoBanner(slides[0], true)}
+            </div>
+            <template id="heroSlidesExtras">
+              ${slides.slice(1).map(s => slideDoBanner(s, false)).join("\n              ")}
+            </template>`;
+  const f = slides[0].fontes;
+  const preload = `<link rel="preload" as="image" href="${f.src}"${f.srcset ? ` imagesrcset="${f.srcset}" imagesizes="${BANNER_SIZES}"` : ""} fetchpriority="high">`;
+  CACHE_BANNER = { versao, html, preload };
   return html;
 }
 
-function preloadDoHero(){
-  blocoHero();
-  return CACHE_HERO.preload;
+function preloadDoBanner(){
+  blocoBanner();
+  return CACHE_BANNER.preload;
 }
 
 function comAvaliacoes(html){
@@ -1461,8 +1460,8 @@ function comAvaliacoes(html){
   // reinjetaria o próprio marcador no meio da página.
   if(saida.includes(MARCA_NOTA_MEDIA)) saida = saida.replace(MARCA_NOTA_MEDIA, () => blocoNotaMedia());
   if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
-  if(saida.includes(MARCA_HERO)) saida = saida.replace(MARCA_HERO, () => blocoHero());
-  if(saida.includes(MARCA_HERO_PRELOAD)) saida = saida.replace(MARCA_HERO_PRELOAD, () => preloadDoHero());
+  if(saida.includes(MARCA_BANNER)) saida = saida.replace(MARCA_BANNER, () => blocoBanner());
+  if(saida.includes(MARCA_HERO_PRELOAD)) saida = saida.replace(MARCA_HERO_PRELOAD, () => preloadDoBanner());
   return saida;
 }
 
@@ -5685,7 +5684,7 @@ app.put("/api/admin/depoimentos/ordem", auth.requireAdmin, auth.requireAdminTwoF
    topo tempo suficiente para ver mais do que isso; cada foto a mais também
    é um download a mais na visita que abre o menu de pontinhos.
 
-   Zero fotos é permitido e volta para as fixas de img/hero-* (ver blocoHero).
+   Zero fotos é permitido e volta para as fixas de img/hero-*.
 ========================================================================= */
 const MAX_FOTOS_HERO = 6;
 const ENQUADRAMENTOS = new Set(["top", "center", "bottom"]);
@@ -5701,7 +5700,7 @@ const heroPhotoUpload = multer({
 // O alt descreve a foto para quem usa leitor de tela e para o Google; a
 // legenda é o que o carrossel anuncia ao trocar de foto. Os dois são texto
 // da lojista e vão para dentro do HTML da home — daí o teto de tamanho aqui
-// e o escaparHtml na hora de montar (slideHero).
+// e o escaparHtml na hora de montar.
 function textoDeFoto(valor, maximo){
   if(typeof valor !== "string") return null;
   const limpo = valor.trim().replace(/\s+/g, " ");

@@ -1,7 +1,7 @@
 /* GERADO por scripts/subset-icones.js — não editar à mão.
-   85 de 2050 ícones do Bootstrap Icons v1.11.3 (MIT).
+   83 de 2050 ícones do Bootstrap Icons v1.11.3 (MIT).
    Para adicionar um ícone: use a classe no HTML/JS e rode o script de novo. */
-@font-face{font-display:block;font-family:bootstrap-icons;src:url("fonts/bootstrap-icons.subset-4f21c72f.woff2") format("woff2")}
+@font-face{font-display:block;font-family:bootstrap-icons;src:url("fonts/bootstrap-icons.subset-6504617a.woff2") format("woff2")}
 .bi::before,[class*=" bi-"]::before,[class^=bi-]::before{display:inline-block;font-family:bootstrap-icons!important;font-style:normal;font-weight:400!important;font-variant:normal;text-transform:none;line-height:1;vertical-align:-.125em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .bi-arrow-counterclockwise::before{content:"\f117"}
 .bi-arrow-down-short::before{content:"\f124"}
@@ -36,7 +36,6 @@
 .bi-eye-slash::before{content:"\f340"}
 .bi-facebook::before{content:"\f344"}
 .bi-file-earmark-spreadsheet::before{content:"\f389"}
-.bi-flower1::before{content:"\f3cd"}
 .bi-geo-alt::before{content:"\f3e8"}
 .bi-gift::before{content:"\f3ec"}
 .bi-gift-fill::before{content:"\f3eb"}
@@ -56,7 +55,6 @@
 .bi-lock::before{content:"\f47b"}
 .bi-lock-fill::before{content:"\f47a"}
 .bi-palette::before{content:"\f4b1"}
-.bi-palette2::before{content:"\f4b2"}
 .bi-pencil::before{content:"\f4cb"}
 .bi-people::before{content:"\f4d0"}
 .bi-person::before{content:"\f4e1"}

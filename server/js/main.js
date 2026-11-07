@@ -558,6 +558,15 @@
     aplicarRecorte();
   });
 
+  document.addEventListener("click", e => {
+    const alvo = e.target.closest("[data-abrir-cat]");
+    if(!alvo) return;
+    e.preventDefault();
+    document.querySelector(`#filterGroup .chip[data-cat="${CSS.escape(alvo.dataset.abrirCat)}"]`)?.click();
+    const suave = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("colecoes")?.scrollIntoView({ behavior: suave ? "smooth" : "auto", block: "start" });
+  });
+
   const CART_KEY = "plc_cart_v1";
 
   function loadCart(){
@@ -1895,12 +1904,5 @@
       : `Até ${semJuros}x sem juros`;
   }
 
-  const fabEl = document.querySelector("a.fab:not(.fab-top)");
-  const heroAcoesEl = document.querySelector(".hero-acoes");
-  if(fabEl && heroAcoesEl && "IntersectionObserver" in window){
-    new IntersectionObserver(([entrada]) => {
-      fabEl.classList.toggle("is-oculto", entrada.isIntersecting);
-    }, { threshold: 0 }).observe(heroAcoesEl);
-  }
 
 })();

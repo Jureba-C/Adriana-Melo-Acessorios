@@ -9,7 +9,7 @@
   const extras = modelo ? [...modelo.content.querySelectorAll(".hero-slide")] : [];
 
   if(raiz && pista && extras.length){
-    const INTERVALO = 5000;
+    const INTERVALO = 3000;
     const caixaPontos = raiz.querySelector(".hero-pontos");
     const pausa = raiz.querySelector(".hero-pausa");
     const vivo = raiz.querySelector(".hero-vivo");
@@ -42,7 +42,7 @@
       slides.forEach((s, n) => s.classList.toggle("is-ativa", n === atual));
       pontos.forEach((p, n) => p.setAttribute("aria-current", n === atual ? "true" : "false"));
       materializar(atual + 1);
-      if(anunciar && vivo) vivo.textContent = `Foto ${atual + 1} de ${total}: ${slides[atual].dataset.legenda || ""}`;
+      if(anunciar && vivo) vivo.textContent = `Destaque ${atual + 1} de ${total}: ${slides[atual].dataset.legenda || ""}`;
     }
 
     function reiniciar(){
@@ -57,7 +57,7 @@
       const ponto = document.createElement("button");
       ponto.type = "button";
       ponto.className = "hero-ponto";
-      ponto.setAttribute("aria-label", `Foto ${i + 1} de ${total}`);
+      ponto.setAttribute("aria-label", `Destaque ${i + 1} de ${total}`);
       ponto.setAttribute("aria-current", i === 0 ? "true" : "false");
       ponto.addEventListener("click", () => { mostrar(i, true); reiniciar(); });
       caixaPontos.appendChild(ponto);
@@ -70,10 +70,17 @@
         travado = !travado;
         pausa.classList.toggle("is-pausado", travado);
         pausa.setAttribute("aria-pressed", String(travado));
-        pausa.setAttribute("aria-label", travado ? "Retomar a troca das fotos" : "Pausar a troca das fotos");
+        pausa.setAttribute("aria-label", travado ? "Retomar a troca dos destaques" : "Pausar a troca dos destaques");
         reiniciar();
       });
     }
+
+    [[".banner-anterior", -1], [".banner-proximo", 1]].forEach(([seletor, passo]) => {
+      const seta = raiz.querySelector(seletor);
+      if(!seta) return;
+      seta.hidden = false;
+      seta.addEventListener("click", () => { mostrar(atual + passo, true); reiniciar(); });
+    });
 
     raiz.addEventListener("pointerenter", () => { perto = true; reiniciar(); });
     raiz.addEventListener("pointerleave", () => { perto = false; reiniciar(); });
@@ -113,7 +120,7 @@
     });
   }
 
-  const etiqueta = document.querySelector(".hero-stats");
+  const etiqueta = document.querySelector(".vantagens");
   const numeros = etiqueta ? [...etiqueta.querySelectorAll("[data-contar]")] : [];
   if(!numeros.length || semMovimento.matches) return;
 

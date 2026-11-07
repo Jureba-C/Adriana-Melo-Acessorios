@@ -101,38 +101,6 @@ async function apagarTodas(){
   }
 }
 
-test("sem foto no painel, a home usa as fotos fixas de img/hero-*", async () => {
-  await apagarTodas();
-  const home = await (await fetch(ORIGIN + "/")).text();
-  assert.match(home, /img\/hero-laco-bailarina-960\.jpg/);
-  assert.ok(!home.includes("/api/hero/fotos/"), "não deve apontar para o banco sem foto cadastrada");
-});
-
-test("a primeira foto é eager com fetchpriority=high e as outras ficam no <template>", async () => {
-  await apagarTodas();
-  const home = await (await fetch(ORIGIN + "/")).text();
-  const antesDoTemplate = home.slice(0, home.indexOf('id="heroSlidesExtras"'));
-  assert.equal((antesDoTemplate.match(/class="hero-slide is-ativa"/g) || []).length, 1);
-  assert.match(antesDoTemplate, /fetchpriority="high"/);
-  // Nenhuma das demais pode ter prioridade alta: seriam quatro downloads
-  // disputando banda com o LCP.
-  const depois = home.slice(home.indexOf('id="heroSlidesExtras"'));
-  assert.ok(!depois.includes('fetchpriority="high"'));
-});
-
-test("foto enviada pelo painel entra na home no lugar das fixas", async () => {
-  await apagarTodas();
-  const res = await enviarFoto({ legenda: "Laço de teste", alt: "Um laço rosa de teste" });
-  assert.equal(res.status, 201);
-  const { id } = await res.json();
-
-  const home = await (await fetch(ORIGIN + "/")).text();
-  assert.ok(home.includes(`/api/hero/fotos/${id}?w=960`), "a home deve apontar para a foto do banco");
-  assert.ok(!home.includes("img/hero-laco-bailarina"), "as fixas devem sair de cena");
-  assert.match(home, /data-legenda="Laço de teste"/);
-  assert.match(home, /alt="Um laço rosa de teste"/);
-});
-
 test("a rota pública devolve 4:5 em toda largura e formato", async () => {
   await apagarTodas();
   const { id } = await (await enviarFoto()).json();
@@ -170,34 +138,6 @@ test("mudar o enquadramento joga fora o recorte em cache", async () => {
   });
   assert.equal(res.status, 200);
   assert.equal(db.getHeroPhotoVariant(id, 480, "webp"), null, "o corte antigo não pode sobreviver");
-});
-
-test("texto escrito no painel não vira HTML na home", async () => {
-  await apagarTodas();
-  await enviarFoto({ legenda: '"><script>alert(1)</script>', alt: 'foto " onload="alert(2)' });
-  const home = await (await fetch(ORIGIN + "/")).text();
-  assert.ok(!home.includes("<script>alert(1)</script>"));
-  assert.ok(!home.includes('onload="alert(2)'));
-  assert.match(home, /&lt;script&gt;/);
-});
-
-test("a ordem do painel é a ordem do carrossel", async () => {
-  await apagarTodas();
-  const a = (await (await enviarFoto({ legenda: "Primeira" })).json()).id;
-  const b = (await (await enviarFoto({ legenda: "Segunda" })).json()).id;
-
-  let home = await (await fetch(ORIGIN + "/")).text();
-  assert.ok(home.indexOf("Primeira") < home.indexOf("Segunda"));
-
-  const res = await fetch(`${ORIGIN}/api/admin/hero/fotos/ordem`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: adminCookie },
-    body: JSON.stringify({ ids: [b, a] }),
-  });
-  assert.equal(res.status, 200);
-
-  home = await (await fetch(ORIGIN + "/")).text();
-  assert.ok(home.indexOf("Segunda") < home.indexOf("Primeira"), "a nova ordem tem de aparecer na home");
 });
 
 test("ordem incompleta é recusada em vez de embaralhar o carrossel", async () => {
@@ -273,36 +213,3 @@ test("id inventado responde 404, sem revelar se existe", async () => {
    o <picture> vai escolher: um srcset ou um sizes fora de sincronia faz o
    navegador baixar DUAS fotos diferentes — o dobro do peso para adiantar nada.
    Por isso os dois saem da mesma função (fontesDaFoto). */
-test("o preload do topo aponta para exatamente a mesma imagem do <picture>", async () => {
-  await apagarTodas();
-  const home = await (await fetch(ORIGIN + "/")).text();
-
-  const preload = home.match(/<link rel="preload" as="image"[^>]*>/);
-  assert.ok(preload, "o preload da foto do topo sumiu");
-  const source = home.match(/<source type="image\/webp"[^>]*>/);
-  assert.ok(source, "o <source> webp do primeiro slide sumiu");
-
-  const pegar = (tag, attr) => (tag.match(new RegExp(`${attr}="([^"]*)"`)) || [])[1];
-  assert.equal(pegar(preload[0], "imagesrcset"), pegar(source[0], "srcset"),
-    "preload e <source> discordam do srcset — o navegador baixaria duas imagens");
-  assert.equal(pegar(preload[0], "imagesizes"), pegar(source[0], "sizes"),
-    "preload e <source> discordam do sizes — muda qual largura o navegador escolhe");
-  assert.match(preload[0], /type="image\/webp"/,
-    "sem o type, navegador sem suporte a webp baixaria um arquivo que não vai usar");
-});
-
-test("com foto do painel, o preload acompanha e larga o type webp", async () => {
-  await apagarTodas();
-  const { id } = await (await enviarFoto({ legenda: "Capa do painel" })).json();
-  const home = await (await fetch(ORIGIN + "/")).text();
-
-  const preload = home.match(/<link rel="preload" as="image"[^>]*>/);
-  assert.ok(preload, "o preload sumiu quando a foto veio do painel");
-  assert.ok(preload[0].includes(`/api/hero/fotos/${id}?w=960`),
-    "o preload continua apontando para a foto fixa em vez da do painel");
-  // A rota serve webp ou jpeg pela mesma URL, decidindo pelo Accept: declarar
-  // image/webp aqui faria o navegador sem suporte ignorar um preload que
-  // funcionaria para ele.
-  assert.ok(!preload[0].includes("type="), "foto do painel não tem formato fixo para declarar");
-  await apagarTodas();
-});
