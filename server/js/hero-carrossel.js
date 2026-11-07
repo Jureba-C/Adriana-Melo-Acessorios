@@ -9,7 +9,7 @@
   const extras = modelo ? [...modelo.content.querySelectorAll(".hero-slide")] : [];
 
   if(raiz && pista && extras.length){
-    const INTERVALO = 3000;
+    const INTERVALO = 5000;
     const caixaPontos = raiz.querySelector(".hero-pontos");
     const pausa = raiz.querySelector(".hero-pausa");
     const vivo = raiz.querySelector(".hero-vivo");
@@ -82,8 +82,6 @@
       seta.addEventListener("click", () => { mostrar(atual + passo, true); reiniciar(); });
     });
 
-    raiz.addEventListener("pointerenter", () => { perto = true; reiniciar(); });
-    raiz.addEventListener("pointerleave", () => { perto = false; reiniciar(); });
     raiz.addEventListener("focusin", () => { perto = true; reiniciar(); });
     raiz.addEventListener("focusout", (e) => {
       if(!raiz.contains(e.relatedTarget)){ perto = false; reiniciar(); }

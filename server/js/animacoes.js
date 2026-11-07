@@ -351,7 +351,6 @@
 
   let gatilhosDaVitrine = [];
 
-  const DOBRA = 0.88;
 
   function entrarEmCascata(lote) {
     return gsap.to(lote, {
@@ -395,7 +394,7 @@
     );
     gsap.set(cards, { opacity: 0, y: 28 });
 
-    const limite = window.innerHeight * DOBRA;
+    const limite = window.innerHeight;
     const agora = [];
     const depois = [];
     cards.forEach((el) => {
@@ -408,7 +407,7 @@
     if (depois.length) {
       gatilhosDaVitrine = gatilhosDaVitrine.concat(
         ScrollTrigger.batch(depois, {
-          start: "top " + Math.round(DOBRA * 100) + "%",
+          start: "top bottom",
           refreshPriority: -3,
           onEnter: entrarEmCascata,
         })

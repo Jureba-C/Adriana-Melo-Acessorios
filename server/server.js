@@ -1374,18 +1374,21 @@ function comVersao(rel){
    O primeiro slide vai direto na página e os demais num <template>: slides
    empilhados contam como visíveis para o navegador, e só o <template> segura
    o download das fotos que ainda não apareceram. */
-const BANNER_SIZES = "(max-width: 575.98px) 44vw, (max-width: 991.98px) 36vw, 340px";
+const BANNER_SIZES = "(max-width: 575.98px) 30vw, (max-width: 991.98px) 26vw, 220px";
 const MAX_SLIDES_BANNER = 6;
-const TEXTO_DO_BANNER = {
-  "laco-unico":  ["Laço único", "um para cada penteado"],
-  "parzinho":    ["Parzinhos", "para usar em dupla"],
-  "laco-g":      ["Laços grandes", "para chamar atenção"],
-  "laco-pompom": ["Laço pompom", "fofinho e cheio de charme"],
-  "tiara":       ["Tiaras", "para completar o look"],
-  "kit":         ["Kits", "presente pronto"],
-  "bolsa":       ["Bolsinhas", "combinando com o laço"],
-  "cabide":      ["Cabides de laço", "para guardar com carinho"],
+const TEMAS_DO_BANNER = {
+  "laco-unico":  { tema: "leque",    chamada: "o clássico da Adriana",      titulo: "Um laço para cada penteado", frase: "feito à mão, um por um" },
+  "parzinho":    { tema: "dupla",    chamada: "em dupla é mais fofo",       titulo: "Parzinhos",                  frase: "dois laços, o dobro de charme" },
+  "laco-g":      { tema: "destaque", chamada: "para quem ama laço grande",  titulo: "Laço G",                     frase: "cheio e impossível de passar despercebido" },
+  "laco-pompom": { tema: "redondo",  chamada: "fofinho que só ele",         titulo: "Laço pompom",                frase: "cheio de charme do jeitinho dela" },
+  "tiara":       { tema: "coroa",    chamada: "para a princesa da festa",   titulo: "Tiaras",                     frase: "o toque final do look" },
+  "kit":         { tema: "presente", chamada: "presente pronto",            titulo: "Kits",                       frase: "é só entregar e ver o sorriso" },
+  "bolsa":       { tema: "etiqueta", chamada: "combinando com o laço",      titulo: "Bolsinhas",                  frase: "para levar tudo com charme" },
+  "cabide":      { tema: "cabide",   chamada: "organização com carinho",    titulo: "Cabides de laço",            frase: "para guardar e mostrar os laços" },
 };
+const TEMAS_EM_RODIZIO = ["leque", "dupla", "destaque", "redondo", "coroa", "presente", "etiqueta", "cabide"];
+
+const reais = v => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function fontesDoBanner(url){
   if(!/^\/api\/products\/photos\//.test(url)) return { src: url, srcset: "" };
@@ -1395,38 +1398,64 @@ function fontesDoBanner(url){
 
 function slidesDoBanner(){
   const overridesMap = getProductOverridesMap();
-  const produtos = getAllProductIds()
+  const visiveis = getAllProductIds()
     .map(id => effectiveProduct(id, overridesMap))
-    .filter(p => p && !p.hidden && p.photoUrl);
+    .filter(p => p && !p.hidden);
   const slides = [];
+  let rodizio = 0;
   for(const cat of getAllCategories()){
     if(slides.length >= MAX_SLIDES_BANNER) break;
-    const produto = produtos.find(p => p.category === cat.slug);
-    if(!produto) continue;
-    const [titulo, frase] = TEXTO_DO_BANNER[cat.slug] || [cat.label, "feito à mão pela Adriana"];
-    slides.push({ slug: cat.slug, rotulo: cat.label, titulo, frase, cta: `Ver ${cat.label}`, alt: produto.name, fontes: fontesDoBanner(produto.photoUrl) });
+    const daCategoria = visiveis.filter(p => p.category === cat.slug);
+    const comFoto = daCategoria.filter(p => p.photoUrl);
+    if(!comFoto.length) continue;
+    const config = TEMAS_DO_BANNER[cat.slug]
+      || { tema: TEMAS_EM_RODIZIO[rodizio++ % TEMAS_EM_RODIZIO.length], chamada: "novidade do ateliê", titulo: cat.label, frase: "feito à mão pela Adriana" };
+    const quantas = config.tema === "leque" ? 3 : config.tema === "dupla" ? 2 : 1;
+    const menor = Math.min(...daCategoria.map(p => Number(p.price) || 0).filter(v => v > 0));
+    slides.push({
+      ...config, slug: cat.slug, rotulo: cat.label,
+      fotos: comFoto.slice(0, quantas).map(p => ({ alt: p.name, ...fontesDoBanner(p.photoUrl) })),
+      preco: Number.isFinite(menor) ? menor : null,
+      modelos: daCategoria.length,
+      maisVendido: daCategoria.some(p => (p.badges || []).includes("Mais vendido")),
+    });
   }
   if(slides.length) return slides;
   const padrao = FOTOS_HERO_PADRAO[0];
   const f = fontesDaFoto(padrao);
-  return [{ slug: "todos", rotulo: "Adriana Melo", titulo: "Laços feitos à mão", frase: "pela Adriana Melo", cta: "Ver a loja",
-    alt: padrao.alt, fontes: { src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` } }];
+  return [{ tema: "leque", slug: "todos", rotulo: "Adriana Melo", chamada: "ateliê Adriana Melo", titulo: "Laços feitos à mão", frase: "pela Adriana Melo",
+    fotos: [{ alt: padrao.alt, src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` }], preco: null, modelos: 0, maisVendido: false }];
 }
 
+const ARTE_EXTRA = {
+  coroa: '<svg class="banner-coroa" viewBox="0 0 64 40" aria-hidden="true" focusable="false"><path d="M4 34 L8 10 L20 22 L32 4 L44 22 L56 10 L60 34 Z"/><rect x="4" y="33" width="56" height="6" rx="2"/><circle cx="8" cy="9" r="3"/><circle cx="32" cy="4" r="3.5"/><circle cx="56" cy="9" r="3"/></svg>',
+  presente: '<svg class="bow-icon banner-presente-laco" aria-hidden="true"><use href="#bow-shape"/></svg><span class="banner-adesivo" aria-hidden="true">leve 4<br>pague 3</span>',
+  etiqueta: '<span class="banner-cordao" aria-hidden="true"></span>',
+  cabide: '<svg class="banner-cabide" viewBox="0 0 120 60" aria-hidden="true" focusable="false"><path d="M60 22 C60 14 70 14 70 8 C70 2 60 0 56 6" fill="none"/><path d="M60 22 L8 52 L112 52 Z" fill="none"/></svg>',
+  dupla: '<span class="banner-fita" aria-hidden="true"></span>',
+  destaque: '<span class="banner-raios" aria-hidden="true"></span>',
+};
+
 function slideDoBanner(s, primeiro){
-  const conjunto = s.fontes.srcset ? ` srcset="${s.fontes.srcset}" sizes="${BANNER_SIZES}"` : "";
-  return `<div class="hero-slide banner-slide${primeiro ? " is-ativa" : ""}" data-legenda="${escaparHtml(s.titulo)}">
+  const fotos = s.fotos.map((f, i) => {
+    const conjunto = f.srcset ? ` srcset="${f.srcset}" sizes="${BANNER_SIZES}"` : "";
+    return `<figure class="banner-foto f${i + 1}"><img src="${f.src}"${conjunto} alt="${escaparHtml(f.alt)}" width="600" height="750" decoding="async"${primeiro && i === 0 ? ' fetchpriority="high"' : ""}></figure>`;
+  }).join("");
+  const preco = s.preco
+    ? `<p class="banner-preco"><span>a partir de</span> <strong>R$ ${reais(s.preco)}</strong> <small>R$ ${reais(pricing.pixPriceFor(s.preco))} no Pix</small></p>`
+    : "";
+  const cta = s.modelos > 1 ? `Ver os ${s.modelos} modelos` : s.modelos === 1 ? "Ver o modelo" : "Ver a loja";
+  return `<div class="hero-slide banner-slide banner-tema-${s.tema}${primeiro ? " is-ativa" : ""}" data-legenda="${escaparHtml(s.titulo)}">
                 <div class="banner-texto">
+                  <p class="banner-chamada">${escaparHtml(s.chamada)}</p>
                   <p class="banner-titulo">${escaparHtml(s.titulo)}</p>
                   <p class="banner-frase">${escaparHtml(s.frase)}</p>
-                  <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${escaparHtml(s.cta)} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                  ${preco}
+                  <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${cta} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
                 </div>
-                <figure class="banner-polaroide">
-                  <span class="banner-fita" aria-hidden="true"></span>
-                  <svg class="bow-icon banner-polaroide-laco" aria-hidden="true"><use href="#bow-shape"/></svg>
-                  <img src="${s.fontes.src}"${conjunto} alt="${escaparHtml(s.alt)}" width="600" height="750" decoding="async"${primeiro ? ' fetchpriority="high"' : ""}>
-                  <figcaption>${escaparHtml(s.rotulo)}</figcaption>
-                </figure>
+                <div class="banner-arte fotos-${s.fotos.length}">
+                  ${ARTE_EXTRA[s.tema] || ""}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}
+                </div>
               </div>`;
 }
 
@@ -1442,7 +1471,7 @@ function blocoBanner(){
             <template id="heroSlidesExtras">
               ${slides.slice(1).map(s => slideDoBanner(s, false)).join("\n              ")}
             </template>`;
-  const f = slides[0].fontes;
+  const f = slides[0].fotos[0];
   const preload = `<link rel="preload" as="image" href="${f.src}"${f.srcset ? ` imagesrcset="${f.srcset}" imagesizes="${BANNER_SIZES}"` : ""} fetchpriority="high">`;
   CACHE_BANNER = { versao, html, preload };
   return html;

@@ -47,7 +47,7 @@ const foto = (n) => `/api/products/photos/${String(n).repeat(32).slice(0, 32)}`;
 
 test("sem produto com foto, entra o slide genérico com a foto fixa", async () => {
   const html = await home();
-  assert.match(html, /class="hero-slide banner-slide is-ativa"/);
+  assert.match(html, /class="hero-slide banner-slide banner-tema-leque is-ativa"/);
   assert.match(html, /Laços feitos à mão/);
   assert.match(html, /data-abrir-cat="todos"/);
   assert.match(html, /img\/hero-laco-bailarina-960\.jpg/);
@@ -61,7 +61,7 @@ test("um slide por categoria com foto; só o primeiro fora do <template>", async
   const extras = html.indexOf('id="heroSlidesExtras"');
   const antes = html.slice(0, extras);
   const depois = html.slice(extras);
-  assert.equal((antes.match(/banner-slide is-ativa/g) || []).length, 1);
+  assert.equal((antes.match(/banner-slide banner-tema-\w+ is-ativa/g) || []).length, 1);
   assert.match(antes, /data-abrir-cat="laco-unico"/);
   assert.match(antes, /fetchpriority="high"/);
   assert.match(antes, new RegExp(`${foto(1)}\\?w=400 400w`));
@@ -83,4 +83,16 @@ test("nome do produto entra escapado no banner", async () => {
   const html = await home();
   assert.ok(!html.includes("<script>alert(1)</script>"));
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test("cada categoria tem tema próprio, preço real e número de modelos", async () => {
+  db.upsertProductOverride(2, { photos: [foto(2)] });
+  const html = await home();
+  assert.match(html, /banner-tema-leque[\s\S]*?data-abrir-cat="laco-unico"/);
+  assert.match(html, /banner-tema-coroa[\s\S]*?data-abrir-cat="tiara"/);
+  assert.match(html, /banner-tema-presente[\s\S]*?data-abrir-cat="kit"/);
+  assert.match(html, /a partir de<\/span> <strong>R\$ 29,90<\/strong>/, "menor preço do laço único");
+  assert.match(html, /Ver os 6 modelos/, "seis laços únicos visíveis no catálogo fixo");
+  assert.match(html, /banner-arte fotos-2/, "leque com duas fotos quando há duas");
+  assert.match(html, /banner-mais-vendido/, "Laço Duquesa tem o selo Mais vendido");
 });

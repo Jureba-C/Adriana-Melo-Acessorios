@@ -411,37 +411,114 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .vitrine-titulo{ font-size:clamp(1.6rem, 1.2rem + 1.6vw, 2.4rem); margin:0; }
 .banner{
   position:relative; overflow:hidden;
-  padding:clamp(1.4rem, 3vw, 2.4rem) clamp(1rem, 5vw, 4.5rem) 2.8rem;
   border:1px solid var(--blush-100); border-radius:var(--radius-lg);
-  background-color:var(--blush-50);
-  background-image:radial-gradient(var(--blush-150) 1.4px, transparent 1.7px);
-  background-size:22px 22px;
+  background:var(--blush-50);
 }
 .banner .hero-slides{ display:grid; }
 .banner-slide{
-  grid-area:1 / 1; display:grid; grid-template-columns:1.1fr .9fr; align-items:center; gap:clamp(.75rem, 3vw, 3rem);
-  opacity:0; visibility:hidden; transition:opacity .7s var(--ease-out), visibility 0s linear .7s;
+  grid-area:1 / 1; display:grid; grid-template-columns:1.05fr .95fr; align-items:center; gap:clamp(.75rem, 3vw, 2.5rem);
+  padding:clamp(1.2rem, 2.4vw, 1.8rem) clamp(1rem, 5vw, 4.5rem) 2.6rem;
+  background-color:var(--cream);
+  background-image:radial-gradient(var(--blush-150) 1.4px, transparent 1.7px); background-size:22px 22px;
+  opacity:0; visibility:hidden; transform:translateX(-6%);
+  transition:opacity .6s var(--ease-out), transform .6s var(--ease-out), visibility 0s linear .6s;
 }
-.banner-slide.is-ativa{ opacity:1; visibility:visible; transition:opacity .7s var(--ease-out); }
-.banner-texto{ position:relative; z-index:1; min-width:0; }
+.banner-slide.is-ativa{ opacity:1; visibility:visible; transform:none; transition:opacity .6s var(--ease-out), transform .6s var(--ease-out); animation:bannerEntraSlide .7s var(--ease-out) both; }
+.banner-slide.is-ativa .banner-texto > *{ animation:bannerEntraTexto .6s var(--ease-out) both; }
+.banner-slide.is-ativa .banner-texto > :nth-child(2){ animation-delay:.08s; }
+.banner-slide.is-ativa .banner-texto > :nth-child(3){ animation-delay:.16s; }
+.banner-slide.is-ativa .banner-texto > :nth-child(4){ animation-delay:.24s; }
+.banner-slide.is-ativa .banner-texto > :nth-child(5){ animation-delay:.32s; }
+.banner-slide.is-ativa .banner-foto{ animation:bannerEntraFoto .75s cubic-bezier(.34,1.56,.64,1) both; }
+.banner-slide.is-ativa .banner-foto.f2{ animation-delay:.1s; }
+.banner-slide.is-ativa .banner-foto.f3{ animation-delay:.2s; }
+.banner-slide.is-ativa .banner-coroa, .banner-slide.is-ativa .banner-presente-laco, .banner-slide.is-ativa .banner-adesivo, .banner-slide.is-ativa .banner-mais-vendido{ animation:bannerEntraFoto .7s cubic-bezier(.34,1.56,.64,1) .3s both; }
+@keyframes bannerEntraSlide{ from{ opacity:0; transform:translateX(8%); } to{ opacity:1; transform:none; } }
+@keyframes bannerEntraTexto{ from{ opacity:0; translate:0 14px; } to{ opacity:1; translate:0 0; } }
+@keyframes bannerEntraFoto{ from{ opacity:0; scale:.7; } to{ opacity:1; scale:1; } }
+.banner-texto{ position:relative; z-index:2; min-width:0; }
+.banner-chamada{
+  display:inline-block; margin:0 0 .5rem; padding:.28rem .75rem; border-radius:999px;
+  background:var(--white); border:1px dashed var(--blush-300);
+  font-family:var(--font-script); font-size:clamp(1rem, .8rem + .7vw, 1.3rem); line-height:1.1; color:var(--blush-700);
+}
 .banner-titulo{
-  margin:0; font-family:var(--font-display); font-weight:600; font-size:clamp(1.5rem, 1rem + 2.6vw, 3rem);
-  line-height:1.05; letter-spacing:-.02em; color:var(--ink); text-wrap:balance;
+  margin:0; font-family:var(--font-display); font-weight:600; font-size:clamp(1.45rem, 1rem + 2.2vw, 2.6rem);
+  line-height:1.04; letter-spacing:-.02em; color:var(--ink); text-wrap:balance;
 }
-.banner-frase{ margin:.2rem 0 clamp(.9rem, 2vw, 1.5rem); font-family:var(--font-script); font-size:clamp(1.2rem, .9rem + 1.4vw, 2rem); line-height:1.1; color:var(--blush-700); }
+.banner-frase{ margin:.25rem 0 .6rem; font-family:var(--font-script); font-size:clamp(1.15rem, .9rem + 1.1vw, 1.7rem); line-height:1.1; color:var(--blush-700); }
+.banner-preco{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.15rem .45rem; margin:0 0 .9rem; color:var(--ink-soft); font-size:.85rem; }
+.banner-preco strong{ font-family:var(--font-display); font-size:clamp(1.15rem, .9rem + 1vw, 1.6rem); color:var(--ink); }
+.banner-preco small{ padding:.12rem .5rem; border-radius:999px; background:#E7F6EC; color:#2E7D4A; font-weight:600; font-size:.75rem; }
 .banner-cta{ display:inline-flex; align-items:center; gap:.4rem; padding:.7rem 1.35rem; font-size:.95rem; box-shadow:0 14px 26px -16px rgba(192,84,128,.9); }
-.banner-polaroide{
-  position:relative; z-index:1; justify-self:center; width:min(100%, 250px); margin:0;
-  padding:10px 10px 0; background:var(--white); border-radius:6px;
-  box-shadow:0 18px 34px -18px rgba(84,41,60,.45); transform:rotate(4deg);
+.banner-arte{ position:relative; z-index:1; height:clamp(195px, 25vw, 285px); }
+.banner-foto{
+  position:absolute; margin:0; padding:6px 6px 20px; background:var(--white); border-radius:5px;
+  box-shadow:0 16px 30px -16px rgba(84,41,60,.5); transition:transform .5s var(--ease-out);
 }
-.banner-polaroide img{ display:block; width:100%; height:auto; aspect-ratio:4 / 5; object-fit:cover; border-radius:3px; background:var(--blush-100); }
-.banner-polaroide figcaption{ padding:.3rem 0 .45rem; text-align:center; font-family:var(--font-script); font-size:clamp(1.05rem, .8rem + 1vw, 1.5rem); color:var(--ink); }
+.banner-foto img{ display:block; width:100%; height:auto; aspect-ratio:4 / 5; object-fit:cover; border-radius:3px; background:var(--blush-100); }
+.banner-mais-vendido{
+  position:absolute; z-index:3; top:2%; left:2%; padding:.3rem .7rem; border-radius:999px; rotate:-8deg;
+  background:var(--gold-500); color:var(--white); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  box-shadow:0 8px 16px -8px rgba(84,41,60,.6);
+}
+.banner-tema-leque .f1{ width:40%; left:4%; top:12%; rotate:-11deg; }
+.banner-tema-leque .f2{ width:42%; left:29%; top:2%; rotate:2deg; z-index:2; }
+.banner-tema-leque .f3{ width:40%; left:56%; top:14%; rotate:12deg; }
+.banner-tema-leque .fotos-1 .f1{ width:52%; left:24%; top:4%; rotate:4deg; }
+.banner-tema-leque .fotos-2 .f1{ width:44%; left:10%; rotate:-7deg; }
+.banner-tema-leque .fotos-2 .f2{ width:44%; left:46%; top:8%; rotate:7deg; }
+.banner-slide.is-ativa .banner-foto:hover{ transform:translateY(-6px); }
+.banner-tema-dupla{ background-color:var(--blush-100); background-image:repeating-linear-gradient(135deg, rgba(255,255,255,.55) 0 12px, transparent 12px 24px); background-size:auto; }
+.banner-tema-dupla .f1{ width:44%; left:4%; top:10%; rotate:-6deg; }
+.banner-tema-dupla .f2{ width:44%; left:50%; top:6%; rotate:5deg; }
+.banner-tema-dupla .fotos-1 .f1{ width:52%; left:24%; rotate:3deg; }
 .banner-fita{
-  position:absolute; top:-12px; left:50%; width:44%; height:24px; border-radius:2px; opacity:.9;
-  transform:translateX(-50%) rotate(-3deg);
+  position:absolute; z-index:3; top:2%; left:50%; width:30%; height:22px; border-radius:2px; opacity:.92;
+  transform:translateX(-50%) rotate(-4deg);
   background:repeating-linear-gradient(45deg, var(--blush-300) 0 8px, var(--blush-200) 8px 16px);
 }
+.banner-tema-destaque{ grid-template-columns:.95fr 1.05fr; background-color:var(--ink); background-image:radial-gradient(rgba(201,166,107,.55) 1.6px, transparent 2px); background-size:26px 26px; }
+.banner-tema-destaque .banner-arte{ order:-1; }
+.banner-tema-destaque .banner-titulo{ color:var(--white); }
+.banner-tema-destaque .banner-frase{ color:var(--blush-300); }
+.banner-tema-destaque .banner-preco{ color:var(--blush-150); }
+.banner-tema-destaque .banner-preco strong{ color:var(--white); }
+.banner-tema-destaque .banner-chamada{ background:transparent; border-color:var(--blush-300); color:var(--blush-200); }
+.banner-tema-destaque .f1{ width:58%; left:20%; top:2%; rotate:-4deg; }
+.banner-raios{
+  position:absolute; inset:-20%; border-radius:50%;
+  background:repeating-conic-gradient(from 0deg, rgba(240,106,160,.16) 0 10deg, transparent 10deg 20deg);
+  animation:bannerGira 40s linear infinite;
+}
+.banner-tema-redondo{ background-color:var(--blush-50); background-image:radial-gradient(circle at 85% 20%, var(--blush-150) 0 60px, transparent 61px), radial-gradient(circle at 70% 85%, var(--blush-100) 0 80px, transparent 81px), radial-gradient(circle at 10% 90%, var(--blush-100) 0 50px, transparent 51px); background-size:auto; }
+.banner-tema-redondo .f1{ width:auto; height:92%; aspect-ratio:1; left:50%; top:4%; translate:-50% 0; padding:8px; border-radius:50%; }
+.banner-tema-redondo .f1 img{ height:100%; aspect-ratio:1; border-radius:50%; }
+.banner-tema-redondo .f1::before{ content:""; position:absolute; inset:-12px; border:3px dashed var(--blush-300); border-radius:50%; animation:bannerGira 24s linear infinite; }
+.banner-tema-coroa{ background-color:#FFF8EE; background-image:radial-gradient(rgba(201,166,107,.35) 1.4px, transparent 1.7px); }
+.banner-tema-coroa .f1{ width:54%; left:23%; top:16%; rotate:-3deg; padding-bottom:6px; border-radius:16px; }
+.banner-tema-coroa .f1 img{ border-radius:12px; }
+.banner-coroa{ position:absolute; z-index:3; top:0; left:50%; width:30%; translate:-50% 0; rotate:-8deg; fill:var(--gold-500); filter:drop-shadow(0 4px 6px rgba(84,41,60,.25)); }
+.banner-tema-presente{ background-color:var(--blush-200); background-image:linear-gradient(90deg, transparent 47%, rgba(255,255,255,.45) 47% 53%, transparent 53%), linear-gradient(0deg, transparent 47%, rgba(255,255,255,.45) 47% 53%, transparent 53%); background-size:90px 90px; }
+.banner-tema-presente .f1{ width:56%; left:20%; top:14%; rotate:3deg; padding:8px; }
+.banner-tema-presente .f1::before, .banner-tema-presente .f1::after{ content:""; position:absolute; z-index:1; background:var(--blush-600); opacity:.9; }
+.banner-tema-presente .f1::before{ left:50%; top:0; bottom:0; width:12px; translate:-50% 0; }
+.banner-tema-presente .f1::after{ top:45%; left:0; right:0; height:12px; }
+.banner-presente-laco{ position:absolute; z-index:3; top:2%; left:50%; width:30%; height:auto; aspect-ratio:100 / 70; translate:-50% 0; color:var(--blush-700); filter:drop-shadow(0 4px 6px rgba(84,41,60,.3)); }
+.banner-adesivo{
+  position:absolute; z-index:4; right:2%; bottom:6%; width:clamp(64px, 8vw, 88px); aspect-ratio:1; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; text-align:center; rotate:12deg;
+  background:var(--gold-500); color:var(--white); font-weight:800; font-size:clamp(.62rem, .5rem + .4vw, .8rem); line-height:1.1; text-transform:uppercase;
+  box-shadow:0 0 0 4px rgba(255,255,255,.7), 0 10px 18px -8px rgba(84,41,60,.6);
+}
+.banner-tema-etiqueta{ background-color:var(--cream); background-image:radial-gradient(var(--blush-100) 18%, transparent 19%); background-size:46px 46px; }
+.banner-tema-etiqueta .f1{ width:48%; left:26%; top:18%; rotate:7deg; padding:8px 8px 8px 8px; border-radius:6px 6px 6px 6px; clip-path:polygon(50% 0, 100% 9%, 100% 100%, 0 100%, 0 9%); padding-top:26px; }
+.banner-tema-etiqueta .f1::before{ content:""; position:absolute; top:9px; left:50%; width:12px; height:12px; translate:-50% 0; border-radius:50%; background:var(--blush-100); box-shadow:inset 0 0 0 2px var(--blush-300); }
+.banner-cordao{ position:absolute; top:0; left:52%; width:2px; height:22%; background:var(--blush-500); rotate:7deg; transform-origin:top; }
+.banner-tema-cabide{ background-color:var(--white); background-image:repeating-linear-gradient(90deg, var(--blush-50) 0 14px, transparent 14px 28px); background-size:auto; }
+.banner-tema-cabide .f1{ width:50%; left:25%; top:26%; rotate:-2deg; }
+.banner-cabide{ position:absolute; z-index:3; top:0; left:50%; width:62%; translate:-50% 0; stroke:var(--gold-500); stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+@keyframes bannerGira{ to{ rotate:360deg; } }
 .banner-laco, .banner-brilho, .banner-coracao, .banner-fita-curva{ position:absolute; z-index:0; pointer-events:none; }
 .banner-laco{ height:auto; aspect-ratio:100 / 70; animation:bannerFlutua 7s ease-in-out infinite; }
 .banner-laco.b1{ top:9%;  left:3%;   width:28px; color:var(--blush-300); rotate:-14deg; }
@@ -460,7 +537,6 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .banner-coracao.h1{ top:32%; right:2.5%; rotate:12deg; }
 .banner-coracao.h2{ bottom:11%; left:53%; width:17px; fill:var(--blush-200); rotate:-10deg; animation-delay:2s; }
 .banner-fita-curva{ left:0; bottom:0; width:72%; height:48%; fill:none; stroke:var(--blush-200); stroke-width:3; stroke-dasharray:7 9; stroke-linecap:round; opacity:.9; }
-.banner-polaroide-laco{ position:absolute; z-index:2; top:-14px; right:-16px; width:42px; height:auto; aspect-ratio:100 / 70; color:var(--blush-500); rotate:22deg; filter:drop-shadow(0 4px 6px rgba(84,41,60,.25)); }
 @keyframes bannerFlutua{ 0%,100%{ translate:0 0; } 50%{ translate:0 -8px; } }
 @keyframes bannerBrilha{ 0%,100%{ opacity:.35; scale:.75; } 50%{ opacity:1; scale:1; } }
 .banner-selo{ position:absolute; z-index:2; right:clamp(.6rem, 4vw, 3.5rem); bottom:clamp(1.8rem, 4vw, 2.8rem); width:clamp(62px, 8vw, 92px); transform:rotate(-12deg); pointer-events:none; }
@@ -502,28 +578,43 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .banner .hero-controles{ position:absolute; left:0; right:0; bottom:.8rem; z-index:3; margin:0; }
 .vantagens{ list-style:none; margin:1rem 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:.75rem; }
 .vantagem{ display:flex; align-items:center; gap:.75rem; padding:.8rem 1rem; background:var(--white); border:1px solid var(--blush-100); border-radius:var(--radius-md); }
-.vantagem-icone{ flex:none; width:40px; height:40px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--blush-100); color:var(--blush-700); font-size:1.05rem; }
+.vantagem-icone{ flex:none; width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--blush-100); color:var(--blush-700); font-size:.8rem; }
 .vantagem-texto{ display:flex; flex-direction:column; min-width:0; line-height:1.25; }
 .vantagem-texto strong{ font-size:.95rem; font-weight:600; color:var(--ink); }
 .vantagem-texto > span{ font-size:.8rem; color:var(--ink-soft); }
 @media (prefers-reduced-motion: reduce){
-  .banner-slide, .banner-slide.is-ativa{ transition:none; }
-  .banner-laco, .banner-brilho, .banner-coracao{ animation:none; }
+  .banner-slide, .banner-slide.is-ativa{ transition:none; transform:none; animation:none; }
+  .banner-slide.is-ativa .banner-texto > *, .banner-slide.is-ativa .banner-foto, .banner-slide.is-ativa .banner-coroa, .banner-slide.is-ativa .banner-presente-laco, .banner-slide.is-ativa .banner-adesivo, .banner-slide.is-ativa .banner-mais-vendido{ animation:none; }
+  .banner-laco, .banner-brilho, .banner-coracao, .banner-raios, .banner-tema-redondo .f1::before{ animation:none; }
 }
 @media (max-width: 991.98px){
   .hero{ padding-top:calc(96px + var(--promo-h, 0px)); }
 }
+@media (min-width: 992px){
+  .banner-slide{ padding-top:1.4rem; padding-bottom:2.6rem; }
+  .banner-arte{ height:250px; }
+  .banner-titulo{ font-size:clamp(1.7rem, 1rem + 1.8vw, 2.5rem); }
+  .vantagens{ margin-top:.7rem; gap:.6rem; }
+  .vantagem{ padding:.5rem .85rem; }
+  .vantagem-icone{ width:28px; height:28px; font-size:.78rem; }
+  .vitrine-topo{ padding-top:.6rem; }
+}
 @media (max-width: 575.98px){
   .hero{ padding-top:calc(92px + var(--promo-h, 0px)); }
-  .banner{ padding:1.2rem .9rem 2.4rem; }
-  .banner-slide{ grid-template-columns:1.15fr .85fr; gap:.6rem; }
-  .banner-titulo{ font-size:clamp(1.3rem, 6.4vw, 1.6rem); }
-  .banner-frase{ font-size:1.15rem; margin-bottom:.8rem; }
-  .banner-cta{ padding:.55rem .9rem; font-size:.82rem; }
-  .banner-polaroide{ padding:6px 6px 0; }
-  .banner-fita{ top:-9px; height:18px; }
+  .banner-slide{ grid-template-columns:1.1fr .9fr; gap:.5rem; padding:1.1rem .85rem 2.3rem; }
+  .banner-tema-destaque{ grid-template-columns:.9fr 1.1fr; }
+  .banner-chamada{ font-size:.92rem; padding:.18rem .55rem; margin-bottom:.35rem; }
+  .banner-titulo{ font-size:clamp(1.25rem, 6vw, 1.55rem); }
+  .banner-frase{ font-size:1.05rem; margin-bottom:.45rem; }
+  .banner-preco{ font-size:.72rem; margin-bottom:.65rem; }
+  .banner-preco strong{ font-size:1.05rem; }
+  .banner-preco small{ font-size:.66rem; }
+  .banner-cta{ padding:.5rem .85rem; font-size:.8rem; }
+  .banner-arte{ height:200px; }
+  .banner-foto{ padding:4px 4px 12px; }
   .banner-seta{ display:none; }
-  .banner-selo{ width:52px; right:.4rem; bottom:1.6rem; }
+  .banner-selo{ width:48px; right:.35rem; bottom:1.5rem; }
+  .banner-fita{ height:16px; }
   .banner-laco.b2, .banner-laco.b4, .banner-laco.b6, .banner-brilho.s2, .banner-brilho.s5, .banner-coracao.h2{ display:none; }
   .banner-laco.b1{ top:4%; left:2%; width:20px; }
   .banner-laco.b3{ top:4%; right:3%; width:22px; }
@@ -531,11 +622,9 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   .banner-brilho.s1{ top:5%; left:38%; width:11px; }
   .banner-brilho.s3{ top:6%; right:30%; width:12px; }
   .banner-coracao.h1{ top:auto; bottom:10%; right:auto; left:40%; width:12px; }
-  .banner-polaroide-laco{ width:30px; top:-10px; right:-10px; }
-  .banner-fita-curva{ width:100%; height:40%; }
   .vantagens{ grid-template-columns:1fr 1fr; gap:.5rem; margin-top:.75rem; }
   .vantagem{ padding:.6rem .65rem; gap:.5rem; }
-  .vantagem-icone{ width:32px; height:32px; font-size:.9rem; }
+  .vantagem-icone{ width:26px; height:26px; font-size:.72rem; }
   .vantagem-texto strong{ font-size:.82rem; }
   .vantagem-texto > span{ font-size:.72rem; }
 }
