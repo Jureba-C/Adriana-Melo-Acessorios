@@ -478,17 +478,14 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   transform:translateX(-50%) rotate(-4deg);
   background:repeating-linear-gradient(45deg, var(--blush-300) 0 8px, var(--blush-200) 8px 16px);
 }
-.banner-tema-destaque{ grid-template-columns:.95fr 1.05fr; background-color:var(--ink); background-image:radial-gradient(rgba(201,166,107,.55) 1.6px, transparent 2px); background-size:26px 26px; }
+.banner-tema-destaque{ grid-template-columns:.95fr 1.05fr; background-color:var(--blush-200); background-image:radial-gradient(rgba(255,255,255,.7) 1.6px, transparent 2px), linear-gradient(135deg, var(--blush-150), var(--blush-300)); background-size:26px 26px, auto; }
 .banner-tema-destaque .banner-arte{ order:-1; }
-.banner-tema-destaque .banner-titulo{ color:var(--white); }
-.banner-tema-destaque .banner-frase{ color:var(--blush-300); }
-.banner-tema-destaque .banner-preco{ color:var(--blush-150); }
-.banner-tema-destaque .banner-preco strong{ color:var(--white); }
-.banner-tema-destaque .banner-chamada{ background:transparent; border-color:var(--blush-300); color:var(--blush-200); }
+.banner-tema-destaque .banner-chamada{ background:var(--white); }
+.banner-tema-destaque .banner-frase, .banner-tema-destaque .banner-preco{ color:var(--ink); }
 .banner-tema-destaque .f1{ width:58%; left:20%; top:2%; rotate:-4deg; }
 .banner-raios{
   position:absolute; inset:-20%; border-radius:50%;
-  background:repeating-conic-gradient(from 0deg, rgba(240,106,160,.16) 0 10deg, transparent 10deg 20deg);
+  background:repeating-conic-gradient(from 0deg, rgba(255,255,255,.35) 0 10deg, transparent 10deg 20deg);
   animation:bannerGira 40s linear infinite;
 }
 .banner-tema-redondo{ background-color:var(--blush-50); background-image:radial-gradient(circle at 85% 20%, var(--blush-150) 0 60px, transparent 61px), radial-gradient(circle at 70% 85%, var(--blush-100) 0 80px, transparent 81px), radial-gradient(circle at 10% 90%, var(--blush-100) 0 50px, transparent 51px); background-size:auto; }
