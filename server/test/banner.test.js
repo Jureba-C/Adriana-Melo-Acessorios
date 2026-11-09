@@ -96,3 +96,12 @@ test("cada categoria tem tema próprio, preço real e número de modelos", async
   assert.match(html, /banner-arte fotos-2/, "leque com duas fotos quando há duas");
   assert.match(html, /banner-mais-vendido/, "Laço Duquesa tem o selo Mais vendido");
 });
+
+test("todo slide traz as faíscas; só alguns temas trazem a fita de cetim", async () => {
+  const html = await home();
+  const slides = html.match(/class="hero-slide banner-slide/g).length;
+  assert.equal((html.match(/class="banner-faiscas" aria-hidden="true"/g) || []).length, slides);
+  assert.match(html, /banner-tema-leque[\s\S]*?banner-fita-cetim[\s\S]*?banner-foto f1/);
+  const coroa = html.slice(html.indexOf("banner-tema-coroa"));
+  assert.ok(!coroa.slice(0, coroa.indexOf("banner-foto f1")).includes("banner-fita-cetim"), "coroa tem a coroa como enfeite, sem fita");
+});

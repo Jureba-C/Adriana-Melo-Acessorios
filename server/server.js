@@ -1436,6 +1436,10 @@ const ARTE_EXTRA = {
   destaque: '<span class="banner-raios" aria-hidden="true"></span>',
 };
 
+const ARTE_FAISCAS = `<span class="banner-faiscas" aria-hidden="true">${"<i></i>".repeat(7)}</span>`;
+const ARTE_FITA = '<svg class="banner-fita-cetim" viewBox="0 0 400 300" aria-hidden="true" focusable="false"><path d="M-20 262 C 60 250, 110 292, 190 262 S 330 130, 420 78" pathLength="1"/><path class="fc-brilho" d="M-20 262 C 60 250, 110 292, 190 262 S 330 130, 420 78" pathLength="1"/></svg><svg class="bow-icon banner-no" aria-hidden="true"><use href="#bow-shape"/></svg>';
+const TEMAS_COM_FITA = new Set(["leque", "dupla", "destaque", "redondo", "etiqueta"]);
+
 function slideDoBanner(s, primeiro){
   const fotos = s.fotos.map((f, i) => {
     const conjunto = f.srcset ? ` srcset="${f.srcset}" sizes="${BANNER_SIZES}"` : "";
@@ -1454,7 +1458,7 @@ function slideDoBanner(s, primeiro){
                   <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${cta} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
                 </div>
                 <div class="banner-arte fotos-${s.fotos.length}">
-                  ${ARTE_EXTRA[s.tema] || ""}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}
+                  ${TEMAS_COM_FITA.has(s.tema) ? ARTE_FITA : ""}${ARTE_EXTRA[s.tema] || ""}${ARTE_FAISCAS}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}
                 </div>
               </div>`;
 }

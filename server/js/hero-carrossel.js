@@ -48,8 +48,12 @@
     function reiniciar(){
       clearInterval(timer);
       timer = null;
-      if(visivel && !travado && !perto && !semMovimento.matches){
+      const ativo = visivel && !travado && !perto && !semMovimento.matches;
+      raiz.classList.toggle("is-fora", !visivel);
+      raiz.classList.toggle("is-parado", !ativo);
+      if(ativo){
         timer = setInterval(() => mostrar(atual + 1, false), INTERVALO);
+        pontos[atual].getAnimations({ subtree: true }).forEach((a) => { a.cancel(); a.play(); });
       }
     }
 
@@ -93,6 +97,25 @@
       pontos[atual].focus();
       reiniciar();
     });
+
+    if(window.matchMedia("(hover: hover) and (pointer: fine)").matches && !semMovimento.matches){
+      let quadro = 0, alvoX = 0, alvoY = 0;
+      raiz.addEventListener("pointermove", (e) => {
+        const r = raiz.getBoundingClientRect();
+        alvoX = ((e.clientX - r.left) / r.width - .5) * 2;
+        alvoY = ((e.clientY - r.top) / r.height - .5) * 2;
+        if(quadro) return;
+        quadro = requestAnimationFrame(() => {
+          quadro = 0;
+          raiz.style.setProperty("--px", alvoX.toFixed(3));
+          raiz.style.setProperty("--py", alvoY.toFixed(3));
+        });
+      });
+      raiz.addEventListener("pointerleave", () => {
+        raiz.style.setProperty("--px", "0");
+        raiz.style.setProperty("--py", "0");
+      });
+    }
 
     let toqueX = null;
     pista.addEventListener("touchstart", (e) => { toqueX = e.touches[0].clientX; }, { passive: true });
