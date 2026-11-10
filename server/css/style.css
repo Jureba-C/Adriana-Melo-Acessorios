@@ -4502,3 +4502,23 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
   .df-laco{ width:60px; }
   .df-estrela{ display:none; }
 }
+
+@media (min-width: 576px) and (max-width: 991.98px){
+  .banner .banner-slide{ grid-template-columns:1fr 1fr; }
+  .banner .banner-tema-destaque{ grid-template-columns:1fr 1fr; }
+  .banner .banner-arte{ height:230px; }
+  .banner .banner-tema-leque .f1{ width:min(40%, 70cqh); left:0; top:26%; }
+  .banner .banner-tema-leque .f2{ width:min(50%, 86cqh); }
+  .banner .banner-tema-leque .f3{ width:min(40%, 70cqh); left:60%; top:26%; }
+  .banner .banner-tema-leque .fotos-1 .f1, .banner .banner-tema-dupla .fotos-1 .f1{ width:min(70%, 88cqh); }
+  .banner .banner-tema-leque .fotos-2 .f1, .banner .banner-tema-dupla .f1{ width:min(48%, 86cqh); left:2%; }
+  .banner .banner-tema-leque .fotos-2 .f2, .banner .banner-tema-dupla .f2{ width:min(48%, 86cqh); left:50%; }
+  .banner .banner-tema-destaque .f1{ width:min(58%, 88cqh); }
+  .banner .banner-tema-coroa .f1{ width:min(54%, 76cqh); }
+  .banner .banner-tema-destaque .apoio, .banner .banner-tema-coroa .apoio{ width:min(34%, 58cqh); }
+  .banner .banner-tema-presente .f1{ width:min(44%, 66cqh); }
+  .banner .banner-tema-presente .apoio{ width:min(30%, 52cqh); }
+  .banner-caixa{ width:min(72%, 92cqh); }
+  .banner .banner-tema-etiqueta .f1{ width:min(62%, 70cqh); }
+  .banner .banner-tema-cabide .f1{ width:min(62%, 62cqh); }
+}
