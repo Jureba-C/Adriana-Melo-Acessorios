@@ -437,9 +437,12 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 @keyframes bannerEntraTexto{ from{ opacity:0; translate:0 14px; } to{ opacity:1; translate:0 0; } }
 @keyframes bannerEntraFoto{ from{ opacity:0; scale:.7; } to{ opacity:1; scale:1; } }
 .banner-texto{
-  position:relative; z-index:2; min-width:0; padding:.8rem 1.1rem .9rem;
-  background:rgba(255,255,255,.78); border-radius:var(--radius-md); box-shadow:var(--shadow-sm);
+  position:relative; z-index:2; min-width:0; padding:1rem 1.5rem 1.1rem;
+  background:linear-gradient(155deg, var(--white) 55%, var(--blush-50)); border-radius:20px;
+  box-shadow:0 18px 34px -20px rgba(192,84,128,.55), 0 0 0 1px rgba(244,180,204,.35);
 }
+.banner-texto::before{ content:""; position:absolute; inset:6px; border:1.5px dashed var(--blush-300); border-radius:15px; pointer-events:none; }
+.banner-texto-laco{ position:absolute; top:-13px; right:22px; width:40px; height:auto; aspect-ratio:100 / 70; color:var(--blush-600); rotate:12deg; filter:drop-shadow(0 5px 6px rgba(84,41,60,.28)); pointer-events:none; }
 .banner-chamada{
   display:inline-block; margin:0 0 .5rem; padding:.28rem .75rem; border-radius:999px;
   background:var(--white); border:1px dashed var(--blush-300);
@@ -703,7 +706,7 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   .banner-slide{ padding-top:1rem; padding-bottom:2.5rem; }
   .banner-arte{ height:215px; }
   .banner-titulo{ font-size:clamp(1.7rem, 1rem + 1.2vw, 2.1rem); }
-  .banner-texto{ padding:.6rem 1.1rem .7rem; }
+  .banner-texto{ padding:.85rem 1.4rem .95rem; }
   .banner-chamada{ margin-bottom:.3rem; }
   .banner-frase{ margin:.15rem 0 .4rem; }
   .banner-preco{ margin-bottom:.6rem; }
@@ -713,7 +716,9 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 @media (max-width: 575.98px){
   .hero{ padding-top:calc(92px + var(--promo-h, 0px)); }
   .banner-slide{ grid-template-columns:1.08fr .92fr; gap:.4rem; padding:.8rem .85rem 2.4rem; }
-  .banner-texto{ padding:.55rem .65rem .65rem; }
+  .banner-texto{ padding:.8rem .95rem .85rem; border-radius:16px; }
+  .banner-texto::before{ inset:4px; border-radius:12px; }
+  .banner-texto-laco{ width:28px; top:-9px; right:14px; }
   .banner .banner-minis, .banner .banner-cores{ display:none; }
   .banner-tema-destaque{ grid-template-columns:.9fr 1.1fr; }
   .banner-chamada{ font-size:.92rem; padding:.18rem .55rem; margin-bottom:.35rem; }
