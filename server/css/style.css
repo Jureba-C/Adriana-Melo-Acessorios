@@ -4536,3 +4536,12 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
 .banner .banner-tema-presente .f1{ width:min(34%, 62cqh); top:0; }
 .banner-tema-presente .banner-caixa{ bottom:-6%; width:min(50%, 80cqh); }
 .banner .banner-tema-presente .apoio{ top:34%; }
+.banner-adesivo, .banner-mais-vendido{ z-index:6; }
+.banner-selo{ width:clamp(120px, 10vw, 144px); z-index:5; }
+@media (max-width: 575.98px){
+  .banner .apoio{ display:none; }
+  .banner .banner-tema-leque .fotos-3 .f1, .banner .banner-tema-leque .fotos-3 .f3{ display:none; }
+  .banner .banner-tema-leque .fotos-3 .f2{ width:min(90%, 84cqh); top:4%; }
+  .banner .banner-tema-presente .f1{ width:min(82%, 70cqh); top:0; }
+  .banner-tema-presente .banner-caixa{ width:min(80%, 60cqh); bottom:-4%; }
+}

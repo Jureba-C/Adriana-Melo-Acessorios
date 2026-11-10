@@ -63,7 +63,6 @@ const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // mostrados na tela do produto sejam exatamente os valores cobrados aqui.
 const pricing = require("./js/pricing.js");
 const produtoUrl = require("./js/produto-url.js");
-const { RIBBON_COLORS } = require("./js/colors.js");
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -1397,7 +1396,6 @@ function fontesDoBanner(url){
   return { src: `${base}?w=600`, srcset: `${base}?w=400 400w, ${base}?w=600 600w, ${base}?w=900 900w` };
 }
 
-const HEX_VALIDO = /^#[0-9A-Fa-f]{6}$/;
 const TEMAS_COM_APOIO = new Set(["destaque", "coroa", "presente"]);
 const MAX_BOLAS_BANNER = 6;
 
@@ -1405,15 +1403,53 @@ function miniDaFoto(url){
   return /^\/api\/products\/photos\//.test(url) ? `${url.split("?")[0]}?w=400` : url;
 }
 
-function coresDaCategoria(daCategoria, overridesMap){
-  const paleta = [...RIBBON_COLORS, ...db.listCustomColors()].map(c => c.hex).filter(h => HEX_VALIDO.test(h));
-  const usadas = new Set();
-  for(const p of daCategoria){
-    const linha = p.id >= CUSTOM_PRODUCT_ID_START ? db.getCustomProduct(p.id) : overridesMap.get(p.id);
-    const salvas = linha && linha.available_colors != null ? JSON.parse(linha.available_colors) : paleta;
-    for(const hex of salvas) usadas.add(hex);
+const CORES_DAS_FOTOS = new Map();
+const DISTANCIA_ENTRE_CORES = 70;
+const distanciaCor = (x, y) => Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+const hexParaRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+
+async function extrairCores(buffer){
+  const { data } = await sharp(buffer).resize(24, 24, { fit: "cover" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const baldes = new Map();
+  for(let y = 4; y < 20; y++){
+    for(let x = 4; x < 20; x++){
+      const i = (y * 24 + x) * 3;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const chave = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
+      const t = baldes.get(chave) || [0, 0, 0, 0];
+      t[0] += r; t[1] += g; t[2] += b; t[3]++;
+      baldes.set(chave, t);
+    }
   }
-  return paleta.filter(h => usadas.has(h));
+  const escolhidas = [];
+  for(const t of [...baldes.values()].sort((m, n) => n[3] - m[3])){
+    const cor = [t[0] / t[3], t[1] / t[3], t[2] / t[3]];
+    if(escolhidas.every(c => distanciaCor(c, cor) > DISTANCIA_ENTRE_CORES)) escolhidas.push(cor);
+    if(escolhidas.length === 3) break;
+  }
+  return escolhidas.map(c => "#" + c.map(v => Math.round(v).toString(16).padStart(2, "0")).join("").toUpperCase());
+}
+
+function buscarCoresDaFoto(id){
+  CORES_DAS_FOTOS.set(id, []);
+  const foto = db.getProductPhoto(id);
+  if(!foto) return;
+  extrairCores(Buffer.from(foto.data))
+    .then(cores => { CORES_DAS_FOTOS.set(id, cores); CACHE_BANNER = null; })
+    .catch(() => {});
+}
+
+function coresDaCategoria(daCategoria){
+  const vistas = [];
+  for(const p of daCategoria){
+    const id = (/^\/api\/products\/photos\/([0-9a-f-]{36})/.exec(p.photoUrl || "") || [])[1];
+    if(!id) continue;
+    if(!CORES_DAS_FOTOS.has(id)) buscarCoresDaFoto(id);
+    for(const hex of CORES_DAS_FOTOS.get(id)){
+      if(vistas.every(h => distanciaCor(hexParaRgb(h), hexParaRgb(hex)) > DISTANCIA_ENTRE_CORES)) vistas.push(hex);
+    }
+  }
+  return vistas.slice(0, MAX_BOLAS_BANNER);
 }
 
 function slidesDoBanner(){
@@ -1440,7 +1476,7 @@ function slidesDoBanner(){
       fotos: comFoto.slice(0, quantas).map(p => ({ alt: p.name, ...fontesDoBanner(p.photoUrl) })),
       apoio: apoio.map(p => fontesDoBanner(p.photoUrl)),
       minis, maisModelos: daCategoria.length - usadas - minis.length,
-      cores: coresDaCategoria(daCategoria, overridesMap),
+      cores: coresDaCategoria(daCategoria),
       preco: Number.isFinite(menor) ? menor : null,
       modelos: daCategoria.length,
       maisVendido: daCategoria.some(p => (p.badges || []).includes("Mais vendido")),

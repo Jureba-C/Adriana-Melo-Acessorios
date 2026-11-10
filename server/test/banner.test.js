@@ -108,22 +108,36 @@ test("todo slide traz as faíscas; só alguns temas trazem a fita de cetim", asy
 
 const fatias = html => html.split('class="hero-slide banner-slide').slice(1);
 
-test("miniaturas das outras fotos da categoria e bolinhas só com cores reais", async () => {
+test("miniaturas das outras fotos da categoria; sem foto analisada, sem bolinhas", async () => {
   for(const id of [3, 4, 5, 8]) db.upsertProductOverride(id, { photos: [foto(id)] });
-  let html = await home();
-  let leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
+  const html = await home();
+  const leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
   assert.match(leque, /class="banner-minis" aria-hidden="true"/);
   assert.equal((leque.match(/\?w=400" alt="" width="40"/g) || []).length, 3, "três fotos que sobraram viram miniatura");
   assert.ok(!leque.includes("e mais"), "sem modelos além das miniaturas, sem 'e mais'");
-  assert.equal((leque.match(/<i style="--c:#[0-9A-Fa-f]{6}">/g) || []).length, 6, "sem edição de cores = paleta toda");
-  assert.match(leque, />6 cores</);
+  assert.ok(!leque.includes("banner-cores"), "foto que não existe no banco não gera cor");
   const kit = fatias(html).find(s => s.startsWith(" banner-tema-presente"));
   assert.ok(!kit.includes("banner-minis"), "categoria sem foto sobrando não traz miniaturas");
+});
 
-  for(const id of [1, 2, 3, 4, 5, 8]) db.upsertProductOverride(id, { availableColors: ["#F4B4CC", "#DD6E9B", "#naoexiste"] });
-  html = await home();
-  leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
-  assert.equal((leque.match(/<i style="--c:#/g) || []).length, 2, "cores fora da paleta são ignoradas");
+test("as bolinhas de cor vêm das cores que aparecem nas fotos dos produtos", async () => {
+  const sharp = require("sharp");
+  const fotoReal = async (esq, dir) => {
+    const id = require("node:crypto").randomUUID();
+    const meia = (c) => sharp({ create: { width: 32, height: 64, channels: 3, background: c } }).png().toBuffer();
+    const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: esq } })
+      .composite([{ input: await meia(dir), left: 32, top: 0 }]).png().toBuffer();
+    db.insertProductPhoto(id, "image/png", png);
+    return `/api/products/photos/${id}`;
+  };
+  db.upsertProductOverride(1, { photos: [await fotoReal("#F08CB4", "#5B8FD9")] });
+  await home();
+  await new Promise(r => setTimeout(r, 1000));
+  const html = await home();
+  const leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
+  const cores = leque.match(/<i style="--c:(#[0-9A-F]{6})">/g) || [];
+  assert.equal(cores.length, 2, "rosa e azul da foto");
+  assert.match(leque, /--c:#(EF|F0)[0-9A-F]{4}"/);
   assert.match(leque, />2 cores</);
 });
 
