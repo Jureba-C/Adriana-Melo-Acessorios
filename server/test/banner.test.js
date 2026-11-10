@@ -113,7 +113,7 @@ test("miniaturas das outras fotos da categoria; sem foto analisada, sem bolinhas
   const html = await home();
   const leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
   assert.match(leque, /class="banner-minis" aria-hidden="true"/);
-  assert.equal((leque.match(/\?w=400" alt="" width="40"/g) || []).length, 3, "três fotos que sobraram viram miniatura");
+  assert.equal((leque.match(/\?w=160" alt="" width="40"/g) || []).length, 3, "três fotos que sobraram viram miniatura");
   assert.ok(!leque.includes("e mais"), "sem modelos além das miniaturas, sem 'e mais'");
   assert.ok(!leque.includes("banner-cores"), "foto que não existe no banco não gera cor");
   const kit = fatias(html).find(s => s.startsWith(" banner-tema-presente"));

@@ -248,7 +248,7 @@
     return p.slug || PLCProdutoUrl.caminhoDoProduto(p.id, p.name);
   }
 
-  function cartaoDeProdutoHTML(p, i){
+  function cartaoDeProdutoHTML(p, i, primeiraLeva){
       const pay = pricing.paymentSummaryFor(p.price);
       const parcelamento = rotuloCurtoDeParcelamento(pay);
       const photo = imageFor(p);
@@ -264,7 +264,7 @@
               ${atributosDeFoto(photo, [400, 600], SIZES_DO_CARD)}
               alt="${escapeHTML(p.name)} — ${escapeHTML(p.catLabel)}"
               width="600" height="600"
-              loading="lazy" decoding="async">` : ""}
+              ${primeiraLeva && i < 2 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">` : ""}
             <svg class="bow-icon" style="color:${safeColor(p.color)}; position:absolute"><use href="#bow-shape"/></svg>
           </div>
           <div class="product-body">
@@ -288,7 +288,7 @@
     const todos = produtosFiltrados();
     const list = todos.slice(0, visiveis);
     atualizarResumoVitrine(todos.length, list.length);
-    grid.innerHTML = list.map(cartaoDeProdutoHTML).join("");
+    grid.innerHTML = list.map((p, i) => cartaoDeProdutoHTML(p, i, true)).join("");
     grid.querySelectorAll(".product-thumb img").forEach(wireImage);
     observeReveal(grid);
     document.dispatchEvent(new CustomEvent("vitrine:render"));

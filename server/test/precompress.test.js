@@ -88,14 +88,19 @@ async function comCacheQuente(caminho){
   throw new Error(`o cache de ${caminho} não esquentou`);
 }
 
-test("o que vai comprimido descomprime para o arquivo do disco, byte a byte", async () => {
+test("o que vai comprimido descomprime para o arquivo do disco minificado, byte a byte", async () => {
+  const esbuild = require("esbuild");
   for(const caminho of ARQUIVOS){
     const r = await comCacheQuente(caminho);
     assert.equal(r.headers["content-encoding"], "br", caminho);
-    const disco = fs.readFileSync(path.join(RAIZ, caminho));
+    const disco = fs.readFileSync(path.join(RAIZ, caminho), "utf8");
+    const { code } = esbuild.transformSync(disco, {
+      loader: caminho.endsWith(".css") ? "css" : "js", minify: true, legalComments: "none", charset: "utf8",
+    });
+    const esperado = code.length < Buffer.byteLength(disco) ? code : disco;
     const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
-    assert.equal(sha(zlib.brotliDecompressSync(r.buf)), sha(disco),
-      `${caminho}: o corpo servido não bate com o arquivo em disco`);
+    assert.equal(sha(zlib.brotliDecompressSync(r.buf)), sha(Buffer.from(esperado, "utf8")),
+      `${caminho}: o corpo servido não é o arquivo do disco minificado`);
   }
 });
 

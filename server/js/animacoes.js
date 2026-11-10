@@ -628,7 +628,7 @@
       });
     }
 
-    desenhar();
+    redesenhar();
     const ro = new ResizeObserver(redesenhar);
     ro.observe(grade);
     window.addEventListener("resize", redesenhar);

@@ -1324,6 +1324,19 @@ function secaoAvaliacoes(){
 ========================================================================= */
 const MARCA_BANNER = "<!--#BANNER-HOME#-->";
 const MARCA_PRODUTOS_INICIAIS = "<!--#PRODUTOS-INICIAIS#-->";
+const MARCA_CSS_INLINE = "<!--#CSS-INLINE#-->";
+// fonts.css e o recorte de ícones vão dentro do HTML da home: são pequenos e,
+// como <link>, criavam a cadeia HTML → CSS → fonte que o Lighthouse aponta.
+// Lidos uma vez (só mudam com deploy, que reinicia o processo); os url()
+// relativos viram absolutos porque o CSS deixa de morar em /css/.
+let CSS_INLINE = null;
+function cssInline(){
+  if(CSS_INLINE) return CSS_INLINE;
+  const ler = (rel, base) => fs.readFileSync(path.join(SITE_ROOT, rel), "utf8")
+    .replace(/url\((["']?)(?!\/|data:|https?:)/g, `url($1${base}`);
+  CSS_INLINE = `<style>${ler("css/vendor/bootstrap-icons.subset.css", "/css/vendor/")}${ler("css/fonts.css", "/css/")}</style>`;
+  return CSS_INLINE;
+}
 const MARCA_HERO_PRELOAD = "<!--#HERO-PRELOAD#-->";
 
 const FOTOS_HERO_PADRAO = [
@@ -1401,7 +1414,7 @@ const TEMAS_COM_APOIO = new Set(["destaque", "coroa", "presente"]);
 const MAX_BOLAS_BANNER = 6;
 
 function miniDaFoto(url){
-  return /^\/api\/products\/photos\//.test(url) ? `${url.split("?")[0]}?w=400` : url;
+  return /^\/api\/products\/photos\//.test(url) ? `${url.split("?")[0]}?w=160` : url;
 }
 
 const CORES_DAS_FOTOS = new Map();
@@ -1559,8 +1572,20 @@ function blocoBanner(){
             </template>`;
   const f = slides[0].fotos[fotoPrincipal(slides[0])];
   const preload = `<link rel="preload" as="image" href="${f.src}"${f.srcset ? ` imagesrcset="${f.srcset}" imagesizes="${BANNER_SIZES}"` : ""} fetchpriority="high">`;
-  CACHE_BANNER = { versao, html, preload };
+  CACHE_BANNER = { versao, html, preload: preload + preloadDaVitrine() };
   return html;
+}
+
+// No celular os dois primeiros cartões da vitrine aparecem na primeira tela e
+// costumam ser o LCP, mas a vitrine é montada pelo main.js. O preload com o
+// MESMO srcset/sizes do cartão (js/main.js, SIZES_DO_CARD) deixa o navegador
+// achar a foto já no HTML e reaproveitar o download quando o cartão nascer.
+const SIZES_DO_CARD = "(max-width: 767.98px) 50vw, (max-width: 991.98px) 33vw, 285px";
+function preloadDaVitrine(){
+  return catalogoPublico().products.slice(0, 2)
+    .filter(p => /^\/api\/products\/photos\/[0-9a-f-]{36}$/.test(p.photoUrl || ""))
+    .map(p => `<link rel="preload" as="image" href="${p.photoUrl}?w=600" imagesrcset="${p.photoUrl}?w=400 400w, ${p.photoUrl}?w=600 600w" imagesizes="${SIZES_DO_CARD}" fetchpriority="high">`)
+    .join("");
 }
 
 function preloadDoBanner(){
@@ -1577,6 +1602,7 @@ function comAvaliacoes(html){
   if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
   if(saida.includes(MARCA_BANNER)) saida = saida.replace(MARCA_BANNER, () => blocoBanner());
   if(saida.includes(MARCA_HERO_PRELOAD)) saida = saida.replace(MARCA_HERO_PRELOAD, () => preloadDoBanner());
+  if(saida.includes(MARCA_CSS_INLINE)) saida = saida.replace(MARCA_CSS_INLINE, () => cssInline());
   // O catálogo vai junto do HTML para a vitrine não esperar o main.js baixar e
   // só então pedir /api/products. "<" escapado: um nome com "</script>" não
   // pode fechar a tag.

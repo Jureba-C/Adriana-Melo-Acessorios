@@ -33,8 +33,9 @@ test("todo href/src local de css, js, img e fonte existe no disco", () => {
   assert.deepEqual(faltando, [], `referências quebradas:\n${faltando.join("\n")}`);
 });
 
-test("toda fonte pré-carregada é usada pelo css/fonts.css", () => {
-  const fontes = fs.readFileSync(path.join(RAIZ, "css/fonts.css"), "utf8");
+test("toda fonte pré-carregada é usada pelo css/fonts.css ou pelo recorte de ícones", () => {
+  const fontes = fs.readFileSync(path.join(RAIZ, "css/fonts.css"), "utf8")
+    + fs.readFileSync(path.join(RAIZ, "css/vendor/bootstrap-icons.subset.css"), "utf8");
   const orfas = [];
   for(const pagina of PAGINAS){
     const re = /<link[^>]+rel="preload"[^>]+href="([^"]+\.woff2)"/g;

@@ -17,6 +17,7 @@
     "compression": "^1.8.2",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
+    "esbuild": "^0.25.12",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
