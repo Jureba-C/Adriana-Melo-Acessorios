@@ -361,7 +361,8 @@
   });
   vitrineMaisBtn?.addEventListener("click", acrescentarProdutos);
 
-  renderProducts();
+  const catalogoNoHtml = Boolean(document.getElementById("produtosIniciais"));
+  if(!catalogoNoHtml) renderProducts();
 
   function categoryLabelFor(catSlug){
     const chip = document.querySelector(`#filterGroup .chip[data-cat="${CSS.escape(catSlug)}"]`);
@@ -517,7 +518,7 @@
           changed = true;
         }
       }
-      if(changed){ renderProducts(); renderCart(); }
+      if(changed || catalogoNoHtml){ renderProducts(); renderCart(); }
       esconderCategoriasVazias();
       atualizarBotaoDeCategorias();
       verifyPaymentRules(data.paymentRules);

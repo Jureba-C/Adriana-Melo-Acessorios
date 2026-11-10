@@ -1510,7 +1510,7 @@ function slideDoBanner(s, primeiro){
   }).join("");
   const fotos = s.fotos.map((f, i) => {
     const conjunto = f.srcset ? ` srcset="${f.srcset}" sizes="${BANNER_SIZES}"` : "";
-    return `<figure class="banner-foto f${i + 1}"><img src="${f.src}"${conjunto} alt="${escaparHtml(f.alt)}" width="600" height="750" decoding="async"${primeiro && i === 0 ? ' fetchpriority="high"' : ""}></figure>`;
+    return `<figure class="banner-foto f${i + 1}"><img src="${f.src}"${conjunto} alt="${escaparHtml(f.alt)}" width="600" height="750" decoding="async"${primeiro && i === fotoPrincipal(s) ? ' fetchpriority="high"' : ""}></figure>`;
   }).join("");
   const cores = s.cores.length > 1
     ? `<span class="banner-cores"><span class="banner-cores-bolas" aria-hidden="true">${s.cores.slice(0, MAX_BOLAS_BANNER).map(h => `<i style="--c:${h}"></i>`).join("")}</span><em>${s.cores.length} cores</em></span>`
@@ -1541,6 +1541,10 @@ function slideDoBanner(s, primeiro){
               </div>`;
 }
 
+// No leque de 3 a maior foto (e a única no celular) é a do meio: é ela o LCP,
+// então é ela que leva o preload e o fetchpriority.
+const fotoPrincipal = s => (s.fotos.length === 3 ? 1 : 0);
+
 let CACHE_BANNER = null;
 
 function blocoBanner(){
@@ -1553,7 +1557,7 @@ function blocoBanner(){
             <template id="heroSlidesExtras">
               ${slides.slice(1).map(s => slideDoBanner(s, false)).join("\n              ")}
             </template>`;
-  const f = slides[0].fotos[0];
+  const f = slides[0].fotos[fotoPrincipal(slides[0])];
   const preload = `<link rel="preload" as="image" href="${f.src}"${f.srcset ? ` imagesrcset="${f.srcset}" imagesizes="${BANNER_SIZES}"` : ""} fetchpriority="high">`;
   CACHE_BANNER = { versao, html, preload };
   return html;
