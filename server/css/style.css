@@ -423,7 +423,7 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
   opacity:0; visibility:hidden; transform:translateX(-6%);
   transition:opacity .6s var(--ease-out), transform .6s var(--ease-out), visibility 0s linear .6s;
 }
-.banner-slide.is-ativa{ opacity:1; visibility:visible; transform:none; transition:opacity .6s var(--ease-out), transform .6s var(--ease-out); animation:bannerEntraSlide .7s var(--ease-out) both; }
+.banner-slide.is-ativa{ opacity:1; visibility:visible; transform:none; transition:opacity .6s var(--ease-out), transform .6s var(--ease-out); }
 .banner-slide.is-ativa .banner-texto > *{ animation:bannerEntraTexto .6s var(--ease-out) both; }
 .banner-slide.is-ativa .banner-texto > :nth-child(2){ animation-delay:.08s; }
 .banner-slide.is-ativa .banner-texto > :nth-child(3){ animation-delay:.16s; }
@@ -437,7 +437,7 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 @keyframes bannerEntraTexto{ from{ opacity:0; translate:0 14px; } to{ opacity:1; translate:0 0; } }
 @keyframes bannerEntraFoto{ from{ opacity:0; scale:.7; } to{ opacity:1; scale:1; } }
 .banner-texto{
-  position:relative; z-index:2; min-width:0; padding:1rem 1.5rem 1.1rem;
+  position:relative; z-index:2; min-width:0; padding:1rem 1.35rem 1.1rem;
   background:linear-gradient(155deg, var(--white) 55%, var(--blush-50)); border-radius:20px;
   box-shadow:0 18px 34px -20px rgba(192,84,128,.55), 0 0 0 1px rgba(244,180,204,.35);
 }
@@ -581,14 +581,18 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .banner .hero-controles{ position:absolute; left:0; right:0; bottom:.8rem; z-index:3; margin:0; }
 .banner-palco{ position:relative; }
 .vantagens{
-  list-style:none; margin:0; padding:.6rem 1rem; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:.5rem 1.8rem;
-  position:relative; z-index:3; background:linear-gradient(180deg, #FFF8EE, var(--blush-50)); border-top:1.5px dashed rgba(201,166,107,.7);
+  list-style:none; margin:0; padding:.7rem 1rem; display:grid; grid-template-columns:1fr 1fr; gap:.6rem 1rem;
+  position:relative; z-index:3; border-top:1px solid rgba(255,255,255,.28);
+  background:linear-gradient(90deg, color-mix(in srgb, var(--blush-700) 85%, var(--ink)), color-mix(in srgb, var(--blush-700) 92%, var(--ink)));
 }
-.vantagem{ display:flex; align-items:center; gap:.5rem; }
-.vantagem-icone{ flex:none; width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--white); box-shadow:inset 0 0 0 1px var(--blush-100); color:var(--blush-700); font-size:.74rem; }
+@media (min-width: 992px){
+  .vantagens{ grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:1fr; justify-items:center; padding:.75rem 1.5rem; }
+}
+.vantagem{ display:flex; align-items:center; gap:.55rem; }
+.vantagem-icone{ flex:none; width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--white); color:var(--blush-700); font-size:.74rem; }
 .vantagem-texto{ display:flex; flex-direction:column; min-width:0; line-height:1.2; }
-.vantagem-texto strong{ font-size:.84rem; font-weight:600; color:var(--ink); }
-.vantagem-texto > span{ font-size:.74rem; color:var(--ink-soft); }
+.vantagem-texto strong{ font-size:.86rem; font-weight:600; color:var(--white); }
+.vantagem-texto > span{ font-size:.74rem; color:var(--blush-50); }
 .banner{ --px:0; --py:0; }
 .banner-fita-cetim, .banner-faiscas{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 .banner-fita-cetim{ z-index:0; overflow:visible; translate:calc(var(--px, 0) * 7px) calc(var(--py, 0) * 4px); transition:translate .35s var(--ease-out); }
@@ -655,7 +659,6 @@ body.has-cookie-consent{ padding-bottom:var(--cookie-consent-space, 0px); }
 .banner-slide.is-ativa.banner-tema-etiqueta .banner-foto{ transform-origin:50% 0; animation:bannerFotoEntra .9s cubic-bezier(.22,1.3,.36,1) .15s backwards, bannerPendulo 4.6s ease-in-out 1.2s infinite; }
 .banner-slide.is-ativa .banner-cordao{ transform-origin:top; animation:bannerPendulo 4.6s ease-in-out 1.2s infinite; }
 .banner-slide.is-ativa .banner-cabide{ transform-origin:50% 0; animation:bannerBalanco 6.5s ease-in-out 1.2s infinite; }
-.banner-slide.is-ativa .banner-titulo{ animation:bannerCortina .75s var(--ease-out) .12s both; }
 .banner-slide.is-ativa .banner-preco strong{ transform-origin:left center; animation:bannerPreco .7s cubic-bezier(.34, 1.8, .64, 1) .45s both; }
 .banner-slide.is-ativa .banner-preco small{ animation:bannerEntraTexto .6s var(--ease-out) .7s both; }
 .banner-cta{ position:relative; overflow:hidden; }
@@ -4356,3 +4359,82 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
   .banner-slide.is-ativa .banner-texto-enfeite .pequeno{ animation:bannerEntraFoto .6s cubic-bezier(.34,1.56,.64,1) .8s backwards, bannerFlutua 6s ease-in-out 1.6s infinite; }
   .banner.is-fora .banner-texto-enfeite *{ animation-play-state:paused; }
 }
+
+.banner-puxada{ position:absolute; top:0; bottom:0; left:100%; width:160%; z-index:6; pointer-events:none; visibility:hidden; }
+.banner.is-trocando .banner-puxada{ visibility:visible; animation:bannerPuxa 1s cubic-bezier(.65, 0, .35, 1) both; }
+.banner.is-trocando .banner-slide{ transition:none; }
+@keyframes bannerPuxa{ from{ translate:0 0; } to{ translate:-162.5% 0; } }
+.bp-fita{
+  position:absolute; inset:0; clip-path:polygon(70px 0, 100% 0, 100% 100%, 70px 100%, 0 50%);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.4), transparent 14%, transparent 86%, rgba(255,255,255,.4)),
+    repeating-linear-gradient(90deg, transparent 0 60px, rgba(255,255,255,.22) 60px 74px, transparent 74px 140px),
+    linear-gradient(180deg, var(--blush-300), var(--blush-500) 50%, var(--blush-300));
+}
+.bp-fita::before, .bp-fita::after{ content:""; position:absolute; left:84px; right:0; height:0; border-top:2px dashed rgba(255,255,255,.8); }
+.bp-fita::before{ top:12px; }
+.bp-fita::after{ bottom:12px; }
+.bp-laco{ position:absolute; left:34px; top:50%; width:clamp(84px, 11vw, 130px); height:auto; aspect-ratio:100 / 70; translate:-50% -50%; color:var(--blush-700); filter:drop-shadow(0 8px 10px rgba(84,41,60,.35)); }
+.banner.is-trocando .bp-laco{ animation:bannerLacoBalanca .45s ease-in-out infinite alternate; }
+@keyframes bannerLacoBalanca{ from{ rotate:-14deg; } to{ rotate:10deg; } }
+.bp-brilhos i{ position:absolute; left:6px; top:50%; width:14px; height:14px; background:var(--gold-500); clip-path:polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); opacity:0; }
+.bp-brilhos i:nth-child(even){ background:var(--white); }
+.bp-brilhos i:nth-child(1){ --dx:90px; --dy:-110px; --d:.05s; }
+.bp-brilhos i:nth-child(2){ --dx:140px; --dy:90px; --d:.1s; width:18px; height:18px; }
+.bp-brilhos i:nth-child(3){ --dx:60px; --dy:-50px; --d:.15s; width:10px; height:10px; }
+.bp-brilhos i:nth-child(4){ --dx:190px; --dy:-30px; --d:.2s; }
+.bp-brilhos i:nth-child(5){ --dx:110px; --dy:130px; --d:.25s; width:11px; height:11px; }
+.bp-brilhos i:nth-child(6){ --dx:220px; --dy:60px; --d:.3s; width:16px; height:16px; }
+.bp-brilhos i:nth-child(7){ --dx:150px; --dy:-140px; --d:.12s; width:12px; height:12px; }
+.bp-brilhos i:nth-child(8){ --dx:260px; --dy:-80px; --d:.22s; }
+.banner.is-trocando .bp-brilhos i{ animation:bannerBrilhoFita .9s ease-out var(--d, 0s) both; }
+@keyframes bannerBrilhoFita{ 0%{ opacity:0; translate:0 0; scale:.3; } 20%{ opacity:1; } 100%{ opacity:0; translate:var(--dx) var(--dy); scale:1.1; } }
+
+.banner-titulo .pal{ display:inline-block; }
+.banner-slide.is-ativa .banner-titulo .pal{ animation:bannerPalavra .7s cubic-bezier(.34, 1.7, .5, 1) calc(.15s + var(--i) * .09s) backwards; }
+@keyframes bannerPalavra{ from{ opacity:0; transform:translateY(.7em) scale(.8) rotate(-5deg); } to{ opacity:1; transform:none; } }
+.banner-slide.is-ativa .banner-cta{ animation:bannerCtaPula 3.6s ease-in-out 2.2s infinite; }
+@keyframes bannerCtaPula{ 0%, 70%, 100%{ scale:1; } 78%{ scale:1.07; } 86%{ scale:.97; } 93%{ scale:1.03; } }
+
+.banner-slide.is-ativa.banner-tema-dupla .f1{ animation:bannerBateE .9s cubic-bezier(.3, .8, .4, 1) .1s backwards, bannerBalanco 6.5s ease-in-out 1.2s infinite; }
+.banner-slide.is-ativa.banner-tema-dupla .f2{ animation:bannerBateD .9s cubic-bezier(.3, .8, .4, 1) .1s backwards, bannerBalanco 6.5s ease-in-out 1.6s infinite reverse; }
+@keyframes bannerBateE{ 0%{ opacity:0; transform:translateX(-140%) rotate(-30deg); } 50%{ opacity:1; transform:translateX(6%) rotate(-2deg) scale(1.07, .93); } 70%{ transform:translateX(-2%) rotate(-4deg) scale(.97, 1.04); } 100%{ opacity:1; transform:none; } }
+@keyframes bannerBateD{ 0%{ opacity:0; transform:translateX(140%) rotate(30deg); } 50%{ opacity:1; transform:translateX(-6%) rotate(2deg) scale(1.07, .93); } 70%{ transform:translateX(2%) rotate(4deg) scale(.97, 1.04); } 100%{ opacity:1; transform:none; } }
+
+.banner-slide.is-ativa.banner-tema-destaque .f1{ animation:bannerZoom .9s cubic-bezier(.22, 1.2, .36, 1) .1s backwards, bannerBalanco 6.5s ease-in-out 1.2s infinite; }
+@keyframes bannerZoom{ from{ opacity:0; transform:scale(1.8) rotate(-10deg); } 60%{ opacity:1; transform:scale(.94) rotate(1deg); } to{ opacity:1; transform:none; } }
+.banner-slide.is-ativa .banner-raios{ animation:bannerRaiosEntra 1.1s ease-out backwards, bannerGira 40s linear 1.1s infinite; }
+@keyframes bannerRaiosEntra{ from{ opacity:0; scale:.2; rotate:-160deg; } to{ opacity:1; scale:1; rotate:0deg; } }
+.banner-tema-destaque .banner-arte::after{ content:""; position:absolute; inset:-20%; z-index:4; opacity:0; pointer-events:none; background:radial-gradient(circle, rgba(255,255,255,.95) 0, rgba(255,255,255,0) 55%); }
+.banner-slide.is-ativa.banner-tema-destaque .banner-arte::after{ animation:bannerFlash .9s ease-out .15s; }
+@keyframes bannerFlash{ 0%{ opacity:0; scale:.3; } 25%{ opacity:1; } 100%{ opacity:0; scale:1.4; } }
+
+.banner-slide.is-ativa.banner-tema-redondo .f1{ animation:bannerBolha 1s linear .1s backwards, bannerBalanco 6.5s ease-in-out 1.3s infinite; }
+@keyframes bannerBolha{ 0%{ opacity:0; transform:scale(0); } 40%{ opacity:1; transform:scale(1.22, .82); } 58%{ transform:scale(.9, 1.14); } 76%{ transform:scale(1.05, .96); } 100%{ opacity:1; transform:none; } }
+
+.banner-slide.is-ativa.banner-tema-coroa .f1{ animation:bannerCai .95s cubic-bezier(.3, 0, .4, 1) .1s backwards, bannerBalanco 6.5s ease-in-out 1.3s infinite; }
+.banner-slide.is-ativa .banner-coroa{ animation:bannerCai .9s cubic-bezier(.3, 0, .4, 1) 1s backwards, bannerCoroaBalanca 3.5s ease-in-out 2.2s infinite; }
+@keyframes bannerCoroaBalanca{ 0%, 100%{ rotate:-8deg; } 50%{ rotate:-3deg; } }
+
+.banner-slide.is-ativa.banner-tema-presente .f1{ animation:bannerPulaCaixa .9s cubic-bezier(.3, .9, .4, 1) .15s backwards, bannerBalanco 6.5s ease-in-out 1.5s infinite; }
+@keyframes bannerPulaCaixa{ 0%{ opacity:0; transform:translateY(70%) scale(.25); } 55%{ opacity:1; transform:translateY(-12%) scale(1.1); } 75%{ transform:translateY(3%) scale(.97); } 100%{ opacity:1; transform:none; } }
+
+.banner-slide.is-ativa.banner-tema-etiqueta .banner-foto{ transform-origin:50% -70%; animation:bannerPenduloEntra 1.3s ease-out .1s backwards, bannerPendulo 4.6s ease-in-out 1.5s infinite; }
+.banner-slide.is-ativa .banner-cordao{ animation:bannerPenduloEntra 1.3s ease-out .1s backwards, bannerPendulo 4.6s ease-in-out 1.5s infinite; }
+.banner-slide.is-ativa.banner-tema-cabide .f1{ transform-origin:50% -40%; animation:bannerPenduloEntra 1.2s ease-out .2s backwards, bannerBalanco 6.5s ease-in-out 1.6s infinite; }
+.banner-slide.is-ativa .banner-cabide{ animation:bannerDesce .7s cubic-bezier(.3, 1.3, .5, 1) backwards, bannerBalanco 6.5s ease-in-out 1.2s infinite; }
+@keyframes bannerPenduloEntra{ 0%{ opacity:0; transform:rotate(50deg); } 25%{ opacity:1; transform:rotate(-28deg); } 50%{ transform:rotate(16deg); } 70%{ transform:rotate(-8deg); } 85%{ transform:rotate(3deg); } 100%{ opacity:1; transform:none; } }
+@keyframes bannerDesce{ from{ opacity:0; transform:translateY(-120%); } to{ opacity:1; transform:none; } }
+
+@media (min-width: 992px){
+  .banner-faiscas::before, .banner-faiscas::after{
+    content:""; position:absolute; bottom:18%; width:16px; height:16px; background:var(--blush-500); opacity:0;
+    -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-7-4.6-9.5-9A5.4 5.4 0 0 1 12 6.2 5.4 5.4 0 0 1 21.5 12C19 16.4 12 21 12 21z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-7-4.6-9.5-9A5.4 5.4 0 0 1 12 6.2 5.4 5.4 0 0 1 21.5 12C19 16.4 12 21 12 21z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .banner-faiscas::before{ left:34%; }
+  .banner-faiscas::after{ left:66%; width:12px; height:12px; background:var(--blush-300); }
+  .banner-slide.is-ativa .banner-faiscas::before{ animation:bannerCoracaoSobe 5.5s ease-in 1.8s infinite; }
+  .banner-slide.is-ativa .banner-faiscas::after{ animation:bannerCoracaoSobe 5.5s ease-in 3.6s infinite; }
+}
+@keyframes bannerCoracaoSobe{ 0%{ opacity:0; translate:0 0; scale:.5; } 12%{ opacity:.9; } 100%{ opacity:0; translate:10px -120px; scale:1.2; } }

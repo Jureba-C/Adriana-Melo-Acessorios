@@ -48,7 +48,7 @@ const foto = (n) => `/api/products/photos/${String(n).repeat(32).slice(0, 32)}`;
 test("sem produto com foto, entra o slide genérico com a foto fixa", async () => {
   const html = await home();
   assert.match(html, /class="hero-slide banner-slide banner-tema-leque is-ativa"/);
-  assert.match(html, /Laços feitos à mão/);
+  assert.match(html.replace(/<span class="pal"[^>]*>|<\/span>/g, ""), /Laços feitos à mão/);
   assert.match(html, /data-abrir-cat="todos"/);
   assert.match(html, /img\/hero-laco-bailarina-960\.jpg/);
 });
@@ -116,7 +116,7 @@ test("miniaturas das outras fotos da categoria e bolinhas só com cores reais", 
   assert.equal((leque.match(/\?w=400" alt="" width="40"/g) || []).length, 3, "três fotos que sobraram viram miniatura");
   assert.ok(!leque.includes("e mais"), "sem modelos além das miniaturas, sem 'e mais'");
   assert.equal((leque.match(/<i style="--c:#[0-9A-Fa-f]{6}">/g) || []).length, 6, "sem edição de cores = paleta toda");
-  assert.match(leque, /em 6 cores/);
+  assert.match(leque, />6 cores</);
   const kit = fatias(html).find(s => s.startsWith(" banner-tema-presente"));
   assert.ok(!kit.includes("banner-minis"), "categoria sem foto sobrando não traz miniaturas");
 
@@ -124,11 +124,17 @@ test("miniaturas das outras fotos da categoria e bolinhas só com cores reais", 
   html = await home();
   leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
   assert.equal((leque.match(/<i style="--c:#/g) || []).length, 2, "cores fora da paleta são ignoradas");
-  assert.match(leque, /em 2 cores/);
+  assert.match(leque, />2 cores</);
 });
 
 test("todo slide traz o enfeite do cartão do texto, só decorativo", async () => {
   const html = await home();
   const slides = html.match(/class="hero-slide banner-slide/g).length;
   assert.equal((html.match(/class="banner-texto-enfeite" aria-hidden="true"/g) || []).length, slides);
+});
+
+test("a fita da transição existe uma vez, só decorativa, e o título vem em palavras", async () => {
+  const html = await home();
+  assert.equal((html.match(/class="banner-puxada" aria-hidden="true"/g) || []).length, 1);
+  assert.match(html, /<p class="banner-titulo"><span class="pal" style="--i:0">/);
 });

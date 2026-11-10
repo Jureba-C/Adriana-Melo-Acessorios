@@ -1468,7 +1468,7 @@ function slideDoBanner(s, primeiro){
     return `<figure class="banner-foto f${i + 1}"><img src="${f.src}"${conjunto} alt="${escaparHtml(f.alt)}" width="600" height="750" decoding="async"${primeiro && i === 0 ? ' fetchpriority="high"' : ""}></figure>`;
   }).join("");
   const cores = s.cores.length > 1
-    ? `<span class="banner-cores"><span class="banner-cores-bolas" aria-hidden="true">${s.cores.slice(0, MAX_BOLAS_BANNER).map(h => `<i style="--c:${h}"></i>`).join("")}</span><em>em ${s.cores.length} cores</em></span>`
+    ? `<span class="banner-cores"><span class="banner-cores-bolas" aria-hidden="true">${s.cores.slice(0, MAX_BOLAS_BANNER).map(h => `<i style="--c:${h}"></i>`).join("")}</span><em>${s.cores.length} cores</em></span>`
     : "";
   const preco = s.preco
     ? `<p class="banner-preco"><span>a partir de</span> <strong>R$ ${reais(s.preco)}</strong> <small>R$ ${reais(pricing.pixPriceFor(s.preco))} no Pix</small>${cores}</p>`
@@ -1480,7 +1480,7 @@ function slideDoBanner(s, primeiro){
   return `<div class="hero-slide banner-slide banner-tema-${s.tema}${primeiro ? " is-ativa" : ""}" data-legenda="${escaparHtml(s.titulo)}">
                 <div class="banner-texto">
                   <p class="banner-chamada">${escaparHtml(s.chamada)}</p>
-                  <p class="banner-titulo">${escaparHtml(s.titulo)}</p>
+                  <p class="banner-titulo">${s.titulo.split(" ").map((p, i) => `<span class="pal" style="--i:${i}">${escaparHtml(p)}</span>`).join(" ")}</p>
                   <p class="banner-frase">${escaparHtml(s.frase)}</p>
                   ${preco}
                   <div class="banner-acoes">
