@@ -45,6 +45,7 @@ const qrcode = require("qrcode");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const db = require("./lib/db");
 const precompress = require("./lib/precompress");
+const { criarCssCritico } = require("./lib/css-critico.js");
 const spreadsheetExport = require("./lib/export-spreadsheet");
 const auth = require("./lib/auth");
 const whatsapp = require("./lib/whatsapp");
@@ -1334,7 +1335,10 @@ function cssInline(){
   if(CSS_INLINE) return CSS_INLINE;
   const ler = (rel, base) => fs.readFileSync(path.join(SITE_ROOT, rel), "utf8")
     .replace(/url\((["']?)(?!\/|data:|https?:)/g, `url($1${base}`);
-  CSS_INLINE = `<style>${ler("css/vendor/bootstrap-icons.subset.css", "/css/vendor/")}${ler("css/fonts.css", "/css/")}</style>`;
+  const css = ler("css/vendor/bootstrap-icons.subset.css", "/css/vendor/") + ler("css/fonts.css", "/css/");
+  let minificado = css;
+  try { minificado = require("esbuild").transformSync(css, { loader: "css", minify: true, legalComments: "none", charset: "utf8" }).code; } catch(_) {}
+  CSS_INLINE = `<style>${minificado}</style>`;
   return CSS_INLINE;
 }
 const MARCA_HERO_PRELOAD = "<!--#HERO-PRELOAD#-->";
@@ -1593,6 +1597,8 @@ function preloadDoBanner(){
   return CACHE_BANNER.preload;
 }
 
+const aplicarCssCritico = criarCssCritico(SITE_ROOT);
+
 function comAvaliacoes(html){
   let saida = html;
   // Substituição por FUNÇÃO, não por string: numa string de troca o JS
@@ -1608,6 +1614,7 @@ function comAvaliacoes(html){
   // pode fechar a tag.
   if(saida.includes(MARCA_PRODUTOS_INICIAIS)) saida = saida.replace(MARCA_PRODUTOS_INICIAIS, () =>
     `<script type="application/json" id="produtosIniciais">${JSON.stringify(catalogoPublico()).replace(/</g, "\\u003c")}</script>`);
+  if(saida.includes('id="heroCarrossel"')) saida = aplicarCssCritico(saida);
   return saida;
 }
 

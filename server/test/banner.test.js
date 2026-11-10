@@ -170,7 +170,7 @@ test("tema de foto única traz até duas fotos de apoio e a caixa de presente no
 
 test("só o primeiro slide nasce montado (is-inicial), os outros mantêm a entrada animada", async () => {
   const html = await home();
-  assert.equal((html.match(/is-inicial/g) || []).length, 1);
+  assert.equal((html.match(/class="hero-slide [^"]*is-inicial/g) || []).length, 1);
   assert.match(html, /class="hero-slide banner-slide banner-tema-\w+ is-ativa is-inicial"/);
 });
 
@@ -182,4 +182,21 @@ test("a home já traz o catálogo em JSON para a vitrine não esperar a API", as
   assert.ok(Array.isArray(dados.products) && dados.products.length > 0);
   assert.ok(Array.isArray(dados.categories));
   assert.ok(!m[1].includes("<"), "nenhum < cru dentro do JSON");
+});
+
+test("CSS crítico: depois de calculado, vai no <head> e os CSS grandes descem para o fim do <body>", async () => {
+  await home();
+  let html = "";
+  for(let i = 0; i < 40; i++){
+    html = await home();
+    if(!/<link rel="stylesheet" href="\/css\/style\.css[^"]*">[\s\S]*<\/head>/.test(html)) break;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  const cabeca = html.slice(0, html.indexOf("</head>"));
+  assert.ok(!cabeca.includes('href="/css/style.css'), "style.css não bloqueia mais no <head>");
+  assert.match(cabeca, /<style>[^<]*\.banner-slide[^<]*<\/style>/, "crítico tem o banner");
+  assert.match(cabeca, /<style>[^<]*\.product-card[^<]*<\/style>/, "crítico tem os cartões da vitrine criados pelo JS");
+  const corpoFim = html.slice(html.lastIndexOf("</footer>"));
+  assert.match(corpoFim, /<link media="print" data-css-tardio rel="stylesheet" href="\/css\/vendor\/bootstrap\.purged\.css[^"]*">\s*<link media="print" data-css-tardio rel="stylesheet" href="\/css\/style\.css[^"]*">\s*<script src="\/js\/css-tardio\.js" async><\/script>\s*<noscript>/,
+    "os dois CSS no fim do <body>, na mesma ordem, sem bloquear e com o script que os liga");
 });

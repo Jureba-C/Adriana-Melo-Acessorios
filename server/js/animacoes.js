@@ -1,5 +1,6 @@
 (function () {
   "use strict";
+  function comecar() {
   if (!window.gsap) return;
 
   const mm = gsap.matchMedia();
@@ -987,4 +988,34 @@
       });
     });
   }
+  }
+
+  function carregarGsap() {
+    if (window.gsap) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const asset = document.getElementById("assetGsap");
+      const script = document.createElement("script");
+      script.src = asset ? asset.href : "/js/vendor/gsap.min.js";
+      script.onload = () => resolve(!!window.gsap);
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+    });
+  }
+
+  function depoisDaCarga(acao) {
+    let feito = false;
+    function uma() {
+      if (feito) return;
+      feito = true;
+      window.removeEventListener("scroll", uma);
+      window.removeEventListener("pointerdown", uma);
+      acao();
+    }
+    window.addEventListener("scroll", uma, { once: true, passive: true });
+    window.addEventListener("pointerdown", uma, { once: true, passive: true });
+    if ("requestIdleCallback" in window) requestIdleCallback(uma, { timeout: 2000 });
+    else setTimeout(uma, 1000);
+  }
+
+  depoisDaCarga(() => carregarGsap().then((ok) => { if (ok) comecar(); }));
 })();

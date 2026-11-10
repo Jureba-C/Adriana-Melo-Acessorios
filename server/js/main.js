@@ -137,7 +137,7 @@
     processWrapEl.style.setProperty("--y2", `${centroVertical(icones[1])}px`);
     processWrapEl.style.setProperty("--y3", `${centroVertical(icones[2])}px`);
   }
-  posicionarParadasMobile();
+  requestAnimationFrame(posicionarParadasMobile);
   window.addEventListener("resize", posicionarParadasMobile);
   window.addEventListener("load", posicionarParadasMobile);
   if(document.fonts?.ready) document.fonts.ready.then(posicionarParadasMobile);
@@ -520,7 +520,7 @@
       }
       if(changed || catalogoNoHtml){ renderProducts(); renderCart(); }
       esconderCategoriasVazias();
-      atualizarBotaoDeCategorias();
+      requestAnimationFrame(atualizarBotaoDeCategorias);
       verifyPaymentRules(data.paymentRules);
     }catch(err){
       console.warn("Não foi possível verificar atualizações do catálogo:", err);
@@ -1851,7 +1851,7 @@
       scrollTicking = false;
     });
   }, { passive:true });
-  updateActiveSection();
+  requestAnimationFrame(updateActiveSection);
 
   btnTop.addEventListener("click", () => {
     window.scrollTo({ top:0, behavior:"smooth" });
