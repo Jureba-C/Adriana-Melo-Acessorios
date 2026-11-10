@@ -138,3 +138,18 @@ test("a fita da transição existe uma vez, só decorativa, e o título vem em p
   assert.equal((html.match(/class="banner-puxada" aria-hidden="true"/g) || []).length, 1);
   assert.match(html, /<p class="banner-titulo"><span class="pal" style="--i:0">/);
 });
+
+test("tema de foto única traz até duas fotos de apoio e a caixa de presente nos Kits", async () => {
+  let html = await home();
+  let kit = fatias(html).find(s => s.startsWith(" banner-tema-presente"));
+  assert.ok(!kit.includes("banner-foto apoio"), "categoria com uma foto só não traz apoio");
+  assert.match(kit, /class="banner-caixa"/);
+  db.upsertProductOverride(4, { category: "kit" });
+  db.upsertProductOverride(5, { category: "kit" });
+  html = await home();
+  kit = fatias(html).find(s => s.startsWith(" banner-tema-presente"));
+  assert.equal((kit.match(/class="banner-foto apoio a\d"/g) || []).length, 2);
+  assert.ok(!/class="banner-foto apoio[^>]*><img[^>]*alt="[^"]+"/.test(kit), "apoio é decorativo, sem alt");
+  const leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
+  assert.ok(!leque.includes("banner-foto apoio"), "leque já usa várias fotos principais");
+});

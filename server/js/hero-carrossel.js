@@ -9,7 +9,7 @@
   const extras = modelo ? [...modelo.content.querySelectorAll(".hero-slide")] : [];
 
   if(raiz && pista && extras.length){
-    const INTERVALO = 5000;
+    const INTERVALO = 3500;
     const caixaPontos = raiz.querySelector(".hero-pontos");
     const pausa = raiz.querySelector(".hero-pausa");
     const vivo = raiz.querySelector(".hero-vivo");

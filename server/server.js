@@ -1398,6 +1398,7 @@ function fontesDoBanner(url){
 }
 
 const HEX_VALIDO = /^#[0-9A-Fa-f]{6}$/;
+const TEMAS_COM_APOIO = new Set(["destaque", "coroa", "presente"]);
 const MAX_BOLAS_BANNER = 6;
 
 function miniDaFoto(url){
@@ -1431,11 +1432,14 @@ function slidesDoBanner(){
       || { tema: TEMAS_EM_RODIZIO[rodizio++ % TEMAS_EM_RODIZIO.length], chamada: "novidade do ateliê", titulo: cat.label, frase: "feito à mão pela Adriana" };
     const quantas = config.tema === "leque" ? 3 : config.tema === "dupla" ? 2 : 1;
     const menor = Math.min(...daCategoria.map(p => Number(p.price) || 0).filter(v => v > 0));
-    const minis = comFoto.slice(quantas, quantas + 3).map(p => miniDaFoto(p.photoUrl));
+    const apoio = TEMAS_COM_APOIO.has(config.tema) ? comFoto.slice(1, 3) : [];
+    const usadas = quantas + apoio.length;
+    const minis = comFoto.slice(usadas, usadas + 3).map(p => miniDaFoto(p.photoUrl));
     slides.push({
       ...config, slug: cat.slug, rotulo: cat.label,
       fotos: comFoto.slice(0, quantas).map(p => ({ alt: p.name, ...fontesDoBanner(p.photoUrl) })),
-      minis, maisModelos: daCategoria.length - quantas - minis.length,
+      apoio: apoio.map(p => fontesDoBanner(p.photoUrl)),
+      minis, maisModelos: daCategoria.length - usadas - minis.length,
       cores: coresDaCategoria(daCategoria, overridesMap),
       preco: Number.isFinite(menor) ? menor : null,
       modelos: daCategoria.length,
@@ -1446,12 +1450,12 @@ function slidesDoBanner(){
   const padrao = FOTOS_HERO_PADRAO[0];
   const f = fontesDaFoto(padrao);
   return [{ tema: "leque", slug: "todos", rotulo: "Adriana Melo", chamada: "ateliê Adriana Melo", titulo: "Laços feitos à mão", frase: "pela Adriana Melo",
-    fotos: [{ alt: padrao.alt, src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` }], preco: null, modelos: 0, maisVendido: false, minis: [], maisModelos: 0, cores: [] }];
+    fotos: [{ alt: padrao.alt, src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` }], preco: null, modelos: 0, maisVendido: false, apoio: [], minis: [], maisModelos: 0, cores: [] }];
 }
 
 const ARTE_EXTRA = {
   coroa: '<svg class="banner-coroa" viewBox="0 0 64 40" aria-hidden="true" focusable="false"><path d="M4 34 L8 10 L20 22 L32 4 L44 22 L56 10 L60 34 Z"/><rect x="4" y="33" width="56" height="6" rx="2"/><circle cx="8" cy="9" r="3"/><circle cx="32" cy="4" r="3.5"/><circle cx="56" cy="9" r="3"/></svg>',
-  presente: '<svg class="bow-icon banner-presente-laco" aria-hidden="true"><use href="#bow-shape"/></svg><span class="banner-adesivo" aria-hidden="true">leve 4<br>pague 3</span>',
+  presente: '<svg class="banner-caixa" viewBox="0 -24 240 144" aria-hidden="true" focusable="false"><rect class="cx-corpo" x="22" y="44" width="196" height="74" rx="8"/><rect class="cx-sombra" x="22" y="44" width="196" height="12"/><rect class="cx-tampa" x="8" y="22" width="224" height="30" rx="8"/><rect class="cx-fita" x="104" y="22" width="32" height="96"/><rect class="cx-brilho" x="111" y="22" width="5" height="96"/><use href="#bow-shape" x="82" y="-24" width="76" height="53"/></svg><span class="banner-adesivo" aria-hidden="true">leve 4<br>pague 3</span>',
   etiqueta: '<span class="banner-cordao" aria-hidden="true"></span>',
   cabide: '<svg class="banner-cabide" viewBox="0 0 120 60" aria-hidden="true" focusable="false"><path d="M60 22 C60 14 70 14 70 8 C70 2 60 0 56 6" fill="none"/><path d="M60 22 L8 52 L112 52 Z" fill="none"/></svg>',
   dupla: '<span class="banner-fita" aria-hidden="true"></span>',
@@ -1463,6 +1467,10 @@ const ARTE_FITA = '<svg class="banner-fita-cetim" viewBox="0 0 400 300" aria-hid
 const TEMAS_COM_FITA = new Set(["leque", "dupla", "destaque", "redondo", "etiqueta"]);
 
 function slideDoBanner(s, primeiro){
+  const apoio = s.apoio.map((f, i) => {
+    const conjunto = f.srcset ? ` srcset="${f.srcset}" sizes="${BANNER_SIZES}"` : "";
+    return `<figure class="banner-foto apoio a${i + 1}"><img src="${f.src}"${conjunto} alt="" width="600" height="750" loading="lazy" decoding="async"></figure>`;
+  }).join("");
   const fotos = s.fotos.map((f, i) => {
     const conjunto = f.srcset ? ` srcset="${f.srcset}" sizes="${BANNER_SIZES}"` : "";
     return `<figure class="banner-foto f${i + 1}"><img src="${f.src}"${conjunto} alt="${escaparHtml(f.alt)}" width="600" height="750" decoding="async"${primeiro && i === 0 ? ' fetchpriority="high"' : ""}></figure>`;
@@ -1491,7 +1499,7 @@ function slideDoBanner(s, primeiro){
                   <span class="banner-texto-enfeite" aria-hidden="true"><svg class="bow-icon grande"><use href="#bow-shape"/></svg><svg class="bow-icon pequeno"><use href="#bow-shape"/></svg></span>
                 </div>
                 <div class="banner-arte fotos-${s.fotos.length}">
-                  ${TEMAS_COM_FITA.has(s.tema) ? ARTE_FITA : ""}${ARTE_EXTRA[s.tema] || ""}${ARTE_FAISCAS}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}
+                  ${TEMAS_COM_FITA.has(s.tema) ? ARTE_FITA : ""}${ARTE_EXTRA[s.tema] || ""}${ARTE_FAISCAS}${apoio}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}
                 </div>
               </div>`;
 }
