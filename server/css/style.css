@@ -4454,17 +4454,10 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
 .banner-slide.is-ativa .apoio.a1{ animation-delay:.45s, 1.7s; }
 .banner-slide.is-ativa .apoio.a2{ animation-delay:.6s, 2.1s; }
 
-.banner-tema-presente .f1{ width:min(36%, 66cqh); left:50%; top:12%; translate:-50% 0; rotate:3deg; }
+.banner-tema-presente .f1{ width:min(36%, 66cqh); left:50%; top:4%; translate:-50% 0; rotate:3deg; }
 .banner .banner-tema-presente .apoio{ width:min(26%, 52cqh); top:30%; }
 .banner .banner-tema-presente .apoio.a1{ left:10%; }
 .banner .banner-tema-presente .apoio.a2{ right:10%; }
-.banner-caixa{ position:absolute; left:50%; bottom:2%; width:min(56%, 92cqh); height:auto; aspect-ratio:240 / 144; translate:-50% 0; z-index:3; pointer-events:none; filter:drop-shadow(0 10px 12px rgba(84,41,60,.3)); }
-.cx-corpo{ fill:var(--blush-600); }
-.cx-sombra{ fill:rgba(84,41,60,.22); }
-.cx-tampa{ fill:var(--blush-700); }
-.cx-fita{ fill:var(--gold-500); }
-.cx-brilho{ fill:rgba(255,255,255,.45); }
-.banner-caixa use{ fill:var(--gold-500); }
 .banner-slide.is-ativa .banner-caixa{ animation:bannerCaixaSobe .8s cubic-bezier(.3, 1.4, .5, 1) .05s backwards; }
 @keyframes bannerCaixaSobe{ from{ opacity:0; transform:translateY(70%); } 60%{ opacity:1; transform:translateY(-6%); } to{ opacity:1; transform:none; } }
 .banner-slide.is-ativa.banner-tema-presente .f1{ animation:bannerPulaCaixa .9s cubic-bezier(.3, .9, .4, 1) .55s backwards, bannerBalanco 6.5s ease-in-out 1.8s infinite; }
@@ -4522,3 +4515,18 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
   .banner .banner-tema-etiqueta .f1{ width:min(62%, 70cqh); }
   .banner .banner-tema-cabide .f1{ width:min(62%, 62cqh); }
 }
+
+.banner-caixa{ position:absolute; left:50%; bottom:1%; width:min(62%, 104cqh); height:auto; aspect-ratio:260 / 182; translate:-50% 0; z-index:3; pointer-events:none; filter:drop-shadow(0 8px 10px rgba(84,41,60,.28)); }
+.cx-chao{ fill:rgba(84,41,60,.18); }
+.cx-corpo{ fill:url(#cxCorpo); }
+#cxPontos circle{ fill:rgba(255,255,255,.3); }
+.cx-pontos{ fill:url(#cxPontos); }
+.cx-sombra{ fill:rgba(84,41,60,.25); }
+.cx-tampa{ fill:url(#cxTampa); }
+.cx-brilho{ fill:rgba(255,255,255,.3); }
+.cx-fita{ fill:url(#cxOuro); }
+.cx-laco, .cx-ponta{ fill:url(#cxOuro); stroke:#9C7940; stroke-width:1.2; stroke-linejoin:round; }
+.cx-no{ fill:#D9BC84; stroke:#9C7940; stroke-width:1.2; }
+.cx-tampa-g{ transform-box:fill-box; transform-origin:0% 100%; transform:rotate(-4deg); }
+.banner-slide.is-ativa .cx-tampa-g{ animation:bannerTampaAbre .9s cubic-bezier(.3, 1.4, .5, 1) .35s backwards; }
+@keyframes bannerTampaAbre{ from{ transform:rotate(0deg) translateY(14px); } 55%{ transform:rotate(-12deg) translateY(-12px); } to{ transform:rotate(-4deg); } }
