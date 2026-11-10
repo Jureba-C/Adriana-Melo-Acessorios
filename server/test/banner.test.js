@@ -105,3 +105,24 @@ test("todo slide traz as faíscas; só alguns temas trazem a fita de cetim", asy
   const coroa = html.slice(html.indexOf("banner-tema-coroa"));
   assert.ok(!coroa.slice(0, coroa.indexOf("banner-foto f1")).includes("banner-fita-cetim"), "coroa tem a coroa como enfeite, sem fita");
 });
+
+const fatias = html => html.split('class="hero-slide banner-slide').slice(1);
+
+test("miniaturas das outras fotos da categoria e bolinhas só com cores reais", async () => {
+  for(const id of [3, 4, 5, 8]) db.upsertProductOverride(id, { photos: [foto(id)] });
+  let html = await home();
+  let leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
+  assert.match(leque, /class="banner-minis" aria-hidden="true"/);
+  assert.equal((leque.match(/\?w=400" alt="" width="40"/g) || []).length, 3, "três fotos que sobraram viram miniatura");
+  assert.ok(!leque.includes("e mais"), "sem modelos além das miniaturas, sem 'e mais'");
+  assert.equal((leque.match(/<i style="--c:#[0-9A-Fa-f]{6}">/g) || []).length, 6, "sem edição de cores = paleta toda");
+  assert.match(leque, /em 6 cores/);
+  const kit = fatias(html).find(s => s.startsWith(" banner-tema-presente"));
+  assert.ok(!kit.includes("banner-minis"), "categoria sem foto sobrando não traz miniaturas");
+
+  for(const id of [1, 2, 3, 4, 5, 8]) db.upsertProductOverride(id, { availableColors: ["#F4B4CC", "#DD6E9B", "#naoexiste"] });
+  html = await home();
+  leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
+  assert.equal((leque.match(/<i style="--c:#/g) || []).length, 2, "cores fora da paleta são ignoradas");
+  assert.match(leque, /em 2 cores/);
+});

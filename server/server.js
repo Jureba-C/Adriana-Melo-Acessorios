@@ -63,6 +63,7 @@ const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // mostrados na tela do produto sejam exatamente os valores cobrados aqui.
 const pricing = require("./js/pricing.js");
 const produtoUrl = require("./js/produto-url.js");
+const { RIBBON_COLORS } = require("./js/colors.js");
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -1396,10 +1397,28 @@ function fontesDoBanner(url){
   return { src: `${base}?w=600`, srcset: `${base}?w=400 400w, ${base}?w=600 600w, ${base}?w=900 900w` };
 }
 
+const HEX_VALIDO = /^#[0-9A-Fa-f]{6}$/;
+const MAX_BOLAS_BANNER = 6;
+
+function miniDaFoto(url){
+  return /^\/api\/products\/photos\//.test(url) ? `${url.split("?")[0]}?w=400` : url;
+}
+
+function coresDaCategoria(daCategoria, overridesMap){
+  const paleta = [...RIBBON_COLORS, ...db.listCustomColors()].map(c => c.hex).filter(h => HEX_VALIDO.test(h));
+  const usadas = new Set();
+  for(const p of daCategoria){
+    const linha = p.id >= CUSTOM_PRODUCT_ID_START ? db.getCustomProduct(p.id) : overridesMap.get(p.id);
+    const salvas = linha && linha.available_colors != null ? JSON.parse(linha.available_colors) : paleta;
+    for(const hex of salvas) usadas.add(hex);
+  }
+  return paleta.filter(h => usadas.has(h));
+}
+
 function slidesDoBanner(){
   const overridesMap = getProductOverridesMap();
   const visiveis = getAllProductIds()
-    .map(id => effectiveProduct(id, overridesMap))
+    .map(id => { const p = effectiveProduct(id, overridesMap); return p && { ...p, id }; })
     .filter(p => p && !p.hidden);
   const slides = [];
   let rodizio = 0;
@@ -1412,9 +1431,12 @@ function slidesDoBanner(){
       || { tema: TEMAS_EM_RODIZIO[rodizio++ % TEMAS_EM_RODIZIO.length], chamada: "novidade do ateliê", titulo: cat.label, frase: "feito à mão pela Adriana" };
     const quantas = config.tema === "leque" ? 3 : config.tema === "dupla" ? 2 : 1;
     const menor = Math.min(...daCategoria.map(p => Number(p.price) || 0).filter(v => v > 0));
+    const minis = comFoto.slice(quantas, quantas + 3).map(p => miniDaFoto(p.photoUrl));
     slides.push({
       ...config, slug: cat.slug, rotulo: cat.label,
       fotos: comFoto.slice(0, quantas).map(p => ({ alt: p.name, ...fontesDoBanner(p.photoUrl) })),
+      minis, maisModelos: daCategoria.length - quantas - minis.length,
+      cores: coresDaCategoria(daCategoria, overridesMap),
       preco: Number.isFinite(menor) ? menor : null,
       modelos: daCategoria.length,
       maisVendido: daCategoria.some(p => (p.badges || []).includes("Mais vendido")),
@@ -1424,7 +1446,7 @@ function slidesDoBanner(){
   const padrao = FOTOS_HERO_PADRAO[0];
   const f = fontesDaFoto(padrao);
   return [{ tema: "leque", slug: "todos", rotulo: "Adriana Melo", chamada: "ateliê Adriana Melo", titulo: "Laços feitos à mão", frase: "pela Adriana Melo",
-    fotos: [{ alt: padrao.alt, src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` }], preco: null, modelos: 0, maisVendido: false }];
+    fotos: [{ alt: padrao.alt, src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` }], preco: null, modelos: 0, maisVendido: false, minis: [], maisModelos: 0, cores: [] }];
 }
 
 const ARTE_EXTRA = {
@@ -1445,8 +1467,14 @@ function slideDoBanner(s, primeiro){
     const conjunto = f.srcset ? ` srcset="${f.srcset}" sizes="${BANNER_SIZES}"` : "";
     return `<figure class="banner-foto f${i + 1}"><img src="${f.src}"${conjunto} alt="${escaparHtml(f.alt)}" width="600" height="750" decoding="async"${primeiro && i === 0 ? ' fetchpriority="high"' : ""}></figure>`;
   }).join("");
+  const cores = s.cores.length > 1
+    ? `<span class="banner-cores"><span class="banner-cores-bolas" aria-hidden="true">${s.cores.slice(0, MAX_BOLAS_BANNER).map(h => `<i style="--c:${h}"></i>`).join("")}</span><em>em ${s.cores.length} cores</em></span>`
+    : "";
   const preco = s.preco
-    ? `<p class="banner-preco"><span>a partir de</span> <strong>R$ ${reais(s.preco)}</strong> <small>R$ ${reais(pricing.pixPriceFor(s.preco))} no Pix</small></p>`
+    ? `<p class="banner-preco"><span>a partir de</span> <strong>R$ ${reais(s.preco)}</strong> <small>R$ ${reais(pricing.pixPriceFor(s.preco))} no Pix</small>${cores}</p>`
+    : "";
+  const minis = s.minis.length
+    ? `<span class="banner-minis" aria-hidden="true">${s.minis.map(src => `<img src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async">`).join("")}${s.maisModelos > 0 ? `<small>e mais ${s.maisModelos}</small>` : ""}</span>`
     : "";
   const cta = s.modelos > 1 ? `Ver os ${s.modelos} modelos` : s.modelos === 1 ? "Ver o modelo" : "Ver a loja";
   return `<div class="hero-slide banner-slide banner-tema-${s.tema}${primeiro ? " is-ativa" : ""}" data-legenda="${escaparHtml(s.titulo)}">
@@ -1455,7 +1483,10 @@ function slideDoBanner(s, primeiro){
                   <p class="banner-titulo">${escaparHtml(s.titulo)}</p>
                   <p class="banner-frase">${escaparHtml(s.frase)}</p>
                   ${preco}
-                  <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${cta} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                  <div class="banner-acoes">
+                    <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${cta} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                    ${minis}
+                  </div>
                 </div>
                 <div class="banner-arte fotos-${s.fotos.length}">
                   ${TEMAS_COM_FITA.has(s.tema) ? ARTE_FITA : ""}${ARTE_EXTRA[s.tema] || ""}${ARTE_FAISCAS}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}

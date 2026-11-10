@@ -336,22 +336,22 @@
         <div class="hero-pontos" role="group" aria-label="Escolher o destaque"></div>
         <button type="button" class="hero-pausa" aria-pressed="false" aria-label="Pausar a troca dos destaques" hidden><span class="hero-pausa-icone" aria-hidden="true"></span></button>
       </div>
+      <ul class="vantagens">
+        <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-tags"></i></span><span class="vantagem-texto"><strong>Leve 4, pague 3</strong><span>a mais barata sai grátis</span></span></li>
+        <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-qr-code"></i></span><span class="vantagem-texto"><strong>5% de desconto</strong><span>pagando no Pix</span></span></li>
+        <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-truck"></i></span><span class="vantagem-texto"><strong>Todo o Brasil</strong><span>envio com rastreio</span></span></li>
+        <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-arrow-repeat"></i></span><span class="vantagem-texto"><strong>Devolução grátis</strong><span>em até 7 dias</span></span></li>
+        <!--#NOTA-MEDIA#-->
+      </ul>
     </div>
-    <ul class="vantagens">
-      <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-tags"></i></span><span class="vantagem-texto"><strong>Leve 4, pague 3</strong><span>a mais barata sai grátis</span></span></li>
-      <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-qr-code"></i></span><span class="vantagem-texto"><strong>5% de desconto</strong><span>pagando no Pix</span></span></li>
-      <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-truck"></i></span><span class="vantagem-texto"><strong>Todo o Brasil</strong><span>envio com rastreio</span></span></li>
-      <li class="vantagem"><span class="vantagem-icone" aria-hidden="true"><i class="bi bi-arrow-repeat"></i></span><span class="vantagem-texto"><strong>Devolução grátis</strong><span>em até 7 dias</span></span></li>
-      <!--#NOTA-MEDIA#-->
-    </ul>
   </div>
 </header>
 
 <section id="colecoes" class="vitrine-topo pb-5">
   <div class="container">
-    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-2">
       <div>
-        <h2 class="section-title vitrine-titulo">Escolha o <em>seu laço</em></h2>
+        <h2 class="section-title vitrine-titulo"><svg class="bow-icon vitrine-laco" aria-hidden="true"><use href="#bow-shape"/></svg>Escolha o <em>seu laço</em></h2>
       </div>
 
       <div class="vitrine-busca reveal">
@@ -362,7 +362,7 @@
       </div>
     </div>
 
-    <div class="chip-linha mb-3">
+    <div class="chip-linha mb-2">
       <div class="chip-group" id="filterGroup" role="group" aria-label="Filtrar por tipo de produto">
         <button class="chip active" data-cat="todos" aria-pressed="true">Todos</button>
         <button class="chip" data-cat="laco-unico" aria-pressed="false">Laço Único</button>
@@ -380,7 +380,7 @@
       </button>
     </div>
 
-    <p class="vitrine-contagem mb-3" id="vitrineContagem" role="status" aria-live="polite"></p>
+    <p class="vitrine-contagem mb-2" id="vitrineContagem" role="status" aria-live="polite"></p>
 
     <div class="row g-4" id="productsGrid"></div>
 
@@ -395,6 +395,11 @@
     </div>
   </div>
 </section>
+
+<div class="divisor-fita" aria-hidden="true">
+  <svg viewBox="0 0 1200 40" preserveAspectRatio="none" focusable="false"><path class="df-onda" d="M0 14 Q 50 34 100 14 T 200 14 T 300 14 T 400 14 T 500 14 T 600 14 T 700 14 T 800 14 T 900 14 T 1000 14 T 1100 14 T 1200 14"/></svg>
+  <svg class="bow-icon df-laco"><use href="#bow-shape"/></svg>
+</div>
 
 <section id="historia" class="py-5" style="padding-top:5rem; padding-bottom:5rem;">
   <div class="container">
