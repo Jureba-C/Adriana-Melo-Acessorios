@@ -4345,3 +4345,14 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
   .vitrine-filtros > .vitrine-busca{ order:-1; flex:1 1 100%; min-width:0; }
   .vitrine-filtros > .chip-linha{ flex:1 1 100%; }
 }
+
+.banner-texto-enfeite{ display:none; }
+@media (min-width: 1200px){
+  .banner-texto-enfeite{ position:absolute; inset:0 3% 0 auto; width:clamp(120px, 11vw, 160px); display:flex; align-items:center; z-index:0; pointer-events:none; }
+  .banner-texto-enfeite .grande{ width:100%; height:auto; aspect-ratio:100 / 70; color:var(--blush-200); rotate:12deg; filter:drop-shadow(0 8px 10px rgba(192,84,128,.25)); }
+  .banner-texto-enfeite .pequeno{ position:absolute; left:-4%; bottom:16%; width:38%; height:auto; aspect-ratio:100 / 70; color:var(--blush-600); rotate:-16deg; filter:drop-shadow(0 5px 6px rgba(84,41,60,.28)); }
+  .banner-chamada, .banner-titulo, .banner-frase, .banner-preco, .banner-acoes{ position:relative; z-index:1; }
+  .banner-slide.is-ativa .banner-texto-enfeite .grande{ animation:bannerEntraFoto .7s cubic-bezier(.34,1.56,.64,1) .5s backwards, bannerRespira 5.5s ease-in-out 1.4s infinite; }
+  .banner-slide.is-ativa .banner-texto-enfeite .pequeno{ animation:bannerEntraFoto .6s cubic-bezier(.34,1.56,.64,1) .8s backwards, bannerFlutua 6s ease-in-out 1.6s infinite; }
+  .banner.is-fora .banner-texto-enfeite *{ animation-play-state:paused; }
+}

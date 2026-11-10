@@ -126,3 +126,9 @@ test("miniaturas das outras fotos da categoria e bolinhas só com cores reais", 
   assert.equal((leque.match(/<i style="--c:#/g) || []).length, 2, "cores fora da paleta são ignoradas");
   assert.match(leque, /em 2 cores/);
 });
+
+test("todo slide traz o enfeite do cartão do texto, só decorativo", async () => {
+  const html = await home();
+  const slides = html.match(/class="hero-slide banner-slide/g).length;
+  assert.equal((html.match(/class="banner-texto-enfeite" aria-hidden="true"/g) || []).length, slides);
+});

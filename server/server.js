@@ -1488,6 +1488,7 @@ function slideDoBanner(s, primeiro){
                     ${minis}
                   </div>
                   <svg class="bow-icon banner-texto-laco" aria-hidden="true"><use href="#bow-shape"/></svg>
+                  <span class="banner-texto-enfeite" aria-hidden="true"><svg class="bow-icon grande"><use href="#bow-shape"/></svg><svg class="bow-icon pequeno"><use href="#bow-shape"/></svg></span>
                 </div>
                 <div class="banner-arte fotos-${s.fotos.length}">
                   ${TEMAS_COM_FITA.has(s.tema) ? ARTE_FITA : ""}${ARTE_EXTRA[s.tema] || ""}${ARTE_FAISCAS}${fotos}${s.maisVendido ? '<span class="banner-mais-vendido">Mais vendido</span>' : ""}
