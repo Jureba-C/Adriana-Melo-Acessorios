@@ -4530,3 +4530,9 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
 .cx-tampa-g{ transform-box:fill-box; transform-origin:0% 100%; transform:rotate(-4deg); }
 .banner-slide.is-ativa .cx-tampa-g{ animation:bannerTampaAbre .9s cubic-bezier(.3, 1.4, .5, 1) .35s backwards; }
 @keyframes bannerTampaAbre{ from{ transform:rotate(0deg) translateY(14px); } 55%{ transform:rotate(-12deg) translateY(-12px); } to{ transform:rotate(-4deg); } }
+.banner-tema-presente .banner-foto{ z-index:4; }
+.banner .banner-tema-presente .f1{ top:2%; }
+.banner-tema-presente .banner-caixa{ bottom:-3%; width:min(56%, 92cqh); }
+.banner .banner-tema-presente .f1{ width:min(34%, 62cqh); top:0; }
+.banner-tema-presente .banner-caixa{ bottom:-6%; width:min(50%, 80cqh); }
+.banner .banner-tema-presente .apoio{ top:34%; }
