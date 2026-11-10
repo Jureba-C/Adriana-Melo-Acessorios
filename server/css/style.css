@@ -4545,3 +4545,5 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
   .banner .banner-tema-presente .f1{ width:min(82%, 70cqh); top:0; }
   .banner-tema-presente .banner-caixa{ width:min(80%, 60cqh); bottom:-4%; }
 }
+
+.banner-slide.is-inicial, .banner-slide.is-inicial *, .banner-slide.is-inicial *::before, .banner-slide.is-inicial *::after{ animation-duration:0s !important; animation-delay:0s !important; }

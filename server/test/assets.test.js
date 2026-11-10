@@ -83,8 +83,8 @@ test("os plugins de rolagem do GSAP entram sob demanda, não por <script> na pá
 
   const home = fs.readFileSync(path.join(RAIZ, "index.html"), "utf8");
   for(const id of ["assetScrollTrigger", "assetSplitText"]){
-    assert.match(home, new RegExp(`<link[^>]*rel="preload"[^>]*id="${id}"`),
-      `sem o <link rel=preload id=${id}>, o carregador cai no caminho de reserva`);
+    assert.match(home, new RegExp(`<link[^>]*rel="(preload|prefetch)"[^>]*id="${id}"`),
+      `sem o <link rel=prefetch id=${id}>, o carregador cai no caminho de reserva`);
     assert.ok(animacoes.includes(`"${id}"`), `js/animacoes.js não procura mais por ${id}`);
   }
 

@@ -1323,6 +1323,7 @@ function secaoAvaliacoes(){
    quando não há nenhum produto com foto, e o painel ainda lista as cinco.
 ========================================================================= */
 const MARCA_BANNER = "<!--#BANNER-HOME#-->";
+const MARCA_PRODUTOS_INICIAIS = "<!--#PRODUTOS-INICIAIS#-->";
 const MARCA_HERO_PRELOAD = "<!--#HERO-PRELOAD#-->";
 
 const FOTOS_HERO_PADRAO = [
@@ -1486,7 +1487,7 @@ function slidesDoBanner(){
   const padrao = FOTOS_HERO_PADRAO[0];
   const f = fontesDaFoto(padrao);
   return [{ tema: "leque", slug: "todos", rotulo: "Adriana Melo", chamada: "ateliê Adriana Melo", titulo: "Laços feitos à mão", frase: "pela Adriana Melo",
-    fotos: [{ alt: padrao.alt, src: f.jpg960, srcset: `${f.jpg480} 480w, ${f.jpg960} 960w` }], preco: null, modelos: 0, maisVendido: false, apoio: [], minis: [], maisModelos: 0, cores: [] }];
+    fotos: [{ alt: padrao.alt, src: f.webp960, srcset: `${f.webp480} 480w, ${f.webp960} 960w` }], preco: null, modelos: 0, maisVendido: false, apoio: [], minis: [], maisModelos: 0, cores: [] }];
 }
 
 const ARTE_EXTRA = {
@@ -1521,7 +1522,7 @@ function slideDoBanner(s, primeiro){
     ? `<span class="banner-minis" aria-hidden="true">${s.minis.map(src => `<img src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async">`).join("")}${s.maisModelos > 0 ? `<small>e mais ${s.maisModelos}</small>` : ""}</span>`
     : "";
   const cta = s.modelos > 1 ? `Ver os ${s.modelos} modelos` : s.modelos === 1 ? "Ver o modelo" : "Ver a loja";
-  return `<div class="hero-slide banner-slide banner-tema-${s.tema}${primeiro ? " is-ativa" : ""}" data-legenda="${escaparHtml(s.titulo)}">
+  return `<div class="hero-slide banner-slide banner-tema-${s.tema}${primeiro ? " is-ativa is-inicial" : ""}" data-legenda="${escaparHtml(s.titulo)}">
                 <div class="banner-texto">
                   <p class="banner-chamada">${escaparHtml(s.chamada)}</p>
                   <p class="banner-titulo">${s.titulo.split(" ").map((p, i) => `<span class="pal" style="--i:${i}">${escaparHtml(p)}</span>`).join(" ")}</p>
@@ -1572,6 +1573,11 @@ function comAvaliacoes(html){
   if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
   if(saida.includes(MARCA_BANNER)) saida = saida.replace(MARCA_BANNER, () => blocoBanner());
   if(saida.includes(MARCA_HERO_PRELOAD)) saida = saida.replace(MARCA_HERO_PRELOAD, () => preloadDoBanner());
+  // O catálogo vai junto do HTML para a vitrine não esperar o main.js baixar e
+  // só então pedir /api/products. "<" escapado: um nome com "</script>" não
+  // pode fechar a tag.
+  if(saida.includes(MARCA_PRODUTOS_INICIAIS)) saida = saida.replace(MARCA_PRODUTOS_INICIAIS, () =>
+    `<script type="application/json" id="produtosIniciais">${JSON.stringify(catalogoPublico()).replace(/</g, "\\u003c")}</script>`);
   return saida;
 }
 
@@ -4994,6 +5000,10 @@ app.get("/api/products", (req, res) => {
   // Express já gera devolve 304 quando nada mudou. O custo é uma ida ao
   // servidor, não o corpo inteiro.
   res.setHeader("Cache-Control", "no-cache");
+  res.json(catalogoPublico());
+});
+
+function catalogoPublico(){
   const overridesMap = getProductOverridesMap();
   const products = getAllProductIds()
     .map(id => ({ id, p: effectiveProduct(id, overridesMap) }))
@@ -5008,8 +5018,8 @@ app.get("/api/products", (req, res) => {
   // mesmo motivo: é o que permite a vitrine criar um chip de filtro para
   // uma categoria nova sem precisar editar index.html — ver
   // ensureCategoryChips() em js/main.js.
-  res.json({ products, categories: getAllCategories(), paymentRules: pricing.PAYMENT_RULES });
-});
+  return { products, categories: getAllCategories(), paymentRules: pricing.PAYMENT_RULES };
+}
 
 /* =========================================================================
    GESTÃO DE PRODUTOS (painel administrativo) — /api/admin/products

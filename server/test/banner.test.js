@@ -47,10 +47,10 @@ const foto = (n) => `/api/products/photos/${String(n).repeat(32).slice(0, 32)}`;
 
 test("sem produto com foto, entra o slide genérico com a foto fixa", async () => {
   const html = await home();
-  assert.match(html, /class="hero-slide banner-slide banner-tema-leque is-ativa"/);
+  assert.match(html, /class="hero-slide banner-slide banner-tema-leque is-ativa is-inicial"/);
   assert.match(html.replace(/<span class="pal"[^>]*>|<\/span>/g, ""), /Laços feitos à mão/);
   assert.match(html, /data-abrir-cat="todos"/);
-  assert.match(html, /img\/hero-laco-bailarina-960\.jpg/);
+  assert.match(html, /img\/hero-laco-bailarina-960\.webp/);
 });
 
 test("um slide por categoria com foto; só o primeiro fora do <template>", async () => {
@@ -166,4 +166,20 @@ test("tema de foto única traz até duas fotos de apoio e a caixa de presente no
   assert.ok(!/class="banner-foto apoio[^>]*><img[^>]*alt="[^"]+"/.test(kit), "apoio é decorativo, sem alt");
   const leque = fatias(html).find(s => s.startsWith(" banner-tema-leque"));
   assert.ok(!leque.includes("banner-foto apoio"), "leque já usa várias fotos principais");
+});
+
+test("só o primeiro slide nasce montado (is-inicial), os outros mantêm a entrada animada", async () => {
+  const html = await home();
+  assert.equal((html.match(/is-inicial/g) || []).length, 1);
+  assert.match(html, /class="hero-slide banner-slide banner-tema-\w+ is-ativa is-inicial"/);
+});
+
+test("a home já traz o catálogo em JSON para a vitrine não esperar a API", async () => {
+  const html = await home();
+  const m = html.match(/<script type="application\/json" id="produtosIniciais">([\s\S]*?)<\/script>/);
+  assert.ok(m, "bloco produtosIniciais na home");
+  const dados = JSON.parse(m[1]);
+  assert.ok(Array.isArray(dados.products) && dados.products.length > 0);
+  assert.ok(Array.isArray(dados.categories));
+  assert.ok(!m[1].includes("<"), "nenhum < cru dentro do JSON");
 });

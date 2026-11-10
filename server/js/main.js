@@ -453,9 +453,17 @@
 
   async function loadProductOverrides(){
     try{
-      const res = await fetch("/api/products");
-      if(!res.ok) return;
-      const data = await res.json();
+      const inicial = document.getElementById("produtosIniciais");
+      let data = null;
+      if(inicial){
+        try{ data = JSON.parse(inicial.textContent); }catch(e){ data = null; }
+        inicial.remove();
+      }
+      if(!data){
+        const res = await fetch("/api/products");
+        if(!res.ok) return;
+        data = await res.json();
+      }
       ensureCategoryChips(data.categories);
       let changed = false;
       (Array.isArray(data.products) ? data.products : []).forEach(o => {

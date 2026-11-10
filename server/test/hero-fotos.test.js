@@ -160,7 +160,7 @@ test("apagar a última foto devolve o topo para as fixas", async () => {
     method: "DELETE", headers: { Origin: ORIGIN, Cookie: adminCookie },
   });
   const home = await (await fetch(ORIGIN + "/")).text();
-  assert.match(home, /img\/hero-laco-bailarina-960\.jpg/);
+  assert.match(home, /img\/hero-laco-bailarina-960\.webp/);
 });
 
 test("passa do teto de fotos e o envio é recusado", async () => {

@@ -7,6 +7,8 @@
   const pista = raiz && raiz.querySelector(".hero-slides");
   const modelo = raiz && raiz.querySelector("#heroSlidesExtras");
   const extras = modelo ? [...modelo.content.querySelectorAll(".hero-slide")] : [];
+  const inicial = raiz && raiz.querySelector(".is-inicial");
+  if(inicial) setTimeout(() => inicial.classList.remove("is-inicial"), 2600);
 
   if(raiz && pista && extras.length){
     const INTERVALO = 3500;
@@ -39,7 +41,7 @@
     }
 
     function aplicar(){
-      slides.forEach((s, n) => s.classList.toggle("is-ativa", n === atual));
+      slides.forEach((s, n) => { s.classList.toggle("is-ativa", n === atual); s.classList.remove("is-inicial"); });
     }
 
     function mostrar(i, anunciar){
