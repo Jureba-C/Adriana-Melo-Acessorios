@@ -355,31 +355,32 @@
       <div>
         <h2 class="section-title vitrine-titulo"><svg class="bow-icon vitrine-laco" aria-hidden="true"><use href="#bow-shape"/></svg>Escolha o <em>seu laço</em></h2>
       </div>
-
-      <div class="vitrine-busca reveal">
-        <label class="visually-hidden" for="buscaProduto">Buscar produto pelo nome</label>
-        <i class="bi bi-search" aria-hidden="true"></i>
-        <input type="search" id="buscaProduto" class="form-control" placeholder="Buscar pelo nome…" autocomplete="off">
-        <button type="button" id="buscaLimpar" class="vitrine-busca-limpar d-none" aria-label="Limpar busca"><i class="bi bi-x-lg"></i></button>
-      </div>
     </div>
 
-    <div class="chip-linha mb-2">
-      <div class="chip-group" id="filterGroup" role="group" aria-label="Filtrar por tipo de produto">
-        <button class="chip active" data-cat="todos" aria-pressed="true">Todos</button>
-        <button class="chip" data-cat="laco-unico" aria-pressed="false">Laço Único</button>
-        <button class="chip" data-cat="parzinho" aria-pressed="false">Parzinho</button>
-        <button class="chip" data-cat="laco-g" aria-pressed="false">Laço G</button>
-        <button class="chip" data-cat="laco-pompom" aria-pressed="false">Laço Pompom</button>
-        <button class="chip" data-cat="tiara" aria-pressed="false">Tiara</button>
-        <button class="chip" data-cat="kit" aria-pressed="false">Kit</button>
-        <button class="chip" data-cat="bolsa" aria-pressed="false">Bolsa</button>
-        <button class="chip" data-cat="cabide" aria-pressed="false">Cabide</button>
+    <div class="vitrine-filtros mb-2">
+      <div class="chip-linha">
+        <div class="chip-group" id="filterGroup" role="group" aria-label="Filtrar por tipo de produto">
+          <button class="chip active" data-cat="todos" aria-pressed="true">Todos</button>
+          <button class="chip" data-cat="laco-unico" aria-pressed="false">Laço Único</button>
+          <button class="chip" data-cat="parzinho" aria-pressed="false">Parzinho</button>
+          <button class="chip" data-cat="laco-g" aria-pressed="false">Laço G</button>
+          <button class="chip" data-cat="laco-pompom" aria-pressed="false">Laço Pompom</button>
+          <button class="chip" data-cat="tiara" aria-pressed="false">Tiara</button>
+          <button class="chip" data-cat="kit" aria-pressed="false">Kit</button>
+          <button class="chip" data-cat="bolsa" aria-pressed="false">Bolsa</button>
+          <button class="chip" data-cat="cabide" aria-pressed="false">Cabide</button>
+        </div>
+        <button type="button" class="chip chip-mais d-none" id="verTodasCategorias" aria-controls="filterGroup" aria-expanded="false">
+          <span id="verTodasCategoriasTexto">Ver todas</span>
+          <i class="bi bi-chevron-right" aria-hidden="true"></i>
+        </button>
       </div>
-      <button type="button" class="chip chip-mais d-none" id="verTodasCategorias" aria-controls="filterGroup" aria-expanded="false">
-        <span id="verTodasCategoriasTexto">Ver todas</span>
-        <i class="bi bi-chevron-right" aria-hidden="true"></i>
-      </button>
+        <div class="vitrine-busca reveal">
+          <label class="visually-hidden" for="buscaProduto">Buscar produto pelo nome</label>
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input type="search" id="buscaProduto" class="form-control" placeholder="Buscar pelo nome…" autocomplete="off">
+          <button type="button" id="buscaLimpar" class="vitrine-busca-limpar d-none" aria-label="Limpar busca"><i class="bi bi-x-lg"></i></button>
+        </div>
     </div>
 
     <p class="vitrine-contagem mb-2" id="vitrineContagem" role="status" aria-live="polite"></p>

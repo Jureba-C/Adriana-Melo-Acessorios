@@ -4332,6 +4332,11 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
 .divisor-fita svg:first-child{ position:absolute; inset:0; width:100%; height:100%; }
 .df-onda{ fill:none; stroke:var(--blush-200); stroke-width:6; stroke-linecap:round; vector-effect:non-scaling-stroke; }
 .df-laco{ position:absolute; left:50%; top:50%; width:44px; height:auto; aspect-ratio:100 / 70; box-sizing:content-box; padding:0 12px; translate:-50% -50%; color:var(--blush-500); background:var(--cream); }
+.vitrine-filtros{ display:flex; align-items:flex-start; gap:.75rem 1.25rem; }
+.vitrine-filtros > .chip-linha{ flex:1 1 0; min-width:0; }
+.vitrine-filtros > .vitrine-busca{ flex:0 0 300px; }
 @media (max-width: 767.98px){
-  .vitrine-busca{ flex:1 1 100%; min-width:0; }
+  .vitrine-filtros{ flex-wrap:wrap; }
+  .vitrine-filtros > .vitrine-busca{ order:-1; flex:1 1 100%; min-width:0; }
+  .vitrine-filtros > .chip-linha{ flex:1 1 100%; }
 }
