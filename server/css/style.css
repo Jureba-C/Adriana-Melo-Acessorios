@@ -4438,3 +4438,25 @@ a.pedido-avaliar:focus-visible{ outline:2px solid var(--blush-600); outline-offs
   .banner-slide.is-ativa .banner-faiscas::after{ animation:bannerCoracaoSobe 5.5s ease-in 3.6s infinite; }
 }
 @keyframes bannerCoracaoSobe{ 0%{ opacity:0; translate:0 0; scale:.5; } 12%{ opacity:.9; } 100%{ opacity:0; translate:10px -120px; scale:1.2; } }
+@media (max-width: 575.98px){
+  .banner-slide{ grid-template-columns:1fr 1fr; gap:.2rem; padding:.7rem .7rem 2.3rem; }
+  .banner-tema-destaque{ grid-template-columns:1fr 1fr; }
+  .banner-texto{ padding:.6rem .7rem .7rem; }
+  .banner-chamada{ display:none; }
+  .banner-titulo{ font-size:clamp(1.05rem, 5vw, 1.25rem); line-height:1.08; }
+  .banner-frase{ font-size:.95rem; margin:.15rem 0 .35rem; }
+  .banner-preco{ margin-bottom:.45rem; font-size:.68rem; }
+  .banner-preco strong{ font-size:.95rem; }
+  .banner-preco small{ font-size:.62rem; padding:.08rem .4rem; }
+  .banner-cta{ padding:.42rem .7rem; font-size:.72rem; }
+  .banner-arte{ height:200px; margin-right:0; }
+  .banner-tema-leque .fotos-1 .f1, .banner-tema-dupla .fotos-1 .f1, .banner-tema-destaque .f1{ width:min(90%, 76cqh); }
+  .banner-tema-coroa .f1, .banner-tema-presente .f1{ width:min(84%, 64cqh); }
+  .banner-tema-etiqueta .f1{ width:min(78%, 60cqh); }
+  .banner-tema-cabide .f1{ width:min(70%, 56cqh); }
+  .banner-tema-leque .fotos-2 .f1, .banner-tema-dupla .f1{ width:min(62%, 72cqh); left:0; }
+  .banner-tema-leque .fotos-2 .f2, .banner-tema-dupla .f2{ width:min(62%, 72cqh); left:36%; }
+  .banner-tema-leque .fotos-3 .f1{ width:min(58%, 66cqh); left:-2%; top:14%; }
+  .banner-tema-leque .fotos-3 .f2{ width:min(70%, 76cqh); left:15%; top:4%; }
+  .banner-tema-leque .fotos-3 .f3{ width:min(58%, 66cqh); left:44%; top:16%; }
+}
