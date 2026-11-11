@@ -147,9 +147,9 @@ test("todo slide traz o enfeite do cartão do texto, só decorativo", async () =
   assert.equal((html.match(/class="banner-texto-enfeite" aria-hidden="true"/g) || []).length, slides);
 });
 
-test("a fita da transição existe uma vez, só decorativa, e o título vem em palavras", async () => {
+test("o título vem em palavras e não há mais a fita que cobria a troca", async () => {
   const html = await home();
-  assert.equal((html.match(/class="banner-puxada" aria-hidden="true"/g) || []).length, 1);
+  assert.ok(!html.includes("banner-puxada"));
   assert.match(html, /<p class="banner-titulo"><span class="pal" style="--i:0">/);
 });
 

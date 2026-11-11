@@ -31,8 +31,8 @@ const esbuild = require("esbuild");
 
 // O que o JS cria depois do HTML e já aparece na primeira tela: os cartões
 // da vitrine e os pontinhos/pausa do banner. Sem isso eles piscariam sem
-// estilo até o CSS do fim do <body> chegar.
-const SEMPRE_INCLUIR = [/^\.(product-|hero-ponto|hero-pausa|col-|row)/];
+// estilo até o CSS do fim do <body> chegar. Idem para a troca de slide.
+const SEMPRE_INCLUIR = [/^\.(product-|hero-ponto|hero-pausa|col-|row)/, /is-(saindo|entrando)/];
 
 const LINK_BLOQUEANTE = /<link rel="stylesheet" href="\/css\/(?:vendor\/bootstrap\.purged|style)\.css[^"]*">\n?/g;
 

@@ -18,9 +18,8 @@
     const slides = [...pista.children];
     const pontos = [];
     const total = 1 + extras.length;
-    const TROCA_MEIO = 480, TROCA_TOTAL = 1000;
-    const fita = raiz.querySelector(".banner-puxada");
-    let atual = 0, timer = null, travado = false, perto = false, visivel = false, troca = 0, inicioTroca = 0;
+    const TROCA = 900;
+    let atual = 0, timer = null, travado = false, perto = false, visivel = false, fimDaTroca = 0;
 
     raiz.setAttribute("aria-roledescription", "carrossel");
     slides[0].setAttribute("role", "group");
@@ -44,25 +43,27 @@
       slides.forEach((s, n) => { s.classList.toggle("is-ativa", n === atual); s.classList.remove("is-inicial"); });
     }
 
+    function limparTroca(){
+      slides.forEach(s => s.classList.remove("is-saindo", "is-entrando"));
+    }
+
     function mostrar(i, anunciar){
+      const anterior = slides[atual];
+      const direcao = i < atual ? "tras" : "frente";
       atual = (i + total) % total;
       materializar(atual);
       pontos.forEach((p, n) => p.setAttribute("aria-current", n === atual ? "true" : "false"));
       materializar(atual + 1);
       if(anunciar && vivo) vivo.textContent = `Destaque ${atual + 1} de ${total}: ${slides[atual].dataset.legenda || ""}`;
-      if(!fita || !visivel || semMovimento.matches){ aplicar(); return; }
-      if(raiz.classList.contains("is-trocando")){
-        const resta = TROCA_MEIO - (performance.now() - inicioTroca);
-        clearTimeout(troca);
-        if(resta <= 0) aplicar();
-        else troca = setTimeout(aplicar, resta);
-        return;
-      }
-      if(slides[atual].classList.contains("is-ativa")) return;
-      inicioTroca = performance.now();
-      raiz.classList.add("is-trocando");
-      troca = setTimeout(aplicar, TROCA_MEIO);
-      setTimeout(() => raiz.classList.remove("is-trocando"), TROCA_TOTAL);
+      if(slides[atual] === anterior) return;
+      clearTimeout(fimDaTroca);
+      limparTroca();
+      if(!visivel || semMovimento.matches){ aplicar(); return; }
+      raiz.dataset.direcao = direcao;
+      anterior.classList.add("is-saindo");
+      slides[atual].classList.add("is-entrando");
+      aplicar();
+      fimDaTroca = setTimeout(limparTroca, TROCA);
     }
 
     function reiniciar(){
