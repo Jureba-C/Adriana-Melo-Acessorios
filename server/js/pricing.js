@@ -48,6 +48,21 @@
     return { discount: round2(discount), freeQtyById };
   }
 
+  function pixDiscountForItems(items) {
+    const lista = Array.isArray(items) ? items : [];
+    const { freeQtyById } = promoLeve4Pague3Breakdown(lista);
+    const gratisRestantes = new Map(freeQtyById);
+    let desconto = 0;
+    lista.forEach(item => {
+      const qty = Math.max(0, Number(item.qty) || 0);
+      const price = Number(item.price) || 0;
+      const gratis = Math.min(qty, gratisRestantes.get(item.id) || 0);
+      gratisRestantes.set(item.id, (gratisRestantes.get(item.id) || 0) - gratis);
+      desconto += (price - pixPriceFor(price)) * (qty - gratis);
+    });
+    return round2(desconto);
+  }
+
   function promoLeve4Pague3For(items) {
     return promoLeve4Pague3Breakdown(items).discount;
   }
@@ -107,6 +122,7 @@
     pixPriceFor,
     promoLeve4Pague3Breakdown,
     promoLeve4Pague3For,
+    pixDiscountForItems,
     installmentValueFor,
     installmentCountFor,
     installmentPlanFor,

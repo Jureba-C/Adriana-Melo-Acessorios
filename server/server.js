@@ -2343,14 +2343,12 @@ async function buildCheckoutDraft(req){
      MESMO produto não cabe num único `unit_price * quantity` — por isso a
      linha desse produto na preferência do Mercado Pago é separada em duas:
      as unidades pagas (preço normal, ou com Pix) e as grátis (preço 0). */
-  let pixDiscount = 0;
   const preferenceItems = itensComCupom.flatMap(({ id, qty, product, afterCoupon }) => {
     const freeQty = freeQtyById.get(id) || 0;
     const paidQty = qty - freeQty;
     const linhas = [];
     if(paidQty > 0){
       const unitPrice = paymentMethod === "pix" ? pricing.pixPriceFor(afterCoupon) : afterCoupon;
-      pixDiscount += (afterCoupon - unitPrice) * paidQty;
       linhas.push({
         id: String(id),
         title: product.name,
@@ -2370,7 +2368,10 @@ async function buildCheckoutDraft(req){
     }
     return linhas;
   });
-  pixDiscount = pricing.round2(pixDiscount);
+  // Mesma regra do carrinho (js/pricing.js): Pix só sobre as unidades pagas.
+  const pixDiscount = paymentMethod === "pix"
+    ? pricing.pixDiscountForItems(itensComCupom.map(({ id, qty, afterCoupon }) => ({ id, qty, price: afterCoupon })))
+    : 0;
 
   // Recalcula o frete de novo (nunca confia no preço que o front mostrou)
   const shippingOptions = await quoteShipping(cep, validatedItems);

@@ -82,3 +82,15 @@ test("promoção Leve 4 Pague 3: não muda com a ordem dos itens no carrinho", (
   assert.equal(a, b);
   assert.equal(a, 30);
 });
+
+test("Pix só desconta as peças pagas: na Leve 4 pague 3 a grátis fica de fora", () => {
+  const p = require("../js/pricing.js");
+  const quatro = [1, 2, 3, 4].map(id => ({ id, qty: 1, price: 32 }));
+  assert.equal(p.pixDiscountForItems(quatro), 4.8, "3 pagas × R$ 1,60");
+  assert.equal(p.pixDiscountForItems(quatro.slice(0, 3)), 4.8, "sem promoção, 5% de tudo");
+  assert.equal(p.pixDiscountForItems([{ id: 1, qty: 4, price: 32 }]), 4.8, "4 unidades do mesmo produto");
+  assert.equal(p.pixDiscountForItems([{ id: 1, qty: 8, price: 10 }]), 3, "8 unidades: 2 grátis, 6 pagas × R$ 0,50");
+  assert.equal(p.pixDiscountForItems([{ id: 1, qty: 3, price: 28.8 }, { id: 2, qty: 1, price: 18 }]), 4.32,
+    "a grátis é a mais barata (R$ 18); Pix sobre as 3 de R$ 28,80");
+  assert.equal(p.pixDiscountForItems([]), 0);
+});

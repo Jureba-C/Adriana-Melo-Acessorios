@@ -723,13 +723,16 @@
     return coupon ? Math.round(subtotal * coupon.percentOff / 100 * 100) / 100 : 0;
   }
 
-  function currentPromoDiscount(){
+  function itensDoCarrinhoComCupom(){
     const couponFactor = coupon ? (1 - coupon.percentOff / 100) : 1;
-    const itensComCupom = cart.map(i => {
+    return cart.map(i => {
       const p = findProduct(i.id);
-      return p ? { qty: i.qty, price: pricing.round2(p.price * couponFactor) } : null;
+      return p ? { id: i.id, qty: i.qty, price: pricing.round2(p.price * couponFactor) } : null;
     }).filter(Boolean);
-    return pricing.promoLeve4Pague3For(itensComCupom);
+  }
+
+  function currentPromoDiscount(){
+    return pricing.promoLeve4Pague3For(itensDoCarrinhoComCupom());
   }
 
   let paymentMethod = "pix";
@@ -748,7 +751,7 @@
     }
 
     const afterCoupon = pricing.round2(subtotal - discount);
-    const pixDiscount = pricing.pixDiscountFor(afterCoupon);
+    const pixDiscount = pricing.pixDiscountForItems(itensDoCarrinhoComCupom());
     const shippingPrice = shipping ? shipping.price : 0;
     const promoDiscount = currentPromoDiscount();
 
