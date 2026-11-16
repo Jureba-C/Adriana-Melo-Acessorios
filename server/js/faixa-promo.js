@@ -9,6 +9,7 @@
 
   const telaPromo = faixa.querySelector(".faixa-promo-slide");
   const telaCupom = document.getElementById("faixaPromoCupom");
+  const telaBF = document.getElementById("faixaPromoBF");
   const laco = faixa.querySelector(".faixa-promo-laco");
   if(!telaPromo || !telaCupom) return;
 
@@ -18,7 +19,7 @@
 
     telaCupom.addEventListener("click", () => api.abrir());
 
-    const telas = [telaPromo, telaCupom];
+    const telas = [telaPromo, telaBF, telaCupom].filter(Boolean);
     let atual = 0;
     let relogio = null;
     let limpeza = null;

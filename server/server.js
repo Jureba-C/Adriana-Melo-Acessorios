@@ -63,6 +63,8 @@ const { meFetch, rastreioDoPedido } = require("./lib/melhorEnvio.js");
 // em formato UMD) — é o que garante que o "5% no Pix" e o "3x sem juros"
 // mostrados na tela do produto sejam exatamente os valores cobrados aqui.
 const pricing = require("./js/pricing.js");
+// Só para teste/ensaio: troca a data final da promoção de frete grátis.
+if(process.env.FRETE_GRATIS_ATE) pricing.FRETE_GRATIS.ate = process.env.FRETE_GRATIS_ATE;
 const produtoUrl = require("./js/produto-url.js");
 
 const app = express();
@@ -1326,6 +1328,16 @@ function secaoAvaliacoes(){
 const MARCA_BANNER = "<!--#BANNER-HOME#-->";
 const MARCA_PRODUTOS_INICIAIS = "<!--#PRODUTOS-INICIAIS#-->";
 const MARCA_CSS_INLINE = "<!--#CSS-INLINE#-->";
+const MARCA_FAIXA_BF = "<!--#FAIXA-BF#-->";
+const FAIXA_BF = `<a class="faixa-promo-slide" id="faixaPromoBF" href="#colecoes" hidden aria-label="Black Friday: frete grátis em compras a partir de R$ 89,99, até 30/11, na opção de frete mais econômica. Ver coleção.">
+    <span class="faixa-promo-conteudo">
+      <span class="faixa-promo-grito"><i class="bi bi-truck" aria-hidden="true"></i> Black Friday: frete grátis</span>
+      <span class="faixa-promo-sep" aria-hidden="true"><svg class="bow-icon"><use href="#bow-shape"/></svg></span>
+      <span class="faixa-promo-mecanica">em compras a partir de R$ 89,99, até 30/11</span>
+      <span class="faixa-promo-mecanica-curta" aria-hidden="true">a partir de R$ 89,99</span>
+      <span class="faixa-promo-cta">Aproveitar<i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+    </span>
+  </a>`;
 // fonts.css e o recorte de ícones vão dentro do HTML da home: são pequenos e,
 // como <link>, criavam a cadeia HTML → CSS → fonte que o Lighthouse aponta.
 // Lidos uma vez (só mudam com deploy, que reinicia o processo); os url()
@@ -1477,6 +1489,19 @@ function slidesDoBanner(){
     .filter(p => p && !p.hidden);
   const slides = [];
   let rodizio = 0;
+  if(pricing.freteGratisAtivo()){
+    const comFoto = visiveis.filter(p => p.photoUrl);
+    const destaques = [...comFoto.filter(p => (p.badges || []).includes("Mais vendido")), ...comFoto].filter((p, i, a) => a.indexOf(p) === i).slice(0, 3);
+    if(destaques.length){
+      slides.push({
+        tema: "leque", extra: " banner-bf", slug: "todos", rotulo: "Black Friday", cta: "Aproveitar",
+        chamada: "Black Friday", titulo: "Frete grátis", frase: `em compras a partir de R$ ${reais(pricing.FRETE_GRATIS.minimo)}`,
+        nota: "até 30/11, na opção de frete mais econômica",
+        fotos: destaques.map(p => ({ alt: p.name, ...fontesDoBanner(p.photoUrl) })),
+        apoio: [], minis: [], maisModelos: 0, cores: [], preco: null, modelos: 0, maisVendido: false,
+      });
+    }
+  }
   for(const cat of getAllCategories()){
     if(slides.length >= MAX_SLIDES_BANNER) break;
     const daCategoria = visiveis.filter(p => p.category === cat.slug);
@@ -1538,12 +1563,14 @@ function slideDoBanner(s, primeiro){
   const minis = s.minis.length
     ? `<span class="banner-minis" aria-hidden="true">${s.minis.map(src => `<img src="${src}" alt="" width="40" height="40" loading="lazy" decoding="async">`).join("")}${s.maisModelos > 0 ? `<small>e mais ${s.maisModelos}</small>` : ""}</span>`
     : "";
-  const cta = s.modelos > 1 ? `Ver os ${s.modelos} modelos` : s.modelos === 1 ? "Ver o modelo" : "Ver a loja";
-  return `<div class="hero-slide banner-slide banner-tema-${s.tema}${primeiro ? " is-ativa is-inicial" : ""}" data-legenda="${escaparHtml(s.titulo)}">
+  const nota = s.nota ? `<p class="banner-nota">${escaparHtml(s.nota)}</p>` : "";
+  const cta = s.cta ? s.cta : s.modelos > 1 ? `Ver os ${s.modelos} modelos` : s.modelos === 1 ? "Ver o modelo" : "Ver a loja";
+  return `<div class="hero-slide banner-slide banner-tema-${s.tema}${s.extra || ""}${primeiro ? " is-ativa is-inicial" : ""}" data-legenda="${escaparHtml(s.titulo)}">
                 <div class="banner-texto">
                   <p class="banner-chamada">${escaparHtml(s.chamada)}</p>
                   <p class="banner-titulo">${s.titulo.split(" ").map((p, i) => `<span class="pal" style="--i:${i}">${escaparHtml(p)}</span>`).join(" ")}</p>
                   <p class="banner-frase">${escaparHtml(s.frase)}</p>
+                  ${nota}
                   ${preco}
                   <div class="banner-acoes">
                     <a href="#colecoes" class="btn-blush banner-cta" data-abrir-cat="${escaparHtml(s.slug)}">${cta} <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
@@ -1565,7 +1592,7 @@ const fotoPrincipal = s => (s.fotos.length === 3 ? 1 : 0);
 let CACHE_BANNER = null;
 
 function blocoBanner(){
-  const versao = db.catalogVersion();
+  const versao = db.catalogVersion() + "|" + pricing.freteGratisAtivo();
   if(CACHE_BANNER && CACHE_BANNER.versao === versao) return CACHE_BANNER.html;
   const slides = slidesDoBanner();
   const html = `<div class="hero-slides" id="heroSlides">
@@ -1608,6 +1635,7 @@ function comAvaliacoes(html){
   if(saida.includes(MARCA_AVALIACOES)) saida = saida.replace(MARCA_AVALIACOES, () => secaoAvaliacoes());
   if(saida.includes(MARCA_BANNER)) saida = saida.replace(MARCA_BANNER, () => blocoBanner());
   if(saida.includes(MARCA_HERO_PRELOAD)) saida = saida.replace(MARCA_HERO_PRELOAD, () => preloadDoBanner());
+  if(saida.includes(MARCA_FAIXA_BF)) saida = saida.replace(MARCA_FAIXA_BF, () => pricing.freteGratisAtivo() ? FAIXA_BF : "");
   if(saida.includes(MARCA_CSS_INLINE)) saida = saida.replace(MARCA_CSS_INLINE, () => cssInline());
   // O catálogo vai junto do HTML para a vitrine não esperar o main.js baixar e
   // só então pedir /api/products. "<" escapado: um nome com "</script>" não
@@ -2117,7 +2145,7 @@ async function quoteShipping(cepDestino, validatedItems){
     return [];
   }
 
-  return quotes
+  const opcoes = quotes
     .filter(q => !q.error && (q.custom_price || q.price))
     .filter(q => isOfferedCarrier(q.company?.name, q.name))
     .map(q => {
@@ -2132,6 +2160,10 @@ async function quoteShipping(cepDestino, validatedItems){
       };
     })
     .sort((a, b) => a.price - b.price);
+
+  // Promoção de frete grátis: sai da cotação, então a cliente e o Mercado
+  // Pago veem o mesmo preço (o rótulo real continua pelo valor da transportadora).
+  return pricing.aplicarFreteGratis(opcoes, validatedItems.map(({ id, qty, product }) => ({ id, qty, price: product.price })));
 }
 
 /* =========================================================================

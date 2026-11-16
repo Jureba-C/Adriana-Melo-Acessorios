@@ -67,6 +67,28 @@
     return promoLeve4Pague3Breakdown(items).discount;
   }
 
+  const FRETE_GRATIS = { minimo: 89.99, ate: "2026-11-30T23:59:59-03:00" };
+
+  function freteGratisAtivo(agora) {
+    return (agora ? new Date(agora) : new Date()) <= new Date(FRETE_GRATIS.ate);
+  }
+
+  function subtotalParaFreteGratis(itens) {
+    const lista = Array.isArray(itens) ? itens : [];
+    const bruto = lista.reduce((s, i) => s + (Number(i.price) || 0) * Math.max(0, Number(i.qty) || 0), 0);
+    return round2(bruto - promoLeve4Pague3For(lista));
+  }
+
+  function freteGratisLiberado(itens, agora) {
+    return freteGratisAtivo(agora) && subtotalParaFreteGratis(itens) >= FRETE_GRATIS.minimo;
+  }
+
+  function aplicarFreteGratis(opcoes, itens, agora) {
+    if (!Array.isArray(opcoes) || !opcoes.length || !freteGratisLiberado(itens, agora)) return opcoes;
+    const maisBarata = opcoes.reduce((m, o) => (o.price < m.price ? o : m), opcoes[0]);
+    return opcoes.map(o => (o === maisBarata ? { ...o, price: 0, gratis: true } : o));
+  }
+
   function installmentValueFor(amount, count) {
     const total = Number(amount) || 0;
     const rate = PAYMENT_RULES.monthlyInterestRate;
@@ -123,6 +145,11 @@
     promoLeve4Pague3Breakdown,
     promoLeve4Pague3For,
     pixDiscountForItems,
+    FRETE_GRATIS,
+    freteGratisAtivo,
+    subtotalParaFreteGratis,
+    freteGratisLiberado,
+    aplicarFreteGratis,
     installmentValueFor,
     installmentCountFor,
     installmentPlanFor,

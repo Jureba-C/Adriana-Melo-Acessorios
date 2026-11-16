@@ -26,7 +26,7 @@ let child;
 before(async () => {
   child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", "server.js"], {
     cwd: path.join(__dirname, ".."),
-    env: { ...process.env, DB_PATH: TMP_DB, PORT: String(PORT), CLIENT_ORIGIN: ORIGIN, MP_ACCESS_TOKEN: "TEST-fake", NODE_ENV: "test" },
+    env: { ...process.env, DB_PATH: TMP_DB, PORT: String(PORT), CLIENT_ORIGIN: ORIGIN, MP_ACCESS_TOKEN: "TEST-fake", NODE_ENV: "test", FRETE_GRATIS_ATE: "2000-01-01T00:00:00-03:00" },
     stdio: "ignore",
   });
   const limite = Date.now() + 10000;

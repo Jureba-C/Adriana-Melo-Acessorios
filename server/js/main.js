@@ -737,6 +737,22 @@
 
   let paymentMethod = "pix";
 
+  function rotuloDoFrete(preco){
+    return preco === 0 ? "Grátis" : formatMoney(preco);
+  }
+
+  function atualizarAvisoDeFrete(){
+    const aviso = document.getElementById("cartFreteAviso");
+    if(!aviso) return;
+    const itens = cart.map(i => ({ id: i.id, qty: i.qty, price: findProduct(i.id)?.price || 0 }));
+    if(!itens.length || !pricing.freteGratisAtivo()){ aviso.classList.add("d-none"); return; }
+    const falta = pricing.round2(pricing.FRETE_GRATIS.minimo - pricing.subtotalParaFreteGratis(itens));
+    aviso.textContent = falta > 0
+      ? `Faltam ${formatMoney(falta)} para o frete grátis`
+      : "Frete grátis liberado na opção mais econômica";
+    aviso.classList.remove("d-none");
+  }
+
   function updateTotals(){
     const subtotal = cartSubtotal();
     const discount = currentDiscount(subtotal);
@@ -772,7 +788,8 @@
 
     const total = pricing.round2(afterCoupon - (isPix ? pixDiscount : 0) - promoDiscount + shippingPrice);
     cartShippingRow.classList.toggle("d-none", !shipping);
-    if(shipping) cartShippingPriceEl.textContent = formatMoney(shipping.price);
+    if(shipping) cartShippingPriceEl.textContent = rotuloDoFrete(shipping.price);
+    atualizarAvisoDeFrete();
     cartTotalEl.textContent = formatMoney(total);
 
     const plan = pricing.installmentPlanFor(total);
@@ -804,7 +821,7 @@
         <span class="cart-chosen-name">${escapeHTML(shipping.name)}</span>
         <span class="cart-chosen-days">${escapeHTML(shipping.delivery_time)}</span>
       </span>
-      <span class="cart-chosen-price">${formatMoney(shipping.price)}</span>`;
+      <span class="cart-chosen-price">${rotuloDoFrete(shipping.price)}</span>`;
   }
 
   function renderPrimaryButton(){
@@ -1296,7 +1313,7 @@
             <span class="so-name d-block">${escapeHTML(opt.name)}</span>
             <span class="so-days">${escapeHTML(opt.delivery_time)}</span>
           </span>
-          <span class="so-price">${formatMoney(opt.price)}</span>
+          <span class="so-price">${rotuloDoFrete(opt.price)}</span>
         </label>
       `).join("") + `<p class="so-nota"><i class="bi bi-truck me-1" aria-hidden="true"></i>Prazo da transportadora, contado a partir da postagem.</p>`;
 

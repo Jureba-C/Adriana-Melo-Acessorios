@@ -94,3 +94,25 @@ test("Pix só desconta as peças pagas: na Leve 4 pague 3 a grátis fica de fora
     "a grátis é a mais barata (R$ 18); Pix sobre as 3 de R$ 28,80");
   assert.equal(p.pixDiscountForItems([]), 0);
 });
+
+test("frete grátis: libera a partir de R$ 89,99 depois do Leve 4 pague 3, só na opção mais barata, até 30/11", () => {
+  const p = require("../js/pricing.js");
+  const dentro = new Date("2026-11-20T12:00:00-03:00");
+  const quatro = [1, 2, 3, 4].map(id => ({ id, qty: 1, price: 32 }));
+  assert.equal(p.subtotalParaFreteGratis(quatro), 96);
+  assert.ok(p.freteGratisLiberado(quatro, dentro));
+  const tres = [1, 2, 3].map(id => ({ id, qty: 1, price: 29 }));
+  assert.equal(p.subtotalParaFreteGratis(tres), 87);
+  assert.ok(!p.freteGratisLiberado(tres, dentro));
+  assert.ok(p.freteGratisLiberado([{ id: 1, qty: 1, price: 89.99 }], dentro), "exatamente R$ 89,99 libera");
+  assert.ok(!p.freteGratisLiberado([{ id: 1, qty: 1, price: 89.98 }], dentro));
+  assert.ok(!p.freteGratisLiberado(quatro, new Date("2026-12-01T00:00:00-03:00")), "depois de 30/11 acaba");
+  assert.ok(p.freteGratisLiberado(quatro, new Date("2026-11-30T23:30:00-03:00")), "30/11 à noite ainda vale");
+  const opcoes = [{ service_id: 1, price: 11.61 }, { service_id: 2, price: 13.46 }];
+  const com = p.aplicarFreteGratis(opcoes, quatro, dentro);
+  assert.deepEqual(com.map(o => o.price), [0, 13.46]);
+  assert.equal(com[0].gratis, true);
+  assert.equal(com[0].service_id, 1);
+  assert.deepEqual(p.aplicarFreteGratis(opcoes, tres, dentro), opcoes, "abaixo do mínimo nada muda");
+  assert.equal(opcoes[0].price, 11.61, "não altera a lista original");
+});
