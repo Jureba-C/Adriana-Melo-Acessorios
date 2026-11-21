@@ -17,6 +17,10 @@
  * =============================================================================
  */
 
+// Antes de qualquer trabalho assíncrono: o pool só é criado uma vez. Dois
+// bastam aqui (arquivo, brotli e foto, um de cada vez) e cada thread a
+// menos conta no limite de processos da hospedagem.
+process.env.UV_THREADPOOL_SIZE ||= "2";
 require("dotenv").config({ quiet: true });
 
 process.removeAllListeners("warning");
@@ -36,6 +40,10 @@ const multer = require("multer");
 // UPLOAD DE FOTO DE PRODUTO, abaixo) — sem isso, um upload de 4MB
 // multiplicado por vários produtos incharia rápido o data.db.
 const sharp = require("sharp");
+// As fotos redimensionadas já ficam guardadas no banco; o cache em memória
+// do sharp (até 50 MB por processo) só ocupava espaço.
+sharp.cache(false);
+sharp.concurrency(1);
 const crypto = require("crypto");
 const { randomUUID } = crypto;
 const rateLimit = require("express-rate-limit");
@@ -512,7 +520,11 @@ if (MAINTENANCE_MODE) {
 }
 
 app.use(express.json({ limit: "50kb" }));   // corpo pequeno: evita payloads gigantes (DoS simples)
-app.use(auth.attachUser);                   // preenche req.user (ou null) a partir do cookie de sessão
+// Preenche req.user (ou null) a partir do cookie de sessão. CSS, JS, imagens
+// e fotos do banco não dependem de quem está logado, então não consultam a
+// sessão (eram duas leituras no banco a cada arquivo).
+const SEM_SESSAO = /^\/(css|js|img)\/|^\/api\/(products|avaliacoes|depoimentos|hero)\/(photos|fotos)\//;
+app.use((req, res, next) => (SEM_SESSAO.test(req.path) ? next() : auth.attachUser(req, res, next)));
 
 /* =========================================================================
    PROTEÇÃO CSRF
@@ -1461,13 +1473,18 @@ async function extrairCores(buffer){
   return escolhidas.map(c => "#" + c.map(v => Math.round(v).toString(16).padStart(2, "0")).join("").toUpperCase());
 }
 
+// O banner é refeito uma vez quando a última foto pendente termina, e não
+// a cada foto: no primeiro acesso eram dezenas de reconstruções seguidas.
+let coresPendentes = 0;
 function buscarCoresDaFoto(id){
   CORES_DAS_FOTOS.set(id, []);
   const foto = db.getProductPhoto(id);
   if(!foto) return;
+  coresPendentes++;
   extrairCores(Buffer.from(foto.data))
-    .then(cores => { CORES_DAS_FOTOS.set(id, cores); CACHE_BANNER = null; })
-    .catch(() => {});
+    .then(cores => { CORES_DAS_FOTOS.set(id, cores); })
+    .catch(() => {})
+    .finally(() => { if(--coresPendentes === 0) CACHE_BANNER = null; });
 }
 
 function coresDaCategoria(daCategoria){
@@ -2109,6 +2126,25 @@ function avisarDiasExtrasDoPainel(q, extra){
   console.warn(`Prazo de frete: o painel do Melhor Envio está somando ${extra} dia(s) ao prazo de ${q.company?.name || ""} ${q.name}. Se a entrega parece demorada para a cliente, confira os dias adicionais nas configurações de frete da conta do Melhor Envio.`);
 }
 
+/* Cotação bruta do Melhor Envio guardada por 10 minutos, pela mesma caixa e
+   CEP: a cliente que recalcula ou vai ao checkout não dispara outra chamada
+   externa, e o preço que ela viu é o que vai ser cobrado. O frete grátis é
+   aplicado depois, fora do cache. Limitado a 200 entradas (a mais antiga sai). */
+const COTACOES = new Map();
+const COTACAO_VALIDA_MS = 10 * 60 * 1000;
+const MAX_COTACOES = 200;
+function cotacaoGuardada(chave, agora = Date.now()){
+  const c = COTACOES.get(chave);
+  if(c && agora - c.em < COTACAO_VALIDA_MS) return c.quotes;
+  if(c) COTACOES.delete(chave);
+  return null;
+}
+function guardarCotacao(chave, quotes, agora = Date.now()){
+  COTACOES.delete(chave);
+  COTACOES.set(chave, { quotes, em: agora });
+  if(COTACOES.size > MAX_COTACOES) COTACOES.delete(COTACOES.keys().next().value);
+}
+
 async function quoteShipping(cepDestino, validatedItems){
   const pkg = buildPackage(validatedItems);
 
@@ -2116,27 +2152,33 @@ async function quoteShipping(cepDestino, validatedItems){
      instabilidade momentânea que hoje derrubaria a cotação inteira.
      8 segundos porque a cliente está parada olhando o carrinho — e como
      timeout não é repetido (ver meFetch), o pior caso continua sendo 8s. */
-  const quotes = await meFetch("/api/v2/me/shipment/calculate", {
-    method: "POST",
-    timeoutMs: 8000,
-    retries: 1,
-    body: {
-      from: { postal_code: process.env.ORIGIN_CEP },
-      to: { postal_code: cepDestino },
-      package: {
-        weight: pkg.weight,
-        width: pkg.width,
-        height: pkg.height,
-        length: pkg.length,
-      },
-      options: {
-        insurance_value: pkg.insurance_value,
-        receipt: false,
-        own_hand: false,
-        collect: false,
-      },
+  const pedido = {
+    from: { postal_code: process.env.ORIGIN_CEP },
+    to: { postal_code: cepDestino },
+    package: {
+      weight: pkg.weight,
+      width: pkg.width,
+      height: pkg.height,
+      length: pkg.length,
     },
-  });
+    options: {
+      insurance_value: pkg.insurance_value,
+      receipt: false,
+      own_hand: false,
+      collect: false,
+    },
+  };
+  const chave = JSON.stringify(pedido);
+  let quotes = cotacaoGuardada(chave);
+  if(!quotes){
+    quotes = await meFetch("/api/v2/me/shipment/calculate", {
+      method: "POST",
+      timeoutMs: 8000,
+      retries: 1,
+      body: pedido,
+    });
+    if(Array.isArray(quotes)) guardarCotacao(chave, quotes);
+  }
 
   /* A API devolve uma lista. Se um dia devolver outra coisa (mudança de
      contrato, página de erro com HTTP 200), sem esta guarda o .filter abaixo
@@ -3036,6 +3078,9 @@ const LARGURAS_FOTO_AVALIACAO = new Set([160, 640]);
    produto — variante gerada no primeiro pedido e guardada no banco — com a
    diferença que a checagem de "publicada" vem ANTES de tudo, inclusive do
    cache de variante: foto ocultada não pode continuar saindo pela miniatura. */
+// res.send, e não res.end, nas fotos com cache de 1h: o Express põe ETag
+// pelo conteúdo e responde 304 quando o navegador já tem a mesma foto, em
+// vez de mandar a imagem inteira de novo a cada hora.
 app.get("/api/avaliacoes/fotos/:id", async (req, res) => {
   if(!ROTA_FOTO_AVALIACAO.test(req.params.id)) return res.status(404).end();
   const foto = db.getReviewPhotoPublicada(req.params.id);
@@ -3046,7 +3091,7 @@ app.get("/api/avaliacoes/fotos/:id", async (req, res) => {
   const largura = LARGURAS_FOTO_AVALIACAO.has(pedida) ? pedida : null;
   if(!largura){
     res.setHeader("Content-Type", foto.mime_type);
-    return res.end(Buffer.from(foto.data));
+    return res.send(Buffer.from(foto.data));
   }
 
   const formato = /\bimage\/webp\b/.test(req.headers.accept || "") ? "webp" : "jpeg";
@@ -3054,7 +3099,7 @@ app.get("/api/avaliacoes/fotos/:id", async (req, res) => {
   const emCache = db.getReviewPhotoVariant(req.params.id, largura, formato);
   if(emCache){
     res.setHeader("Content-Type", emCache.mime_type);
-    return res.end(Buffer.from(emCache.data));
+    return res.send(Buffer.from(emCache.data));
   }
   try{
     const mime = formato === "webp" ? "image/webp" : "image/jpeg";
@@ -3063,11 +3108,11 @@ app.get("/api/avaliacoes/fotos/:id", async (req, res) => {
     const reduzida = await pipeline.toBuffer();
     db.saveReviewPhotoVariant(req.params.id, largura, formato, mime, reduzida);
     res.setHeader("Content-Type", mime);
-    res.end(reduzida);
+    res.send(reduzida);
   }catch(err){
     console.error("Não foi possível reduzir a foto da avaliação:", err.message || err);
     res.setHeader("Content-Type", foto.mime_type);
-    res.end(Buffer.from(foto.data));
+    res.send(Buffer.from(foto.data));
   }
 });
 /* Mesma rota da foto de avaliação, para os depoimentos. Precisa ser separada
@@ -3086,7 +3131,7 @@ app.get("/api/depoimentos/fotos/:id", async (req, res) => {
   const largura = LARGURAS_FOTO_AVALIACAO.has(pedida) ? pedida : null;
   if(!largura){
     res.setHeader("Content-Type", foto.mime_type);
-    return res.end(Buffer.from(foto.data));
+    return res.send(Buffer.from(foto.data));
   }
 
   const formato = /\bimage\/webp\b/.test(req.headers.accept || "") ? "webp" : "jpeg";
@@ -3094,7 +3139,7 @@ app.get("/api/depoimentos/fotos/:id", async (req, res) => {
   const emCache = db.getReviewPhotoVariant(req.params.id, largura, formato);
   if(emCache){
     res.setHeader("Content-Type", emCache.mime_type);
-    return res.end(Buffer.from(emCache.data));
+    return res.send(Buffer.from(emCache.data));
   }
   try{
     const mime = formato === "webp" ? "image/webp" : "image/jpeg";
@@ -3103,11 +3148,11 @@ app.get("/api/depoimentos/fotos/:id", async (req, res) => {
     const reduzida = await pipeline.toBuffer();
     db.saveReviewPhotoVariant(req.params.id, largura, formato, mime, reduzida);
     res.setHeader("Content-Type", mime);
-    res.end(reduzida);
+    res.send(reduzida);
   }catch(err){
     console.error("Não foi possível reduzir a foto do depoimento:", err.message || err);
     res.setHeader("Content-Type", foto.mime_type);
-    res.end(Buffer.from(foto.data));
+    res.send(Buffer.from(foto.data));
   }
 });
 
@@ -5074,7 +5119,18 @@ app.get("/api/products", (req, res) => {
   res.json(catalogoPublico());
 });
 
+// Guardado pela versão do catálogo (a mesma chave do banner e do sitemap):
+// qualquer produto, preço, foto, ordem ou categoria alterada muda a versão
+// e o próximo pedido recalcula. Eram 20+ consultas por visita na home.
+let CACHE_CATALOGO = null;
 function catalogoPublico(){
+  const versao = db.catalogVersion();
+  if(CACHE_CATALOGO?.versao === versao) return CACHE_CATALOGO.dados;
+  const dados = montarCatalogoPublico();
+  CACHE_CATALOGO = { versao, dados };
+  return dados;
+}
+function montarCatalogoPublico(){
   const overridesMap = getProductOverridesMap();
   const products = getAllProductIds()
     .map(id => ({ id, p: effectiveProduct(id, overridesMap) }))
@@ -6051,7 +6107,7 @@ app.get("/api/hero/fotos/:id", async (req, res) => {
   const emCache = db.getHeroPhotoVariant(req.params.id, largura, formato);
   if(emCache){
     res.setHeader("Content-Type", emCache.mime_type);
-    return res.end(Buffer.from(emCache.data));
+    return res.send(Buffer.from(emCache.data));
   }
 
   const foto = db.getHeroPhoto(req.params.id);
@@ -6075,7 +6131,7 @@ app.get("/api/hero/fotos/:id", async (req, res) => {
 
     db.saveHeroPhotoVariant(req.params.id, largura, formato, mime, recortada);
     res.setHeader("Content-Type", mime);
-    res.end(recortada);
+    res.send(recortada);
   }catch(err){
     // Aqui o original NÃO serve de reserva: ele não está em 4:5, e entregá-lo
     // deixaria o quadro do topo torto. Melhor a imagem faltar e o alt aparecer.

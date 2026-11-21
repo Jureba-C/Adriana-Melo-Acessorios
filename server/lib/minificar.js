@@ -1,3 +1,8 @@
+// Precisam existir antes do require: o esbuild lê os dois ao carregar. O
+// GOMAXPROCS limita as threads do programa Go; sem worker thread, o
+// transformSync usa um processo que termina na hora.
+process.env.GOMAXPROCS ||= "1";
+process.env.ESBUILD_WORKER_THREADS ||= "0";
 const esbuild = require("esbuild");
 
 // O esbuild deixa dois processos filhos vivos depois do primeiro uso (~23

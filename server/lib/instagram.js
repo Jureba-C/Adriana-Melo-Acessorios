@@ -73,7 +73,7 @@ const MOCK_FEED = {
 
 async function refreshLongLivedToken(currentToken) {
   const url = `${GRAPH_HOST}/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(currentToken)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   const data = await res.json().catch(() => null);
   if (!res.ok || data?.error) {
     throw new Error(data?.error?.message || `refresh_access_token respondeu ${res.status}`);
@@ -83,7 +83,7 @@ async function refreshLongLivedToken(currentToken) {
 
 async function fetchProfile(token) {
   const url = `${GRAPH_HOST}/${GRAPH_VERSION}/me?fields=username,profile_picture_url&access_token=${encodeURIComponent(token)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   const data = await res.json().catch(() => null);
   if (!res.ok || data?.error) {
     throw new Error(data?.error?.message || `/me respondeu ${res.status}`);
@@ -93,7 +93,7 @@ async function fetchProfile(token) {
 
 async function fetchRecentMedia(token, limit = 6) {
   const url = `${GRAPH_HOST}/${GRAPH_VERSION}/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&limit=${limit}&access_token=${encodeURIComponent(token)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   const data = await res.json().catch(() => null);
   if (!res.ok || data?.error) {
     throw new Error(data?.error?.message || `/me/media respondeu ${res.status}`);

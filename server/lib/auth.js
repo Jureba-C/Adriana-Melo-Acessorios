@@ -27,7 +27,9 @@ const BCRYPT_COST = 12;
 // Usado para comparar contra quando o e-mail informado não existe, mantendo
 // o tempo de resposta do login parecido nos dois casos (mitiga enumeração
 // de contas por análise de tempo de resposta).
-const DUMMY_HASH = bcrypt.hashSync("senha-de-referencia-para-tempo-constante", BCRYPT_COST);
+// Já calculado (custo 12, o mesmo de BCRYPT_COST): gerar no boot travava o
+// processo por centenas de ms a cada vez que a hospedagem o acordava.
+const DUMMY_HASH = "$2b$12$KRSnCblHiyp1CmaEf1StDOWk6iIiuhpQrEHIzhGH2Y6NGElsyevMe";
 
 /* ------------------------------ SENHAS ------------------------------ */
 async function hashPassword(password) {

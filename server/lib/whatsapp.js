@@ -103,6 +103,7 @@ async function sendWhatsAppMessage(toNumber, message) {
   const apiVersion = WHATSAPP_CLOUD_API_VERSION || "v21.0";
   const url = `https://graph.facebook.com/${apiVersion}/${WHATSAPP_CLOUD_PHONE_NUMBER_ID}/messages`;
   const res = await fetch(url, {
+    signal: AbortSignal.timeout(10000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",

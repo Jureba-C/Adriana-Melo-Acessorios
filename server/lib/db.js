@@ -1467,7 +1467,7 @@ const stmtSetOverrideSortOrder = db.prepare(`
   ON CONFLICT(product_id) DO UPDATE SET sort_order = excluded.sort_order, updated_at = excluded.updated_at
 `);
 const stmtSetCustomProductSortOrder = db.prepare(
-  `UPDATE custom_products SET sort_order = ? WHERE id = ?`
+  `UPDATE custom_products SET sort_order = ?, updated_at = ? WHERE id = ?`
 );
 /* Recebe os ids JÁ na ordem desejada e grava 0,1,2... em todos de uma vez.
    Numa transação porque uma gravação parcial deixaria a vitrine com duas
@@ -1480,7 +1480,7 @@ function setProductsOrder(orderedIds, customIds) {
   db.exec("BEGIN");
   try {
     orderedIds.forEach((id, index) => {
-      if (custom.has(id)) stmtSetCustomProductSortOrder.run(index, id);
+      if (custom.has(id)) stmtSetCustomProductSortOrder.run(index, now, id);
       else stmtSetOverrideSortOrder.run(id, index, now);
     });
     db.exec("COMMIT");
@@ -2399,10 +2399,13 @@ function markEmailFailed(id, erro){
    COUNT junto de MAX(updated_at) porque apagar uma linha não move o MAX; e
    custom_categories não tem updated_at, então vai o conteúdo mesmo (são poucas
    linhas) para que renomear uma categoria também conte. */
+const stmtVersaoOverrides = db.prepare("SELECT COUNT(*) AS n, IFNULL(MAX(updated_at), 0) AS t FROM product_overrides");
+const stmtVersaoCustom = db.prepare("SELECT COUNT(*) AS n, IFNULL(MAX(updated_at), 0) AS t FROM custom_products");
+const stmtVersaoCategorias = db.prepare("SELECT IFNULL(GROUP_CONCAT(slug || ':' || label), '') AS s FROM custom_categories");
 function catalogVersion(){
-  const p = db.prepare("SELECT COUNT(*) AS n, IFNULL(MAX(updated_at), 0) AS t FROM product_overrides").get();
-  const c = db.prepare("SELECT COUNT(*) AS n, IFNULL(MAX(updated_at), 0) AS t FROM custom_products").get();
-  const k = db.prepare("SELECT IFNULL(GROUP_CONCAT(slug || ':' || label), '') AS s FROM custom_categories").get();
+  const p = stmtVersaoOverrides.get();
+  const c = stmtVersaoCustom.get();
+  const k = stmtVersaoCategorias.get();
   return `${p.n}.${p.t}|${c.n}.${c.t}|${k.s.length}.${hashCurto(k.s)}`;
 }
 
