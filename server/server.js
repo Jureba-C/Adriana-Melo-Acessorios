@@ -46,6 +46,7 @@ const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const db = require("./lib/db");
 const precompress = require("./lib/precompress");
 const { criarCssCritico } = require("./lib/css-critico.js");
+const { minificarSync } = require("./lib/minificar.js");
 const spreadsheetExport = require("./lib/export-spreadsheet");
 const auth = require("./lib/auth");
 const whatsapp = require("./lib/whatsapp");
@@ -1349,7 +1350,7 @@ function cssInline(){
     .replace(/url\((["']?)(?!\/|data:|https?:)/g, `url($1${base}`);
   const css = ler("css/vendor/bootstrap-icons.subset.css", "/css/vendor/") + ler("css/fonts.css", "/css/");
   let minificado = css;
-  try { minificado = require("esbuild").transformSync(css, { loader: "css", minify: true, legalComments: "none", charset: "utf8" }).code; } catch(_) {}
+  try { minificado = minificarSync(css, "css"); } catch(_) {}
   CSS_INLINE = `<style>${minificado}</style>`;
   return CSS_INLINE;
 }

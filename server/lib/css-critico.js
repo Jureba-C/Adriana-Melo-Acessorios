@@ -27,7 +27,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const esbuild = require("esbuild");
+const { minificar } = require("./minificar.js");
 
 // O que o JS cria depois do HTML e já aparece na primeira tela: os cartões
 // da vitrine e os pontinhos/pausa do banner. Sem isso eles piscariam sem
@@ -61,9 +61,9 @@ function criarCssCritico(raiz){
         const novos = (saida.match(/<style>[\s\S]*?<\/style>/g) || []).filter(s => !antes.has(s));
         const css = novos.map(s => s.slice(7, -8)).join("\n");
         if(!css) throw new Error("beasties não devolveu CSS crítico");
-        return esbuild.transform(css, { loader: "css", minify: true, legalComments: "none", charset: "utf8" });
+        return minificar(css, "css");
       })
-      .then(({ code }) => { pronto = { chave, css: code }; })
+      .then(code => { pronto = { chave, css: code }; })
       .catch(err => console.error("CSS crítico não calculado:", err.message || err))
       .finally(() => { if(calculando === chave) calculando = null; });
   }

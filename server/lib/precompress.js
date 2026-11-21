@@ -29,7 +29,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const etag = require("etag");
-const esbuild = require("esbuild");
+const { minificar } = require("./minificar.js");
 
 const QUALIDADE = 11;
 // Teto por arquivo. Não é para poupar memória (o conjunto todo dá ~155 KB),
@@ -60,10 +60,8 @@ function criarPrecompressor(raiz, { revalidarSempre }){
       // nomes locais; se der erro, segue com o original.
       let bruto = original;
       try{
-        const { code } = await esbuild.transform(original.toString("utf8"), {
-          loader: path.extname(absoluto).toLowerCase() === ".css" ? "css" : "js",
-          minify: true, legalComments: "none", charset: "utf8",
-        });
+        const code = await minificar(original.toString("utf8"),
+          path.extname(absoluto).toLowerCase() === ".css" ? "css" : "js");
         if(code.length < original.length) bruto = Buffer.from(code, "utf8");
       }catch(_){ bruto = original; }
       zlib.brotliCompress(bruto, {
